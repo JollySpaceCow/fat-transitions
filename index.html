@@ -267,6 +267,50 @@ function drawTallow(cx, w, h) {
 
 function drawBlack(cx, w, h) { cx.fillStyle = '#000'; cx.fillRect(0, 0, w, h); }
 
+// Default A — warm amber/terracotta gradient with a radial highlight
+function drawDefaultA(cx, w, h) {
+  const g = cx.createLinearGradient(0, 0, w, h);
+  g.addColorStop(0, '#5a2d0c'); g.addColorStop(0.5, '#a04a1a'); g.addColorStop(1, '#2e1206');
+  cx.fillStyle = g; cx.fillRect(0, 0, w, h);
+  // Warm radial highlight upper-left
+  const r = cx.createRadialGradient(w*.28, h*.28, 0, w*.28, h*.28, w*.55);
+  r.addColorStop(0, 'rgba(255,180,80,.38)'); r.addColorStop(1, 'rgba(255,180,80,0)');
+  cx.fillStyle = r; cx.fillRect(0, 0, w, h);
+  // Subtle diagonal grain lines
+  cx.save(); cx.globalAlpha = 0.06; cx.strokeStyle = '#ffb040'; cx.lineWidth = w * 0.0025;
+  for (let i = -h; i < w + h; i += w * 0.045) {
+    cx.beginPath(); cx.moveTo(i, 0); cx.lineTo(i + h, h); cx.stroke();
+  }
+  cx.restore();
+  // Label
+  const fs = Math.round(w / 22);
+  cx.fillStyle = 'rgba(255,210,140,.55)'; cx.font = `bold ${fs}px sans-serif`;
+  cx.textAlign = 'center'; cx.textBaseline = 'middle';
+  cx.fillText('A', w/2, h/2);
+}
+
+// Default B — cool slate/teal gradient with a radial highlight
+function drawDefaultB(cx, w, h) {
+  const g = cx.createLinearGradient(0, h, w, 0);
+  g.addColorStop(0, '#081820'); g.addColorStop(0.5, '#0e3040'); g.addColorStop(1, '#163850');
+  cx.fillStyle = g; cx.fillRect(0, 0, w, h);
+  // Cool radial highlight upper-right
+  const r = cx.createRadialGradient(w*.72, h*.26, 0, w*.72, h*.26, w*.52);
+  r.addColorStop(0, 'rgba(80,200,220,.28)'); r.addColorStop(1, 'rgba(80,200,220,0)');
+  cx.fillStyle = r; cx.fillRect(0, 0, w, h);
+  // Subtle horizontal bands
+  cx.save(); cx.globalAlpha = 0.055; cx.strokeStyle = '#40d0e8'; cx.lineWidth = w * 0.002;
+  for (let y = 0; y < h; y += h * 0.07) {
+    cx.beginPath(); cx.moveTo(0, y); cx.lineTo(w, y); cx.stroke();
+  }
+  cx.restore();
+  // Label
+  const fs = Math.round(w / 22);
+  cx.fillStyle = 'rgba(140,220,240,.55)'; cx.font = `bold ${fs}px sans-serif`;
+  cx.textAlign = 'center'; cx.textBaseline = 'middle';
+  cx.fillText('B', w/2, h/2);
+}
+
 
 // ══════════════════════════════════════════════════════════════════════════
 // SECTION 4 · SHARED EFFECT — SHIMMER
@@ -960,18 +1004,18 @@ Object.keys(TRANSITIONS).forEach(registerTransition);
 // ══════════════════════════════════════════════════════════════════════════
 
 // ── Paint default scenes ─────────────────────────────────────────────────
+// Transitions 1 & 2 keep their bespoke scenes (milk/butter, trimmings/tallow).
+// Transitions 3, 4, 5 use the global A/B defaults.
 drawMilk     (milkC.getContext('2d'), W, H);
 drawButter   (butC.getContext('2d'),  W, H);
 drawTrimmings(trimC.getContext('2d'), W, H);
 drawTallow   (talC.getContext('2d'),  W, H);
-drawBlack    (bub_srcC.getContext('2d'), RW, RH);
-drawBlack    (bub_dstC.getContext('2d'), RW, RH);
-drawBlack    (par_srcC.getContext('2d'), RW, RH);
-drawBlack    (par_dstC.getContext('2d'), RW, RH);
-
-// Tile drop default scenes: black src → white dst
-td_srcC.getContext('2d').fillStyle = '#000000'; td_srcC.getContext('2d').fillRect(0, 0, RW, RH);
-td_dstC.getContext('2d').fillStyle = '#ffffff'; td_dstC.getContext('2d').fillRect(0, 0, RW, RH);
+drawDefaultA (bub_srcC.getContext('2d'), RW, RH);
+drawDefaultB (bub_dstC.getContext('2d'), RW, RH);
+drawDefaultA (par_srcC.getContext('2d'), RW, RH);
+drawDefaultB (par_dstC.getContext('2d'), RW, RH);
+drawDefaultA (td_srcC.getContext('2d'),  RW, RH);
+drawDefaultB (td_dstC.getContext('2d'),  RW, RH);
 
 // ── Render initial frames to display canvases ────────────────────────────
 ctx1.drawImage(milkC, 0, 0); recCtx1.drawImage(milkC, 0, 0, RW, RH);
