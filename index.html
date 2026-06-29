@@ -1,0 +1,1019 @@
+<h2 class="sr-only">Fat transitions — config-registry architecture. 4K display, 1080p recording.</h2>
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     FAT TRANSITIONS — REFACTORED
+     ─────────────────────────────────────────────────────────────────────────
+     ARCHITECTURE:
+       SECTION 1 · CONSTANTS & CANVAS SETUP   — global sizes, helper canvases
+       SECTION 2 · UTILITY FUNCTIONS          — helpers used by multiple places
+       SECTION 3 · SCENE DRAW FUNCTIONS       — drawMilk, drawButter, etc.
+       SECTION 4 · EFFECT FUNCTIONS           — applyShim (shared sub-effect)
+       SECTION 5 · TRANSITION RUN FUNCTIONS   — runSplash, runSolidify, etc.
+                                                each is self-contained & pure-ish
+       SECTION 6 · TRANSITIONS REGISTRY       — one object per transition,
+                                                maps key → { canvases, runFn,
+                                                btnIds, recordFilename }
+       SECTION 7 · ENGINE                     — registerTransition() wires
+                                                buttons + play/record logic
+       SECTION 8 · BOOT                       — init canvases, file inputs,
+                                                call registerTransition() for each
+     ──────────────────────────────────────────────────────────────────────────
+     TO ADD A NEW TRANSITION:
+       1. Write a runXxx(ctx, state, onDone) function in SECTION 5
+       2. Add one entry to TRANSITIONS in SECTION 6
+       3. Add a <canvas> + buttons in the HTML above
+       That's it. Engine and all other transitions are untouched.
+     ══════════════════════════════════════════════════════════════════════════ -->
+
+<div style="padding:.75rem 0 0;">
+
+<!-- File pickers — A feeds all source canvases, B feeds all destination canvases -->
+<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-bottom:10px;">
+  <div style="display:flex;align-items:center;gap:8px;font-size:12px;padding:7px 16px;border-radius:20px;border:.5px solid var(--color-border-tertiary);background:var(--color-bg-secondary);">
+    <input type="file" id="fA" accept="image/*" style="display:none">
+    <label for="fA" id="lblA" style="cursor:pointer;color:var(--color-accent-primary);font-weight:500;">📁 A — Source</label>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px;font-size:12px;padding:7px 16px;border-radius:20px;border:.5px solid var(--color-border-tertiary);background:var(--color-bg-secondary);">
+    <input type="file" id="fB" accept="image/*" style="display:none">
+    <label for="fB" id="lblB" style="cursor:pointer;color:var(--color-accent-primary);font-weight:500;">📁 B — Destination</label>
+  </div>
+</div>
+
+<!-- Canvases -->
+<div style="margin-bottom:14px;">
+  <p style="font-size:11px;font-weight:500;letter-spacing:.1em;color:var(--color-text-secondary);text-align:center;margin:0 0 6px;">MILK → BUTTER</p>
+  <canvas id="c1" width="3840" height="2160" style="display:block;width:100%;height:auto;border-radius:8px;border:.5px solid var(--color-border-tertiary);"></canvas>
+  <div style="display:flex;gap:8px;justify-content:center;margin-top:8px;">
+    <button id="btn1p" style="font-size:12px;padding:7px 20px;">▶ Play</button>
+    <button id="btn1r" style="font-size:12px;padding:7px 20px;border-color:#e05555;color:#e05555;">⏺ Record 1080p</button>
+  </div>
+</div>
+<div style="margin-bottom:14px;">
+  <p style="font-size:11px;font-weight:500;letter-spacing:.1em;color:var(--color-text-secondary);text-align:center;margin:0 0 6px;">TRIMMINGS → TALLOW</p>
+  <canvas id="c2" width="3840" height="2160" style="display:block;width:100%;height:auto;border-radius:8px;border:.5px solid var(--color-border-tertiary);"></canvas>
+  <div style="display:flex;gap:8px;justify-content:center;margin-top:8px;">
+    <button id="btn2p" style="font-size:12px;padding:7px 20px;">▶ Play</button>
+    <button id="btn2r" style="font-size:12px;padding:7px 20px;border-color:#e05555;color:#e05555;">⏺ Record 1080p</button>
+  </div>
+</div>
+<div style="margin-bottom:14px;">
+  <p style="font-size:11px;font-weight:500;letter-spacing:.1em;color:var(--color-text-secondary);text-align:center;margin:0 0 6px;">BUBBLES</p>
+  <canvas id="c3" width="3840" height="2160" style="display:block;width:100%;height:auto;border-radius:8px;border:.5px solid var(--color-border-tertiary);"></canvas>
+  <div style="display:flex;gap:8px;justify-content:center;margin-top:8px;">
+    <button id="btn3p" style="font-size:12px;padding:7px 20px;">▶ Play</button>
+    <button id="btn3r" style="font-size:12px;padding:7px 20px;border-color:#e05555;color:#e05555;">⏺ Record 1080p</button>
+  </div>
+</div>
+<div style="margin-bottom:14px;">
+  <p style="font-size:11px;font-weight:500;letter-spacing:.1em;color:var(--color-text-secondary);text-align:center;margin:0 0 6px;">PARTICLE MATERIALISATION</p>
+  <canvas id="c4" width="3840" height="2160" style="display:block;width:100%;height:auto;border-radius:8px;border:.5px solid var(--color-border-tertiary);"></canvas>
+  <div style="display:flex;gap:8px;justify-content:center;margin-top:8px;">
+    <button id="btn4p" style="font-size:12px;padding:7px 20px;">▶ Play</button>
+    <button id="btn4r" style="font-size:12px;padding:7px 20px;border-color:#e05555;color:#e05555;">⏺ Record 1080p</button>
+  </div>
+</div>
+<div style="margin-bottom:14px;">
+  <p style="font-size:11px;font-weight:500;letter-spacing:.1em;color:var(--color-text-secondary);text-align:center;margin:0 0 6px;">TILE DROP</p>
+  <canvas id="c5" width="3840" height="2160" style="display:block;width:100%;height:auto;border-radius:8px;border:.5px solid var(--color-border-tertiary);"></canvas>
+  <div style="display:flex;gap:8px;justify-content:center;margin-top:8px;">
+    <button id="btn5p" style="font-size:12px;padding:7px 20px;">▶ Play</button>
+    <button id="btn5r" style="font-size:12px;padding:7px 20px;border-color:#e05555;color:#e05555;">⏺ Record 1080p</button>
+  </div>
+  <!-- Grid size picker — sets COLS/ROWS read by runTileDrop at play time -->
+  <div id="tileGridPicker" style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:10px;">
+    <button class="tgb" data-cols="16"  data-rows="9"  style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">16×9<br><span style="font-size:9px;opacity:.6;">144</span></button>
+    <button class="tgb" data-cols="32"  data-rows="18" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">32×18<br><span style="font-size:9px;opacity:.6;">576</span></button>
+    <button class="tgb" data-cols="48"  data-rows="27" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">48×27<br><span style="font-size:9px;opacity:.6;">1296</span></button>
+    <button class="tgb" data-cols="64"  data-rows="36" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">64×36<br><span style="font-size:9px;opacity:.6;">2304</span></button>
+    <button class="tgb" data-cols="96"  data-rows="54" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">96×54<br><span style="font-size:9px;opacity:.6;">5184</span></button>
+    <button class="tgb" data-cols="160" data-rows="90" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">160×90<br><span style="font-size:9px;opacity:.6;">14400</span></button>
+  </div>
+</div>
+<p id="status" style="text-align:center;font-size:11px;color:var(--color-text-tertiary);margin:.4rem 0 .5rem;min-height:1.4em;">Display 4K · Shimmer 1280×720 · Records 1080p · EBML duration patched</p>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════════════════════
+// SECTION 1 · CONSTANTS & CANVAS SETUP
+// ══════════════════════════════════════════════════════════════════════════
+
+// Display resolution (4K canvas)
+const W = 3840, H = 2160;
+
+// Scale factors: canvas units per "design unit" (design grid is 312×218)
+const SW = W / 312, SH = H / 218, SD = Math.hypot(W, H) / Math.hypot(312, 218);
+
+// Shimmer buffer: 1280×720 — 3× upscale to 4K, much crisper than 6×
+const SHW = 1280, SHH = 720;
+
+// Recording / working resolution for transitions 3 & 4
+const RW = 1920, RH = 1080;
+
+// ── Helper: create an offscreen canvas ──────────────────────────────────
+function mkc(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
+
+// ── Shared offscreen canvases ────────────────────────────────────────────
+// Transitions 1 & 2 work at full 4K
+const maskC = mkc(W, H), tmpC = mkc(W, H), shimC = mkc(SHW, SHH);
+const shimBuf = new Uint8ClampedArray(SHW * SHH * 4);
+const MKX = maskC.getContext('2d'), TPX = tmpC.getContext('2d'), SHX = shimC.getContext('2d');
+
+// Scene canvases for transitions 1 & 2
+const milkC = mkc(W, H), butC = mkc(W, H), trimC = mkc(W, H), talC = mkc(W, H);
+
+// Recording canvases for transitions 1 & 2
+const recC1 = mkc(RW, RH), recC2 = mkc(RW, RH);
+const recCtx1 = recC1.getContext('2d'), recCtx2 = recC2.getContext('2d');
+
+// Working + recording canvases for transitions 3 & 4 (animate at 1080p, upscale display)
+const recC3 = mkc(RW, RH), recC4 = mkc(RW, RH);
+const recCtx3 = recC3.getContext('2d'), recCtx4 = recC4.getContext('2d');
+
+// Pre-allocated bubble helper canvases — avoid per-frame allocations
+const bubMaskC = mkc(RW, RH), bubOvC = mkc(RW, RH);
+const bubMaskX = bubMaskC.getContext('2d'), bubOvX = bubOvC.getContext('2d');
+
+// Source / dest image canvases for transitions 3 & 4
+const bub_srcC = mkc(RW, RH), bub_dstC = mkc(RW, RH);
+const par_srcC = mkc(RW, RH), par_dstC = mkc(RW, RH);
+
+// Scale factors for the 1080p working space (transitions 3 & 4)
+const BSW = RW / 312, BSH = RH / 218;
+
+// Working + recording canvases for tile drop (both flavours share td_srcC / td_dstC)
+const recC5 = mkc(RW, RH), recCtx5 = recC5.getContext('2d');
+const td_srcC = mkc(RW, RH);   // tile drop "from" scene (default: black)
+const td_dstC = mkc(RW, RH);   // tile drop "to"   scene (default: white)
+
+// Display canvas contexts
+const c1 = document.getElementById('c1'), ctx1 = c1.getContext('2d');
+const c2 = document.getElementById('c2'), ctx2 = c2.getContext('2d');
+const c3 = document.getElementById('c3'), ctx3 = c3.getContext('2d');
+const c4 = document.getElementById('c4'), ctx4 = c4.getContext('2d');
+const c5 = document.getElementById('c5'), ctx5 = c5.getContext('2d');
+
+
+// ══════════════════════════════════════════════════════════════════════════
+// SECTION 2 · UTILITY FUNCTIONS
+// ══════════════════════════════════════════════════════════════════════════
+
+function setStatus(m) { document.getElementById('status').textContent = m; }
+
+function fnt() { return 'bold ' + Math.round(W / 52) + 'px sans-serif'; }
+
+/** Draw img cover-cropped into (0,0,w,h) on context cx */
+function drawCover(cx, img, w, h) {
+  cx.clearRect(0, 0, w, h);
+  const ir = img.naturalWidth / img.naturalHeight, cr = w / h;
+  let sx = 0, sy = 0, sw = img.naturalWidth, sh = img.naturalHeight;
+  if (ir > cr) { sw = sh * cr; sx = (img.naturalWidth - sw) / 2; }
+  else         { sh = sw / cr; sy = (img.naturalHeight - sh) / 2; }
+  cx.drawImage(img, sx, sy, sw, sh, 0, 0, w, h);
+}
+
+/** Load a File object as an Image, fire cb(img) when ready */
+function loadFromFile(file, cb) {
+  const r = new FileReader();
+  r.onload = e => { const i = new Image(); i.onload = () => cb(i); i.src = e.target.result; };
+  r.readAsDataURL(file);
+}
+
+/** Update a file-picker label to show the chosen filename */
+function setLbl(id, name) {
+  const el = document.getElementById(id), s = name.length > 18 ? name.slice(0, 16) + '…' : name;
+  el.textContent = '✅ ' + s; el.style.color = '#4a9e5c';
+}
+
+/** Cubic bezier point */
+function bez(t, a, b, c, d) {
+  const u = 1 - t;
+  return {
+    x: u*u*u*a.x + 3*u*u*t*b.x + 3*u*t*t*c.x + t*t*t*d.x,
+    y: u*u*u*a.y + 3*u*u*t*b.y + 3*u*t*t*c.y + t*t*t*d.y,
+  };
+}
+
+/** Patch the EBML Duration field in a WebM/MP4 blob */
+async function patchDuration(blob, durationMs) {
+  const buf = await blob.arrayBuffer(), u8 = new Uint8Array(buf), dv = new DataView(buf);
+  for (let i = 0; i < u8.length - 12; i++) {
+    if (u8[i] === 0x44 && u8[i+1] === 0x89) {
+      if (u8[i+2] === 0x88) { dv.setFloat64(i+3, durationMs, false); return new Blob([buf], { type: blob.type }); }
+      if (u8[i+2] === 0x84) { dv.setFloat32(i+3, durationMs, false); return new Blob([buf], { type: blob.type }); }
+    }
+  }
+  return blob;
+}
+
+/** Set all buttons in an array enabled/disabled */
+function setBtns(ids, disabled) {
+  ids.forEach(id => document.getElementById(id).disabled = disabled);
+}
+
+
+// ══════════════════════════════════════════════════════════════════════════
+// SECTION 3 · SCENE DRAW FUNCTIONS
+// Paint a named scene onto (cx, w, h). No animation state.
+// ══════════════════════════════════════════════════════════════════════════
+
+function drawMilk(cx, w, h) {
+  cx.fillStyle = '#edf2f8'; cx.fillRect(0, 0, w, h);
+  const g = cx.createRadialGradient(w*.26, h*.23, 0, w*.26, h*.23, w*.52);
+  g.addColorStop(0, 'rgba(255,255,255,.92)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+  cx.fillStyle = g; cx.fillRect(0, 0, w, h);
+  cx.fillStyle = 'rgba(55,85,115,.32)'; cx.font = fnt();
+  cx.textAlign = 'center'; cx.textBaseline = 'middle';
+  cx.fillText('WHOLE MILK', w/2, h/2);
+}
+
+function drawButter(cx, w, h) {
+  const g = cx.createLinearGradient(0, 0, w, h);
+  g.addColorStop(0, '#f6d262'); g.addColorStop(1, '#c49312');
+  cx.fillStyle = g; cx.fillRect(0, 0, w, h);
+  const s = cx.createRadialGradient(w*.3, h*.27, 0, w*.3, h*.27, w*.43);
+  s.addColorStop(0, 'rgba(255,246,178,.72)'); s.addColorStop(1, 'rgba(255,246,178,0)');
+  cx.fillStyle = s; cx.fillRect(0, 0, w, h);
+  cx.fillStyle = 'rgba(70,38,0,.52)'; cx.font = fnt();
+  cx.textAlign = 'center'; cx.textBaseline = 'middle';
+  cx.fillText('BUTTER', w/2, h/2);
+}
+
+function drawTrimmings(cx, w, h) {
+  const g = cx.createLinearGradient(0, 0, w, h);
+  g.addColorStop(0, '#7c2222'); g.addColorStop(1, '#3e1010');
+  cx.fillStyle = g; cx.fillRect(0, 0, w, h);
+  for (let i = 0; i < 10; i++) {
+    const x = (i/10)*w + Math.sin(i)*18*SW;
+    const s = cx.createLinearGradient(x-22*SW, 0, x+22*SW, h);
+    s.addColorStop(0, 'rgba(195,168,122,0)'); s.addColorStop(.5, 'rgba(195,168,122,.11)'); s.addColorStop(1, 'rgba(195,168,122,0)');
+    cx.fillStyle = s; cx.fillRect(x-22*SW, 0, 44*SW, h);
+  }
+  cx.fillStyle = 'rgba(255,205,185,.48)'; cx.font = fnt();
+  cx.textAlign = 'center'; cx.textBaseline = 'middle';
+  cx.fillText('BEEF TRIMMINGS', w/2, h/2);
+}
+
+function drawTallow(cx, w, h) {
+  const g = cx.createLinearGradient(0, 0, w, h);
+  g.addColorStop(0, '#f4f0e4'); g.addColorStop(1, '#ddd1b8');
+  cx.fillStyle = g; cx.fillRect(0, 0, w, h);
+  const s = cx.createRadialGradient(w*.34, h*.3, 0, w*.34, h*.3, w*.43);
+  s.addColorStop(0, 'rgba(255,252,240,.74)'); s.addColorStop(1, 'rgba(255,252,240,0)');
+  cx.fillStyle = s; cx.fillRect(0, 0, w, h);
+  cx.fillStyle = 'rgba(72,62,42,.42)'; cx.font = fnt();
+  cx.textAlign = 'center'; cx.textBaseline = 'middle';
+  cx.fillText('BEEF TALLOW', w/2, h/2);
+}
+
+function drawBlack(cx, w, h) { cx.fillStyle = '#000'; cx.fillRect(0, 0, w, h); }
+
+
+// ══════════════════════════════════════════════════════════════════════════
+// SECTION 4 · SHARED EFFECT — SHIMMER
+// Used by transitions 1 and 2.
+// ══════════════════════════════════════════════════════════════════════════
+
+/**
+ * applyShim — pixel-shift shimmer effect
+ * @param {HTMLCanvasElement} src     — source canvas to distort
+ * @param {CanvasRenderingContext2D} dstCtx — destination context to draw into
+ * @param {number} amp_w  — amplitude in 4K canvas units
+ * @param {number} spd    — phase offset (cumulative time × speed)
+ */
+function applyShim(src, dstCtx, amp_w, spd) {
+  SHX.drawImage(src, 0, 0, SHW, SHH);
+  const id = SHX.getImageData(0, 0, SHW, SHH), s = id.data;
+  const sa = amp_w * SHW / W;
+  for (let y = 0; y < SHH; y++) {
+    const yw = y * H / SHH;
+    const xs = Math.round(Math.sin(yw*.033 + spd) * sa * (0.55 + .45*Math.sin(yw*.021 + spd*.65)));
+    const ys = Math.round(Math.sin(yw*.023 - spd*.88) * sa * .28);
+    for (let x = 0; x < SHW; x++) {
+      const sx = Math.max(0, Math.min(SHW-1, x+xs)), sy = Math.max(0, Math.min(SHH-1, y+ys));
+      const di = (y*SHW + x)*4, si = (sy*SHW + sx)*4;
+      shimBuf[di] = s[si]; shimBuf[di+1] = s[si+1]; shimBuf[di+2] = s[si+2]; shimBuf[di+3] = s[si+3];
+    }
+  }
+  SHX.putImageData(new ImageData(shimBuf, SHW, SHH), 0, 0);
+  dstCtx.drawImage(shimC, 0, 0, W, H);
+}
+
+
+// ══════════════════════════════════════════════════════════════════════════
+// SECTION 5 · TRANSITION RUN FUNCTIONS
+// Each function is self-contained.
+// Signature: runXxx(onDone)
+//   onDone — called with a reset() function when the transition finishes.
+//            Engine passes a recording-aware reset. Play passes null (uses setTimeout).
+// ══════════════════════════════════════════════════════════════════════════
+
+// ── Transition 1 — MILK SPLASH ───────────────────────────────────────────
+function runSplash(onDone) {
+  const P0 = {x:W+14*SW, y:1}, P1 = {x:W*.87, y:H*.1}, P2 = {x:W*.72, y:H*.46}, P3 = {x:W*.47, y:H*.60};
+  const IX = P3.x, IY = P3.y;
+  const MR = Math.max(Math.hypot(IX,IY), Math.hypot(W-IX,IY), Math.hypot(IX,H-IY), Math.hypot(W-IX,H-IY)) * 1.4;
+  const drops = [], crown = [], rips = [];
+  let jet = {life:0, mL:.52, mH:H*.42, on:false};
+  let sT = 0, phase = 'stream', pT = 0, revR = 0, last = null;
+
+  function impact() {
+    jet.on = true;
+    for (let i = 0; i < 22; i++) {
+      const a = (i/22)*Math.PI*2, s = (105+Math.random()*100)*SW;
+      crown.push({x:IX+Math.cos(a)*7*SW, y:IY+Math.sin(a)*7*SW, vx:Math.cos(a)*s, vy:Math.sin(a)*s-(340+Math.random()*240)*SH, r:(2+Math.random()*3.8)*SW, life:0, mL:.3+Math.random()*.3});
+    }
+    for (let i = 0; i < 175; i++) {
+      const a = Math.PI*(.1+Math.random()*1.8), s = (20+Math.random()*560)*SW;
+      drops.push({x:IX+(Math.random()-.5)*32*SW, y:IY, vx:Math.cos(a)*s, vy:Math.sin(a)*s-Math.random()*80*SH, r:(.6+Math.random()*7.2)*SW, life:0, mL:.22+Math.random()*.92, gold:Math.random()>.56});
+    }
+    [52, 90, 128].forEach((mR, i) => rips.push({mR:mR*SD, life:i*.065, dur:.38+i*.1}));
+  }
+
+  function frm(ts) {
+    if (!last) last = ts;
+    const dt = Math.min((ts-last)/1000, .05); last = ts; pT += dt;
+    ctx1.drawImage(butC, 0, 0);
+    MKX.clearRect(0, 0, W, H);
+    if (revR > 1) {
+      MKX.fillStyle = '#fff'; MKX.beginPath();
+      for (let i = 0; i <= 42; i++) {
+        const a = (i/42)*Math.PI*2, n = 1 + .27*Math.sin(a*3+1.7) + .17*Math.sin(a*7-.9) + .11*Math.sin(a*13+2.3) + .07*Math.sin(a*5+3.1) + .04*Math.sin(a*19-.4);
+        const r = revR*n;
+        i === 0 ? MKX.moveTo(IX+Math.cos(a)*r, IY+Math.sin(a)*r) : MKX.lineTo(IX+Math.cos(a)*r, IY+Math.sin(a)*r);
+      }
+      MKX.closePath(); MKX.fill();
+      for (let i = 0; i < 14; i++) {
+        const a = (i/14)*Math.PI*2+.23, tR = revR*(.19+.06*Math.sin(i*1.8));
+        const dist = revR*(1.17+.07*Math.sin(i*2.4));
+        const tx = IX+Math.cos(a)*dist, ty = IY+Math.sin(a)*dist;
+        MKX.beginPath(); MKX.arc(tx, ty, tR, 0, Math.PI*2); MKX.fill();
+        const fR = revR*.7, fx = IX+Math.cos(a)*fR, fy = IY+Math.sin(a)*fR;
+        const perx = -Math.sin(a), pery = Math.cos(a), w2 = tR*.36;
+        MKX.beginPath(); MKX.moveTo(fx+perx*w2, fy+pery*w2); MKX.lineTo(tx+perx*w2*.5, ty+pery*w2*.5);
+        MKX.lineTo(tx-perx*w2*.5, ty-pery*w2*.5); MKX.lineTo(fx-perx*w2, fy-pery*w2); MKX.closePath(); MKX.fill();
+      }
+    }
+    TPX.clearRect(0, 0, W, H); TPX.drawImage(milkC, 0, 0);
+    TPX.globalCompositeOperation = 'destination-out'; TPX.drawImage(maskC, 0, 0);
+    TPX.globalCompositeOperation = 'source-over';
+    ctx1.drawImage(tmpC, 0, 0);
+    if (phase === 'stream' || (phase === 'impact' && pT < .21)) {
+      const fa = phase === 'impact' ? 1 - pT/.21 : 1;
+      if (phase === 'stream') sT = Math.min(pT/.56, 1);
+      [[24*SW, .1, '220,235,255'], [14*SW, .42, '238,247,255'], [5*SW, .93, '255,255,255']].forEach(([lw, la, col]) => {
+        ctx1.beginPath();
+        const end = phase === 'stream' ? sT : 1;
+        for (let i = 0; i <= 52*end; i++) {
+          const s = i/52, pt = bez(s, P0, P1, P2, P3), wb = Math.sin(i*.54 - pT*9)*2.2*SW*(1-s*.42);
+          i === 0 ? ctx1.moveTo(pt.x+wb, pt.y) : ctx1.lineTo(pt.x+wb, pt.y);
+        }
+        ctx1.strokeStyle = `rgba(${col},${la*fa})`; ctx1.lineWidth = lw; ctx1.lineCap = 'round'; ctx1.lineJoin = 'round'; ctx1.stroke();
+      });
+      if (phase === 'stream' && sT >= 1) { impact(); phase = 'impact'; pT = 0; }
+    }
+    if (phase === 'impact') { if (pT > .055) revR = Math.min(revR + 375*SW*dt, MR); if (revR >= MR) phase = 'done'; }
+    if (jet.on) {
+      jet.life += dt;
+      const lr = Math.min(jet.life/jet.mL, 1), jH = lr < .5 ? jet.mH*lr*2 : jet.mH*(1-(lr-.5)*2), al = Math.max(0, 1-lr*lr*1.45);
+      if (al > .01) {
+        ctx1.beginPath(); ctx1.moveTo(IX, IY); ctx1.lineTo(IX, IY-jH);
+        const jg = ctx1.createLinearGradient(IX, IY, IX, IY-jH);
+        jg.addColorStop(0, `rgba(255,255,255,${al})`); jg.addColorStop(.55, `rgba(225,243,255,${al*.58})`); jg.addColorStop(1, 'rgba(198,228,255,0)');
+        ctx1.strokeStyle = jg; ctx1.lineWidth = 10*SW*(1-lr*.48); ctx1.stroke();
+        ctx1.beginPath(); ctx1.moveTo(IX, IY); ctx1.lineTo(IX, IY-jH*.74);
+        ctx1.strokeStyle = `rgba(255,255,255,${al*.78})`; ctx1.lineWidth = 2.8*SW; ctx1.stroke();
+      }
+    }
+    crown.forEach(s => {
+      s.life += dt; if (s.life > s.mL) return;
+      s.x += s.vx*dt; s.vx *= .972; s.vy += 1520*SH*dt; s.y += s.vy*dt; if (s.y > H+20) return;
+      const lr = s.life/s.mL, al = Math.max(0, 1-lr*lr);
+      ctx1.beginPath(); ctx1.arc(s.x, s.y, s.r*(1-lr*.44), 0, Math.PI*2);
+      ctx1.fillStyle = `rgba(255,255,255,${al*.93})`; ctx1.fill();
+    });
+    drops.forEach(p => {
+      p.life += dt; if (p.life > p.mL) return;
+      p.x += p.vx*dt; p.vx *= .993; p.vy += 1420*SH*dt; p.y += p.vy*dt; if (p.y > H+20) return;
+      const lr = p.life/p.mL, al = Math.max(0, 1-lr*lr), spd = Math.hypot(p.vx, p.vy), el = Math.min(1+spd*.0018/SW, 2.9);
+      ctx1.save(); ctx1.translate(p.x, p.y); ctx1.rotate(Math.atan2(p.vy, p.vx)); ctx1.scale(el, 1);
+      ctx1.beginPath(); ctx1.arc(0, 0, p.r, 0, Math.PI*2);
+      ctx1.fillStyle = p.gold ? `rgba(228,183,42,${al})` : `rgba(226,244,255,${al})`; ctx1.fill(); ctx1.restore();
+    });
+    rips.forEach(r => {
+      r.life += dt; if (r.life > r.dur) return;
+      const prog = r.life/r.dur, al = .64*(1-prog);
+      ctx1.beginPath(); ctx1.arc(IX, IY, 3*SD+r.mR*prog, 0, Math.PI*2);
+      ctx1.strokeStyle = `rgba(255,255,255,${al})`; ctx1.lineWidth = 1.6*SD; ctx1.stroke();
+    });
+    recCtx1.drawImage(c1, 0, 0, RW, RH);
+    if (phase === 'done') {
+      ctx1.drawImage(butC, 0, 0); recCtx1.drawImage(butC, 0, 0, RW, RH);
+      const reset = () => { ctx1.drawImage(milkC, 0, 0); recCtx1.drawImage(milkC, 0, 0, RW, RH); };
+      onDone ? onDone(reset) : setTimeout(reset, 1600);
+      return;
+    }
+    requestAnimationFrame(frm);
+  }
+  requestAnimationFrame(frm);
+}
+
+
+// ── Transition 2 — TRIMMINGS SOLIDIFY ────────────────────────────────────
+function runSolidify(onDone) {
+  const BIGR = Math.hypot(W, H) * 2.2;
+  const seeds = Array.from({length:16}, () => ({
+    x: W*(.07+Math.random()*.86), y: H*(.07+Math.random()*.86),
+    r: 0, spd: (100+Math.random()*100)*SD,
+    na: Math.random()*100, nb: Math.random()*100,
+    delay: Math.random()*1.05, on: false,
+  }));
+  let phase = 'shimmer', el = 0, tot = 0, last = null;
+
+  function blob(cx, s) {
+    const N = 64; cx.beginPath();
+    for (let i = 0; i <= N; i++) {
+      const a = (i/N)*Math.PI*2;
+      const n = 1 + .22*Math.sin(a*4+s.na) + .15*Math.sin(a*7-s.nb) + .10*Math.sin(a*11+s.na*.4) + .06*Math.sin(a*17-s.nb*.65) + .03*Math.sin(a*23+s.na*.2);
+      cx.lineTo(s.x + Math.cos(a)*s.r*n, s.y + Math.sin(a)*s.r*n);
+    }
+    cx.closePath();
+  }
+
+  function frm(ts) {
+    if (!last) last = ts;
+    const dt = Math.min((ts-last)/1000, .05); last = ts; el += dt; tot += dt;
+
+    if (phase === 'shimmer') {
+      const intensity = Math.min(el/1.05, 1);
+      applyShim(trimC, ctx2, intensity*16*SW, tot*3.9);
+      const ha = intensity*.068, hg = ctx2.createLinearGradient(0, 0, 0, H);
+      hg.addColorStop(0, `rgba(255,148,28,${ha*1.25})`); hg.addColorStop(.5, `rgba(255,90,4,${ha*.58})`); hg.addColorStop(1, `rgba(255,148,28,${ha})`);
+      ctx2.fillStyle = hg; ctx2.fillRect(0, 0, W, H);
+      recCtx2.drawImage(c2, 0, 0, RW, RH);
+      if (el >= 2.25) { phase = 'solidify'; el = 0; }
+      requestAnimationFrame(frm); return;
+    }
+
+    seeds.forEach(s => { if (!s.on && el >= s.delay) s.on = true; if (s.on && s.r < BIGR) s.r += s.spd*dt; });
+    MKX.clearRect(0, 0, W, H); MKX.fillStyle = '#fff';
+    seeds.forEach(s => { if (s.on && s.r > 1) { blob(MKX, s); MKX.fill(); } });
+    ctx2.drawImage(talC, 0, 0);
+    const sL = phase === 'solidify' ? Math.max(0, 1-el/1.7) : 0;
+    if (sL > .025) { applyShim(trimC, TPX, sL*8.5*SW, tot*3.9); }
+    else { TPX.clearRect(0, 0, W, H); TPX.drawImage(trimC, 0, 0); }
+    TPX.globalCompositeOperation = 'destination-out'; TPX.drawImage(maskC, 0, 0);
+    TPX.globalCompositeOperation = 'source-over';
+    if (phase === 'fade') ctx2.globalAlpha = Math.max(0, 1-el/.55);
+    ctx2.drawImage(tmpC, 0, 0); ctx2.globalAlpha = 1;
+    const ea = phase === 'fade' ? Math.max(0, 1-el/.55) : 1;
+    if (ea > 0.005) {
+      seeds.forEach(s => {
+        if (!s.on || s.r < 1) return;
+        blob(ctx2, s);
+        ctx2.strokeStyle = `rgba(255,250,222,${.26*ea})`; ctx2.lineWidth = 5*SW; ctx2.stroke();
+        ctx2.strokeStyle = `rgba(255,253,235,${.7*ea})`; ctx2.lineWidth = 1.3*SW; ctx2.stroke();
+      });
+    }
+    if (phase === 'solidify' && el > 3.8) { phase = 'fade'; el = 0; }
+    recCtx2.drawImage(c2, 0, 0, RW, RH);
+    if (phase === 'fade' && el >= .55) {
+      ctx2.drawImage(talC, 0, 0); recCtx2.drawImage(talC, 0, 0, RW, RH);
+      const reset = () => { ctx2.drawImage(trimC, 0, 0); recCtx2.drawImage(trimC, 0, 0, RW, RH); };
+      onDone ? onDone(reset) : setTimeout(reset, 1600); return;
+    }
+    requestAnimationFrame(frm);
+  }
+  requestAnimationFrame(frm);
+}
+
+
+// ── Transition 3 — BUBBLES ───────────────────────────────────────────────
+function runBubbles(onDone) {
+  const bx = recCtx3, bw = RW, bh = RH;
+  const NUM = 80;
+
+  function mkBub() {
+    return {
+      x: bw*(.03+Math.random()*.94), y: bh*(1.02+Math.random()*.2),
+      r: (14+Math.random()*48)*BSW,
+      vx: (Math.random()-.5)*12*BSW, vy: -(50+Math.random()*95)*BSH,
+      life: 0, maxLife: 1.5+Math.random()*1.4, born: Math.random()*3.0,
+      hue: 175+Math.random()*70,
+      pop: false, popT: 0, popR: 0, popX: 0, popY: 0, done: false,
+    };
+  }
+
+  const bubbles = Array.from({length:NUM}, mkBub);
+  const popped = [];
+  let el = 0, last3 = null, doneEl = 0, finished = false;
+
+  function frm(ts) {
+    if (!last3) last3 = ts;
+    const dt = Math.min((ts-last3)/1000, .05); last3 = ts; el += dt;
+    bx.drawImage(bub_srcC, 0, 0);
+
+    popped.forEach(p => {
+      if (p.done) return; p.t += dt;
+      const pf = Math.min(p.t/.25, 1);
+      p.r = p.maxR*(1+pf*1.5);
+      if (pf >= 1) { p.r = p.maxR*2.5; p.done = true; }
+    });
+
+    if (popped.length > 0) {
+      bx.save(); bx.beginPath();
+      popped.forEach(p => { bx.arc(p.x, p.y, p.r, 0, Math.PI*2); bx.closePath(); });
+      bx.clip(); bx.drawImage(bub_dstC, 0, 0); bx.restore();
+    }
+
+    let allDone = true;
+    bubbles.forEach(b => {
+      if (b.done) return;
+      if (el < b.born) { allDone = false; return; }
+      if (b.pop) {
+        b.popT += dt;
+        const pf = Math.min(b.popT/.22, 1);
+        if (pf < 1) {
+          allDone = false;
+          const ra = (1-pf)*.65;
+          bx.beginPath(); bx.arc(b.popX, b.popY, b.popR*(1+pf*2.1), 0, Math.PI*2);
+          bx.strokeStyle = `rgba(255,255,255,${ra})`; bx.lineWidth = 2*BSW*(1-pf); bx.stroke();
+          for (let s = 0; s < 6; s++) {
+            const sa = (s/6)*Math.PI*2+b.popT*9, sd = b.popR*(1.1+pf*.9);
+            bx.beginPath(); bx.arc(b.popX+Math.cos(sa)*sd, b.popY+Math.sin(sa)*sd, 1.4*BSW*(1-pf), 0, Math.PI*2);
+            bx.fillStyle = `rgba(255,255,255,${ra*.65})`; bx.fill();
+          }
+        } else { b.done = true; }
+        return;
+      }
+      allDone = false;
+      b.life += dt; b.x += b.vx*dt; b.vx *= 0.996;
+      b.vy += 5*BSH*dt; b.y += b.vy*dt; b.r += 0.25*BSW*dt;
+      const shouldPop = b.y-b.r < -10 || b.life > b.maxLife || (b.y < bh*.12 && Math.random() < .016) || (b.life > b.maxLife*.75 && Math.random() < .007);
+      if (shouldPop) {
+        b.pop = true; b.popT = 0; b.popR = b.r; b.popX = b.x; b.popY = b.y;
+        popped.push({x:b.x, y:b.y, r:b.r, maxR:b.r, t:0, done:false});
+        return;
+      }
+      const h = b.hue, tt = el*1.8+b.born;
+      const film = bx.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.r);
+      film.addColorStop(0, `hsla(${h},60%,85%,0)`); film.addColorStop(0.5, `hsla(${h+40+Math.sin(tt)*30},70%,80%,0.07)`);
+      film.addColorStop(0.82, `hsla(${h+80+Math.cos(tt*1.3)*40},75%,90%,0.2)`); film.addColorStop(1, `hsla(${h},55%,95%,0)`);
+      bx.beginPath(); bx.arc(b.x, b.y, b.r, 0, Math.PI*2); bx.fillStyle = film; bx.fill();
+      const rim = bx.createRadialGradient(b.x, b.y, b.r*.87, b.x, b.y, b.r);
+      rim.addColorStop(0, 'rgba(255,255,255,0)'); rim.addColorStop(0.6, `hsla(${h+60+Math.sin(el*2)*50},80%,90%,0.3)`);
+      rim.addColorStop(0.86, 'rgba(255,255,255,0.55)'); rim.addColorStop(1, 'rgba(255,255,255,0.05)');
+      bx.beginPath(); bx.arc(b.x, b.y, b.r, 0, Math.PI*2); bx.fillStyle = rim; bx.fill();
+      const hx = b.x-b.r*.28, hy = b.y-b.r*.32, hr = b.r*.38;
+      const gl = bx.createRadialGradient(b.x-b.r*.32, b.y-b.r*.38, 0, hx, hy, hr);
+      gl.addColorStop(0, 'rgba(255,255,255,0.6)'); gl.addColorStop(0.5, 'rgba(255,255,255,0.08)'); gl.addColorStop(1, 'rgba(255,255,255,0)');
+      bx.beginPath(); bx.arc(hx, hy, hr, 0, Math.PI*2); bx.fillStyle = gl; bx.fill();
+    });
+
+    bubMaskX.clearRect(0, 0, RW, RH); bubMaskX.fillStyle = '#fff';
+    bubbles.forEach(b => { if (b.done || el < b.born || b.pop) return; bubMaskX.beginPath(); bubMaskX.arc(b.x, b.y, b.r, 0, Math.PI*2); bubMaskX.fill(); });
+    bubOvX.clearRect(0, 0, RW, RH); bubOvX.drawImage(bub_dstC, 0, 0);
+    bubOvX.globalCompositeOperation = 'destination-in'; bubOvX.drawImage(bubMaskC, 0, 0);
+    bubOvX.globalCompositeOperation = 'source-over';
+    bx.globalAlpha = 0.5; bx.drawImage(bubOvC, 0, 0); bx.globalAlpha = 1;
+    ctx3.drawImage(recC3, 0, 0, W, H);
+
+    if ((allDone || el > 7.5) && !finished) { finished = true; doneEl = 0; }
+    if (finished) {
+      doneEl += dt;
+      if (doneEl >= .4) {
+        recCtx3.drawImage(bub_dstC, 0, 0); ctx3.drawImage(recC3, 0, 0, W, H);
+        const reset = () => { recCtx3.drawImage(bub_srcC, 0, 0); ctx3.drawImage(recC3, 0, 0, W, H); };
+        onDone ? onDone(reset) : setTimeout(reset, 1600); return;
+      }
+    }
+    requestAnimationFrame(frm);
+  }
+  requestAnimationFrame(frm);
+}
+
+
+// ── Transition 4 — PARTICLE MATERIALISATION ──────────────────────────────
+function runParticles(onDone) {
+  // Sample dst at 480×270 → ~6000 particles, plenty dense at 1080p
+  const PSW = 480, PSH = 270;
+  const sampC = mkc(PSW, PSH), sampX = sampC.getContext('2d');
+  sampX.drawImage(par_dstC, 0, 0, PSW, PSH);
+  const imgData = sampX.getImageData(0, 0, PSW, PSH).data;
+
+  const parts = [];
+  const pcx = RW*.5, pcy = RH*.5;
+  const R_LAND = RW/PSW*0.8;   // one sample → gapless at 1080p
+  const R_FAR  = R_LAND*8;
+
+  for (let idx = 0; idx < PSW*PSH; idx++) {
+    const d4 = idx*4; if (imgData[d4+3] < 12) continue;
+    const px = idx%PSW, py = Math.floor(idx/PSW);
+    const tx = (px+0.5)/PSW*RW, ty = (py+0.5)/PSH*RH;
+    const dx = tx-pcx, dy = ty-pcy, dist = Math.hypot(dx, dy)||1;
+    const ang = Math.atan2(dy, dx) + (Math.random()-.5)*3.5;
+    const spread = 0.8+Math.random()*2.8;
+    const sx = pcx + Math.cos(ang)*dist*spread + (Math.random()-.5)*RW*.35;
+    const sy = pcy + Math.sin(ang)*dist*spread + (Math.random()-.5)*RH*.35;
+    const normD = dist/Math.hypot(pcx, pcy);
+    parts.push({tx, ty, sx, sy, col:`rgb(${imgData[d4]},${imgData[d4+1]},${imgData[d4+2]})`, delay:normD*0.5+Math.random()*.5, arrive:1.8+Math.random()*1.4});
+  }
+
+  let el = 0, last4 = null, allLanded = false, settleEl = 0;
+  function easeOut3(t) { return 1 - Math.pow(1-t, 3); }
+
+  function frm(ts) {
+    if (!last4) last4 = ts;
+    const dt = Math.min((ts-last4)/1000, .05); last4 = ts; el += dt;
+
+    if (!allLanded) {
+      const srcA = Math.max(0, 1-el/1.2);
+      if (srcA > 0) { recCtx4.drawImage(par_srcC, 0, 0); }
+      else { recCtx4.fillStyle = '#000'; recCtx4.fillRect(0, 0, RW, RH); }
+      if (srcA > 0 && srcA < 1) { recCtx4.globalAlpha = 1-srcA; recCtx4.fillStyle = '#000'; recCtx4.fillRect(0, 0, RW, RH); recCtx4.globalAlpha = 1; }
+      let landed = true;
+      parts.forEach(p => {
+        if (el < p.delay) { landed = false; return; }
+        const age = el-p.delay, t = Math.min(age/p.arrive, 1);
+        if (t < 1) landed = false;
+        const et = easeOut3(t), swirl = (1-t)*(1-t);
+        const px = p.sx + (p.tx-p.sx)*et + swirl*80*Math.sin(el*3.8+p.delay*9);
+        const py = p.sy + (p.ty-p.sy)*et + swirl*80*Math.cos(el*3.2+p.delay*7);
+        const r = R_FAR + (R_LAND-R_FAR)*et;
+        recCtx4.fillStyle = p.col;
+        recCtx4.globalAlpha = Math.min(1, age/.3)*(0.55+et*.45);
+        recCtx4.fillRect(px-r, py-r, r*2, r*2);
+      });
+      recCtx4.globalAlpha = 1;
+      ctx4.drawImage(recC4, 0, 0, W, H);
+      if (landed) allLanded = true;
+    } else {
+      settleEl += dt;
+      const fa = Math.min(settleEl/.4, 1);
+      recCtx4.clearRect(0, 0, RW, RH);
+      recCtx4.globalAlpha = fa; recCtx4.drawImage(par_dstC, 0, 0); recCtx4.globalAlpha = 1;
+      if (fa < 0.99) {
+        parts.forEach(p => {
+          recCtx4.fillStyle = p.col; recCtx4.globalAlpha = (1-fa)*0.9;
+          recCtx4.fillRect(p.tx-R_LAND, p.ty-R_LAND, R_LAND*2, R_LAND*2);
+        });
+        recCtx4.globalAlpha = 1;
+      }
+      ctx4.drawImage(recC4, 0, 0, W, H);
+      if (fa >= 1) {
+        recCtx4.clearRect(0, 0, RW, RH); recCtx4.drawImage(par_dstC, 0, 0); ctx4.drawImage(recC4, 0, 0, W, H);
+        const reset = () => { recCtx4.drawImage(par_srcC, 0, 0); ctx4.drawImage(recC4, 0, 0, W, H); };
+        onDone ? onDone(reset) : setTimeout(reset, 1600); return;
+      }
+    }
+    requestAnimationFrame(frm);
+  }
+  requestAnimationFrame(frm);
+}
+
+
+// ── Transition 5 & 6 — TILE DROP (shared engine) ─────────────────────────
+//
+// A 16×9 grid of tiles covers the src scene. Tiles fall away one by one,
+// revealing the dst scene beneath. Release order radiates from the centre.
+//
+// Two flavours share this engine — each passes its own params + canvases:
+//   runTileDrop  — natural cascade, constant gravity  (Transition 5)
+//   runTileDropCranked — slow-then-slam, exponential gravity (Transition 6)
+//
+// PARAMS object fields:
+//   COLS / ROWS   — grid dimensions
+//   TOTAL_DUR     — total animation length in seconds
+//   STAGGER_POW   — release order exponent. 1=linear wave, 4+=slow-then-flood
+//   GAP_PX        — gap between tiles in 1080p pixels (0 = seamless)
+//   EXP_RATE      — exponential gravity rate. 0 = constant gravity.
+//                   ~1.2 = gentle ease-in. ~2.8 = hang-then-slam. 6 = violent.
+//   BASE_GRAV     — gravity at age=0 in canvas-heights/s².
+//                   With EXP_RATE=0 this is just constant gravity.
+//   srcC / dstC   — source and destination image canvases (1080p)
+//   recCtx        — recording context to draw into (1080p)
+//   dispCtx       — display context to blit to (4K)
+//
+function _tileDropEngine(p, onDone) {
+  const { COLS, ROWS, TOTAL_DUR, STAGGER_POW, GAP_PX, EXP_RATE, BASE_GRAV,
+          srcC, dstC, recCtx, dispCtx } = p;
+
+  const TW = RW / COLS, TH = RH / ROWS;
+  const baseGravPx = BASE_GRAV * RH;
+
+  const tiles = [];
+  const pcx = (COLS - 1) / 2, pcy = (ROWS - 1) / 2;
+  const maxDist = Math.hypot(pcx, pcy);
+
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const dist   = Math.hypot(c - pcx, r - pcy) / maxDist;
+      const jitter = (Math.random() - 0.5) * 0.06;
+      tiles.push({
+        x: c * TW, y: r * TH,
+        normRelease: Math.pow(dist, 1 / STAGGER_POW) + jitter,
+        age: 0,         // time since this tile released
+        released: false,
+      });
+    }
+  }
+
+  const maxNorm       = Math.max(...tiles.map(t => t.normRelease));
+  const releaseBudget = TOTAL_DUR * 0.72;
+  tiles.forEach(t => { t.releaseAt = (t.normRelease / maxNorm) * releaseBudget; });
+
+  let el = 0, lastT = null;
+
+  function frm(ts) {
+    if (!lastT) lastT = ts;
+    const dt = Math.min((ts - lastT) / 1000, 0.05);
+    lastT = ts; el += dt;
+
+    // Layer 1 — dst scene always underneath
+    recCtx.drawImage(dstC, 0, 0);
+
+    let allGone = true;
+
+    tiles.forEach(t => {
+      let drawY;
+      if (el < t.releaseAt) {
+        allGone = false;
+        drawY = t.y;
+      } else {
+        t.age += dt;
+        // Position via analytic integral of exponential gravity:
+        //   g(age) = baseGrav * e^(k*age)
+        //   v(age) = baseGrav/k * (e^(k*age) - 1)       [v=0 at age=0]
+        //   y(age) = baseGrav/k² * (e^(k*age) - k*age - 1)
+        // When EXP_RATE=0 (constant gravity), use standard ½at²
+        let dy;
+        if (EXP_RATE < 0.01) {
+          dy = 0.5 * baseGravPx * t.age * t.age;
+        } else {
+          const k = EXP_RATE;
+          dy = (baseGravPx / (k * k)) * (Math.exp(k * t.age) - k * t.age - 1);
+        }
+        drawY = t.y + dy;
+        if (drawY < RH + TH) allGone = false;
+      }
+
+      if (drawY >= RH + TH) return;
+      recCtx.drawImage(
+        srcC,
+        t.x, t.y, TW, TH,
+        t.x + GAP_PX / 2, drawY + GAP_PX / 2,
+        TW - GAP_PX, TH - GAP_PX
+      );
+    });
+
+    dispCtx.drawImage(recCtx.canvas, 0, 0, W, H);
+
+    if (allGone) {
+      recCtx.drawImage(dstC, 0, 0);
+      dispCtx.drawImage(recCtx.canvas, 0, 0, W, H);
+      const reset = () => {
+        recCtx.drawImage(srcC, 0, 0);
+        dispCtx.drawImage(recCtx.canvas, 0, 0, W, H);
+      };
+      onDone ? onDone(reset) : setTimeout(reset, 1600);
+      return;
+    }
+    requestAnimationFrame(frm);
+  }
+  requestAnimationFrame(frm);
+}
+
+// Gentle — natural cascade, constant gravity
+function runTileDrop(onDone) {
+  // Read active grid choice from the picker (defaults to 16×9 if nothing selected)
+  const activeBtn = document.querySelector('.tgb.tgb-active');
+  const COLS = activeBtn ? parseInt(activeBtn.dataset.cols) : 16;
+  const ROWS = activeBtn ? parseInt(activeBtn.dataset.rows) : 9;
+  _tileDropEngine({
+    COLS, ROWS,
+    TOTAL_DUR:   3.2,
+    STAGGER_POW: 2.4,
+    GAP_PX:      0,
+    EXP_RATE:    0,      // constant gravity
+    BASE_GRAV:   4.8,    // canvas-heights / s²
+    srcC: td_srcC, dstC: td_dstC,
+    recCtx: recCtx5, dispCtx: ctx5,
+  }, onDone);
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// SECTION 6 · TRANSITIONS REGISTRY
+// ─────────────────────────────────────────────────────────────────────────
+// Each entry describes one transition completely.
+// The engine (Section 7) reads this — nothing else needs to know about it.
+//
+// Fields:
+//   runFn          — the run function from Section 5
+//   recCanvas      — 1080p canvas that captureStream() records
+//   recordFilename — download filename (extension auto-detected)
+//   playBtnId      — play button element id
+//   recBtnId       — record button element id
+//   running        — [private] set by engine, don't touch
+// ══════════════════════════════════════════════════════════════════════════
+
+const TRANSITIONS = {
+  splash: {
+    runFn:          runSplash,
+    recCanvas:      recC1,
+    recordFilename: 'milk-to-butter',
+    playBtnId:      'btn1p',
+    recBtnId:       'btn1r',
+    running:        false,
+  },
+  solidify: {
+    runFn:          runSolidify,
+    recCanvas:      recC2,
+    recordFilename: 'trimmings-to-tallow',
+    playBtnId:      'btn2p',
+    recBtnId:       'btn2r',
+    running:        false,
+  },
+  bubbles: {
+    runFn:          runBubbles,
+    recCanvas:      recC3,
+    recordFilename: 'bubbles',
+    playBtnId:      'btn3p',
+    recBtnId:       'btn3r',
+    running:        false,
+  },
+  particles: {
+    runFn:          runParticles,
+    recCanvas:      recC4,
+    recordFilename: 'particles',
+    playBtnId:      'btn4p',
+    recBtnId:       'btn4r',
+    running:        false,
+  },
+  tileDrop: {
+    runFn:          runTileDrop,
+    recCanvas:      recC5,
+    recordFilename: 'tile-drop',
+    playBtnId:      'btn5p',
+    recBtnId:       'btn5r',
+    padSecs:        0,
+    running:        false,
+  },
+
+};
+
+
+// ══════════════════════════════════════════════════════════════════════════
+// SECTION 7 · ENGINE  — DO NOT EDIT
+// Reads TRANSITIONS registry, wires buttons, handles recording.
+// To change behaviour, add a field to a TRANSITIONS entry or write a new
+// runFn — don't edit below this line.
+// ══════════════════════════════════════════════════════════════════════════
+
+function recordCanvas(cfg) {
+  if (!window.MediaRecorder) { setStatus('⚠️ MediaRecorder not supported — use Chrome or Edge.'); return; }
+  const candidates = ['video/mp4;codecs=avc1.640028','video/mp4;codecs=avc1.4D4028','video/mp4;codecs=avc1','video/mp4','video/webm;codecs=vp8','video/webm'];
+  const mime = candidates.find(m => MediaRecorder.isTypeSupported(m)) || 'video/webm';
+  const ext  = mime.startsWith('video/mp4') ? '.mp4' : '.webm';
+  const fn   = cfg.recordFilename.replace(/\.(mp4|webm)$/i, '') + ext;
+  let stream, rec, chunks = [], recStart = 0;
+  try { stream = cfg.recCanvas.captureStream(60); } catch(e) { setStatus('⚠️ captureStream: ' + e.message); return; }
+  try { rec = new MediaRecorder(stream, {mimeType:mime, videoBitsPerSecond:15_000_000}); } catch(e) { setStatus('⚠️ Recorder init failed.'); return; }
+  rec.ondataavailable = e => { if (e.data && e.data.size > 0) chunks.push(e.data); };
+  rec.onstop = async () => {
+    const durationMs = Date.now() - recStart;
+    setStatus('🔧 Patching EBML duration…');
+    const fixed = await patchDuration(new Blob(chunks, {type:mime}), durationMs);
+    const url = URL.createObjectURL(fixed);
+    const a = Object.assign(document.createElement('a'), {href:url, download:fn});
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 3000);
+    setStatus(`✅ ${fn} — ${(durationMs/1000).toFixed(1)}s · ${mime.includes('mp4')?'H.264 MP4':'VP8 WebM'} · duration patched`);
+  };
+  // padSecs: intro/outro hold duration in seconds. Set to 0 in the TRANSITIONS
+  // entry for a transition-only recording with no padding. Defaults to 10.
+  const pad = (cfg.padSecs ?? 10) * 1000;
+  recStart = Date.now(); rec.start(500);
+  if (pad > 0) setStatus(`⏺ Intro — ${cfg.padSecs ?? 10}s…`);
+  else setStatus('⏺ Transition running…');
+  setTimeout(() => {
+    if (pad > 0) setStatus('⏺ Transition running…');
+    cfg.runFn(resetFn => {
+      if (pad > 0) setStatus(`⏺ Outro — ${cfg.padSecs ?? 10}s…`);
+      setTimeout(() => { rec.stop(); resetFn(); }, pad);
+    });
+  }, pad);
+}
+
+/** Wire buttons for one transition entry */
+function registerTransition(key) {
+  const cfg = TRANSITIONS[key];
+  const lockBtns  = () => { cfg.running = true;  setBtns([cfg.playBtnId, cfg.recBtnId], true); };
+  const unlockBtns = () => { cfg.running = false; setBtns([cfg.playBtnId, cfg.recBtnId], false); };
+
+  document.getElementById(cfg.playBtnId).addEventListener('click', () => {
+    if (cfg.running) return;
+    lockBtns(); setStatus('');
+    cfg.runFn(reset => { reset(); unlockBtns(); });
+  });
+
+  document.getElementById(cfg.recBtnId).addEventListener('click', () => {
+    if (cfg.running) return;
+    lockBtns(); setStatus('');
+    recordCanvas(cfg);
+    // unlock happens after recording finishes — we rely on rec.onstop firing the reset
+    // so we hook into runFn's reset callback to unlock
+    // (recordCanvas passes its own onDone that calls resetFn then rec.stop)
+    // We patch the cfg so after the recording reset we also unlock:
+    const origRun = cfg.runFn;
+    cfg.runFn = (onDone) => origRun(resetFn => {
+      onDone((...args) => { resetFn(...args); cfg.runFn = origRun; unlockBtns(); });
+    });
+    // Recording already started above — restore runFn after this call
+    // (the patch above self-removes on next invocation)
+  });
+}
+
+// Register all transitions
+// Wire tile grid picker
+(function() {
+  const btns = document.querySelectorAll('.tgb');
+  // Default: highlight the first button (16×9)
+  if (btns.length) btns[0].classList.add('tgb-active');
+  btns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (TRANSITIONS.tileDrop.running) return;
+      btns.forEach(b => { b.classList.remove('tgb-active'); b.style.borderColor = ''; b.style.color = ''; });
+      btn.classList.add('tgb-active');
+    });
+  });
+  // Style active button via class (no separate stylesheet needed)
+  const styleEl = document.createElement('style');
+  styleEl.textContent = '.tgb.tgb-active { border-color: var(--color-text-primary) !important; color: var(--color-text-primary) !important; }';
+  document.head.appendChild(styleEl);
+})();
+
+Object.keys(TRANSITIONS).forEach(registerTransition);
+
+
+// ══════════════════════════════════════════════════════════════════════════
+// SECTION 8 · BOOT
+// Draw initial scenes, hook up file inputs.
+// ══════════════════════════════════════════════════════════════════════════
+
+// ── Paint default scenes ─────────────────────────────────────────────────
+drawMilk     (milkC.getContext('2d'), W, H);
+drawButter   (butC.getContext('2d'),  W, H);
+drawTrimmings(trimC.getContext('2d'), W, H);
+drawTallow   (talC.getContext('2d'),  W, H);
+drawBlack    (bub_srcC.getContext('2d'), RW, RH);
+drawBlack    (bub_dstC.getContext('2d'), RW, RH);
+drawBlack    (par_srcC.getContext('2d'), RW, RH);
+drawBlack    (par_dstC.getContext('2d'), RW, RH);
+
+// Tile drop default scenes: black src → white dst
+td_srcC.getContext('2d').fillStyle = '#000000'; td_srcC.getContext('2d').fillRect(0, 0, RW, RH);
+td_dstC.getContext('2d').fillStyle = '#ffffff'; td_dstC.getContext('2d').fillRect(0, 0, RW, RH);
+
+// ── Render initial frames to display canvases ────────────────────────────
+ctx1.drawImage(milkC, 0, 0); recCtx1.drawImage(milkC, 0, 0, RW, RH);
+ctx2.drawImage(trimC, 0, 0); recCtx2.drawImage(trimC, 0, 0, RW, RH);
+recCtx3.drawImage(bub_srcC, 0, 0); ctx3.drawImage(recC3, 0, 0, W, H);
+recCtx4.drawImage(par_srcC, 0, 0); ctx4.drawImage(recC4, 0, 0, W, H);
+recCtx5.drawImage(td_srcC,  0, 0); ctx5.drawImage(recC5, 0, 0, W, H);
+
+// ── File inputs — A = source (all transitions), B = destination (all transitions) ──
+//
+// Source canvases:  milkC, trimC (4K),  bub_srcC, par_srcC, td_srcC (1080p)
+// Dest canvases:   butC,  talC  (4K),  bub_dstC, par_dstC, td_dstC (1080p)
+//
+// On load: image is drawn cover-cropped into every canvas of the correct size,
+// then all idle display canvases are refreshed.
+
+function refreshAllIdle() {
+  if (!TRANSITIONS.splash.running)   { ctx1.drawImage(milkC,    0,0); recCtx1.drawImage(milkC,    0,0,RW,RH); }
+  if (!TRANSITIONS.solidify.running) { ctx2.drawImage(trimC,    0,0); recCtx2.drawImage(trimC,    0,0,RW,RH); }
+  if (!TRANSITIONS.bubbles.running)  { recCtx3.drawImage(bub_srcC,0,0); ctx3.drawImage(recC3,0,0,W,H); }
+  if (!TRANSITIONS.particles.running){ recCtx4.drawImage(par_srcC,0,0); ctx4.drawImage(recC4,0,0,W,H); }
+  if (!TRANSITIONS.tileDrop.running) { recCtx5.drawImage(td_srcC, 0,0); ctx5.drawImage(recC5,0,0,W,H); }
+}
+
+document.getElementById('fA').addEventListener('change', function() {
+  if (!this.files[0]) return;
+  loadFromFile(this.files[0], img => {
+    // Paint into all source canvases at their respective resolutions
+    [milkC, trimC].forEach(c => drawCover(c.getContext('2d'), img, W,  H));
+    [bub_srcC, par_srcC, td_srcC].forEach(c => drawCover(c.getContext('2d'), img, RW, RH));
+    refreshAllIdle();
+    setLbl('lblA', this.files[0].name);
+  });
+});
+
+document.getElementById('fB').addEventListener('change', function() {
+  if (!this.files[0]) return;
+  loadFromFile(this.files[0], img => {
+    // Paint into all destination canvases at their respective resolutions
+    [butC, talC].forEach(c => drawCover(c.getContext('2d'), img, W,  H));
+    [bub_dstC, par_dstC, td_dstC].forEach(c => drawCover(c.getContext('2d'), img, RW, RH));
+    setLbl('lblB', this.files[0].name);
+  });
+});
+</script>
