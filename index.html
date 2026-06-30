@@ -89,6 +89,22 @@
     <button class="tgb" data-cols="160" data-rows="90" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">160×90<br><span style="font-size:9px;opacity:.6;">14400</span></button>
   </div>
 </div>
+<div style="margin-bottom:14px;">
+  <p style="font-size:11px;font-weight:500;letter-spacing:.1em;color:var(--color-text-secondary);text-align:center;margin:0 0 6px;">CONE REFRACTION</p>
+  <canvas id="c6" width="3840" height="2160" style="display:block;width:100%;height:auto;border-radius:8px;border:.5px solid var(--color-border-tertiary);"></canvas>
+  <div style="display:flex;gap:8px;justify-content:center;margin-top:8px;">
+    <button id="btn6p" style="font-size:12px;padding:7px 20px;">▶ Play</button>
+    <button id="btn6r" style="font-size:12px;padding:7px 20px;border-color:#e05555;color:#e05555;">⏺ Record 1080p</button>
+  </div>
+  <!-- Glass-mode picker — sets which image(s) the cone interior refracts -->
+  <div style="display:flex;gap:6px;justify-content:center;align-items:center;flex-wrap:wrap;margin-top:10px;">
+    <span style="font-size:10px;color:var(--color-text-tertiary);">Glass shows:</span>
+    <button class="cgb" data-mode="A"   style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">A — Source</button>
+    <button class="cgb" data-mode="B"   style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">B — Destination</button>
+    <button class="cgb" data-mode="AB"  style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">AB — Swirl</button>
+    <button class="cgb" data-mode="ABV" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">AB — Bands</button>
+  </div>
+</div>
 <p id="status" style="text-align:center;font-size:11px;color:var(--color-text-tertiary);margin:.4rem 0 .5rem;min-height:1.4em;">Display 4K · Shimmer 1280×720 · Records 1080p · EBML duration patched</p>
 </div>
 
@@ -145,12 +161,27 @@ const recC5 = mkc(RW, RH), recCtx5 = recC5.getContext('2d');
 const td_srcC = mkc(RW, RH);   // tile drop "from" scene (default: black)
 const td_dstC = mkc(RW, RH);   // tile drop "to"   scene (default: white)
 
+// Working + recording canvas for cone refraction
+const recC6 = mkc(RW, RH), recCtx6 = recC6.getContext('2d');
+const cone_srcC = mkc(RW, RH);  // cone "A" scene
+const cone_dstC = mkc(RW, RH);  // cone "B" scene
+
+// Cone refraction renders at a quarter the pixel count (heavy per-pixel trig,
+// doubly so in the AB blend modes which sample both images) then upscales —
+// see runConeRefraction in Section 5 for why. Buffers pre-allocated here,
+// reused across every Play/Record press.
+const CONE_RSCALE = 2;
+const CONE_RW2 = Math.round(RW / CONE_RSCALE), CONE_RH2 = Math.round(RH / CONE_RSCALE);
+const cone_smallC = mkc(CONE_RW2, CONE_RH2), cone_smallCx = cone_smallC.getContext('2d');
+const cone_outBuf = new Uint8ClampedArray(CONE_RW2 * CONE_RH2 * 4);
+
 // Display canvas contexts
 const c1 = document.getElementById('c1'), ctx1 = c1.getContext('2d');
 const c2 = document.getElementById('c2'), ctx2 = c2.getContext('2d');
 const c3 = document.getElementById('c3'), ctx3 = c3.getContext('2d');
 const c4 = document.getElementById('c4'), ctx4 = c4.getContext('2d');
 const c5 = document.getElementById('c5'), ctx5 = c5.getContext('2d');
+const c6 = document.getElementById('c6'), ctx6 = c6.getContext('2d');
 
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -844,6 +875,232 @@ function runTileDrop(onDone) {
   }, onDone);
 }
 
+// ── Transition 6 — CONE REFRACTION ───────────────────────────────────────
+//
+// A wavy refractive glass cone sweeps left → right. The cone is vertical —
+// razor-thin tip at the top, full width at the bottom — and spins around
+// its own axis as it travels. Four "Glass shows" modes (the .cgb buttons)
+// control what the glass interior actually displays:
+//   A        — source image, refracted
+//   B        — destination image, refracted (classic "new image arriving")
+//   AB-Swirl — both images fused, organic spin-driven marbling blend
+//   AB-Bands — both images fused with vertical bands wrapping the cone like
+//              a rotating cylinder: near-side bands slide one way, the
+//              "ghost" far-side bands glimpsed through the glass slide the
+//              opposite way. DEFAULT.
+//
+// PARAMS — edit freely, only this function is affected:
+//   DURATION    — seconds for the full sweep
+//   SPIN_RATE   — how fast the glass rotates as it travels
+//   WAVE_AMP    — how wobbly the cone's silhouette is (0 = smooth cone)
+//   REF_STR     — refraction displacement strength inside the glass
+//   CHROM       — chromatic aberration (R/G/B channel split) strength
+//   CONE_ANGLE  — cone half-angle in degrees (narrow tip vs wide funnel)
+//
+// PERFORMANCE: this does heavy per-pixel trig (doubly so in the AB modes,
+// which sample both images at every pixel) — too costly to run at full
+// resolution every frame in plain JS, which is what causes choppy motion,
+// not the animation timing itself. So it renders at CONE_RW2×CONE_RH2
+// (a quarter of the pixel count, see Section 1) into cone_smallC, then lets
+// the browser's hardware-accelerated scaling upscale that onto both the
+// 1080p recording canvas and the 4K display canvas.
+//
+function runConeRefraction(onDone) {
+  const DURATION   = 5;     // seconds
+  const SPIN_RATE  = 12;
+  const WAVE_AMP   = 0.08;
+  const REF_STR    = 305;
+  const CHROM      = 14;
+  const CONE_ANGLE = 20;    // degrees
+
+  // Glass mode — read from the active .cgb button, default to Bands
+  const activeBtn = document.querySelector('.cgb.cgb-active');
+  const mode = activeBtn ? activeBtn.dataset.mode : 'ABV';
+  const isBlend = mode === 'AB' || mode === 'ABV';
+
+  // Snapshot current A/B images fresh for this run — cone_srcC/cone_dstC may
+  // have changed since the last run via the global A/B file pickers.
+  const srcPix = cone_srcC.getContext('2d').getImageData(0, 0, RW, RH).data;
+  const dstPix = cone_dstC.getContext('2d').getImageData(0, 0, RW, RH).data;
+  const REF_PIX = isBlend ? null : (mode === 'A' ? srcPix : dstPix);
+
+  const tanA   = Math.tan(CONE_ANGLE * Math.PI / 180);
+  const maxHW  = RH * tanA;
+
+  function easeInOut(t) { return t < .5 ? 2*t*t : -1 + (4-2*t)*t; }
+
+  function drawFrame(t_progress, elapsed) {
+    const cone_cx = -maxHW + t_progress * (RW + maxHW * 2);
+    const spin    = elapsed * SPIN_RATE;
+
+    for (let py2 = 0; py2 < CONE_RH2; py2++) {
+      const py = py2 * CONE_RSCALE;      // full-res logical y
+      const t_cone = py / RH;            // 0=tip(top), 1=mouth(bottom)
+      const r_base = py * tanA;          // half-width of cone at this row
+
+      const ph = t_cone * Math.PI;
+      const r_wavy = r_base < 1 ? 0 : r_base * (1
+        + WAVE_AMP * 0.52 * Math.sin(ph * 3.8  + spin * 1.00)
+        + WAVE_AMP * 0.31 * Math.sin(ph * 8.3  + spin * 1.45 + 1.13)
+        + WAVE_AMP * 0.17 * Math.sin(ph * 15.1 + spin * 0.72 + 2.47)
+      );
+
+      for (let px2 = 0; px2 < CONE_RW2; px2++) {
+        const px  = px2 * CONE_RSCALE;             // full-res logical x
+        const oi4 = (py2 * CONE_RW2 + px2) * 4;     // small outBuf write index
+        const si4 = (py  * RW       + px ) * 4;     // full-res srcPix/dstPix read index
+        const hx  = px - cone_cx;
+
+        if (hx > r_wavy) {
+          cone_outBuf[oi4]   = srcPix[si4];
+          cone_outBuf[oi4+1] = srcPix[si4+1];
+          cone_outBuf[oi4+2] = srcPix[si4+2];
+          cone_outBuf[oi4+3] = 255;
+          continue;
+        }
+        if (hx < -r_wavy) {
+          cone_outBuf[oi4]   = dstPix[si4];
+          cone_outBuf[oi4+1] = dstPix[si4+1];
+          cone_outBuf[oi4+2] = dstPix[si4+2];
+          cone_outBuf[oi4+3] = 255;
+          continue;
+        }
+        if (r_wavy < 1) {
+          cone_outBuf[oi4]   = dstPix[si4];
+          cone_outBuf[oi4+1] = dstPix[si4+1];
+          cone_outBuf[oi4+2] = dstPix[si4+2];
+          cone_outBuf[oi4+3] = 255;
+          continue;
+        }
+
+        // ── Refractive glass interior ──────────────────────────────────
+        const hx_norm = hx / r_wavy;
+        const abs_hxn = Math.abs(hx_norm);
+
+        const ref_phase = spin + t_cone * Math.PI * 2.8 + hx_norm * 1.4;
+        const ref_mag   = REF_STR * abs_hxn * Math.sin(abs_hxn * Math.PI) * (r_wavy / (RW * 0.5));
+
+        const dx = (ref_mag * Math.cos(ref_phase) * 0.45) | 0;
+        const dy = (ref_mag * Math.sin(ref_phase)) | 0;
+
+        const ca  = CHROM * abs_hxn;
+        const cph = ref_phase + Math.PI * 0.5;
+        const cax = (ca * Math.sin(cph) * 0.3) | 0;
+        const cay = (ca * Math.cos(cph)) | 0;
+
+        const gx = Math.max(0, Math.min(RW-1, px + dx));
+        const gy = Math.max(0, Math.min(RH-1, py + dy));
+        const rx = Math.max(0, Math.min(RW-1, px + dx + cax));
+        const ry = Math.max(0, Math.min(RH-1, py + dy + cay));
+        const bx = Math.max(0, Math.min(RW-1, px + dx - cax));
+        const by = Math.max(0, Math.min(RH-1, py + dy - cay));
+
+        let dr, dg, db;
+
+        if (isBlend) {
+          const ar = srcPix[(ry * RW + rx) * 4    ];
+          const ag = srcPix[(gy * RW + gx) * 4 + 1];
+          const ab = srcPix[(by * RW + bx) * 4 + 2];
+          const br = dstPix[(ry * RW + rx) * 4    ];
+          const bg = dstPix[(gy * RW + gx) * 4 + 1];
+          const bb = dstPix[(by * RW + bx) * 4 + 2];
+
+          let swirl, spread;
+
+          if (mode === 'AB') {
+            // Organic marbling blend — swirl mask driven by the refraction
+            // phase itself, so bands of A and B marble and rotate with the glass.
+            swirl = 0.5 + 0.5 * Math.sin(
+              ref_phase * 1.35 + t_cone * Math.PI * 4.2 + hx_norm * 2.3 + spin * 0.55
+            );
+            spread = 0.12 + 0.08 * Math.sin(spin * 2.05 + t_cone * Math.PI * 6.1 + hx_norm);
+          } else {
+            // Rotating-cylinder vertical bands. hx_norm ≈ sin(φ) for a point
+            // on the cone's circular cross-section; two angles share that
+            // sine — near face (φ_front) and far face (φ_back = π−φ_front).
+            // A band at fixed material angle φ has screen velocity ∝ cos(φ):
+            // +front, −back — same spin, opposite apparent motion. asin()'s
+            // derivative explodes near ±1 (that's what caused early strobing),
+            // so the input is clamped well inside ±1, band count kept low,
+            // and this layer's rotation is slowed independently of the main
+            // spin rate to stay smooth even at high settings.
+            const hxClamped = Math.max(-0.90, Math.min(0.90, hx_norm));
+            const phiFront  = Math.asin(hxClamped);
+            const phiBack   = Math.PI - phiFront;
+            const N_BANDS   = 4;
+            const bandSpin  = spin * 0.32;
+
+            const frontWave = Math.sin(N_BANDS * (phiFront - bandSpin));
+            const backWave  = Math.sin(N_BANDS * (phiBack  - bandSpin));
+
+            swirl  = 0.5 + 0.5 * (frontWave * 0.62 + backWave * 0.38);
+            spread = 0.10 + 0.06 * (frontWave - backWave) * 0.5;
+          }
+
+          const mixR = Math.min(1, Math.max(0, swirl + spread));
+          const mixG = swirl;
+          const mixB = Math.min(1, Math.max(0, swirl - spread));
+
+          dr = ar * (1 - mixR) + br * mixR;
+          dg = ag * (1 - mixG) + bg * mixG;
+          db = ab * (1 - mixB) + bb * mixB;
+
+        } else {
+          dr = REF_PIX[(ry * RW + rx) * 4    ];
+          dg = REF_PIX[(gy * RW + gx) * 4 + 1];
+          db = REF_PIX[(by * RW + bx) * 4 + 2];
+        }
+
+        // Iridescent edge tint
+        const edge_f = Math.pow(abs_hxn, 1.8);
+        const irid   = spin * 2.4 + t_cone * Math.PI * 5.2;
+        dr = Math.min(255, dr * (1 + edge_f * 0.55 * Math.max(0, Math.sin(irid)))) | 0;
+        dg = Math.min(255, dg * (1 + edge_f * 0.40 * Math.max(0, Math.sin(irid + 2.09)))) | 0;
+        db = Math.min(255, db * (1 + edge_f * 0.65 * Math.max(0, Math.sin(irid + 4.19)))) | 0;
+
+        // Specular rim at glass boundary
+        const rim = Math.pow(Math.max(0, abs_hxn - 0.82) / 0.18, 2.5) * 255;
+
+        // Caustic filament down centre
+        const caustic_angle = spin * 1.8 + t_cone * Math.PI * 3.5;
+        const caustic = Math.pow(Math.max(0, 1 - abs_hxn / 0.18), 3)
+                      * 80 * (0.5 + 0.5 * Math.sin(caustic_angle));
+
+        cone_outBuf[oi4]   = Math.min(255, dr + rim + caustic) | 0;
+        cone_outBuf[oi4+1] = Math.min(255, dg + rim * 0.9 + caustic) | 0;
+        cone_outBuf[oi4+2] = Math.min(255, db + rim + caustic) | 0;
+        cone_outBuf[oi4+3] = 255;
+      }
+    }
+
+    // Small render → recording canvas (1080p) and display canvas (4K),
+    // both scaled up from the same small source via hardware-accelerated blit.
+    cone_smallCx.putImageData(new ImageData(cone_outBuf, CONE_RW2, CONE_RH2), 0, 0);
+    recCtx6.drawImage(cone_smallC, 0, 0, CONE_RW2, CONE_RH2, 0, 0, RW, RH);
+    ctx6.drawImage(cone_smallC, 0, 0, CONE_RW2, CONE_RH2, 0, 0, W, H);
+  }
+
+  let el = 0, lastT = null;
+  function frm(ts) {
+    if (!lastT) lastT = ts;
+    const dt = Math.min((ts - lastT) / 1000, 0.05);
+    lastT = ts; el += dt;
+    const rawT = Math.min(el / DURATION, 1);
+    const t = easeInOut(rawT);
+    drawFrame(t, el);
+    if (rawT >= 1) {
+      recCtx6.drawImage(cone_dstC, 0, 0); ctx6.drawImage(recC6, 0, 0, W, H);
+      const reset = () => {
+        recCtx6.drawImage(cone_srcC, 0, 0); ctx6.drawImage(recC6, 0, 0, W, H);
+      };
+      onDone ? onDone(reset) : setTimeout(reset, 1600);
+      return;
+    }
+    requestAnimationFrame(frm);
+  }
+  requestAnimationFrame(frm);
+}
+
 // ══════════════════════════════════════════════════════════════════════════
 // SECTION 6 · TRANSITIONS REGISTRY
 // ─────────────────────────────────────────────────────────────────────────
@@ -898,6 +1155,15 @@ const TRANSITIONS = {
     recordFilename: 'tile-drop',
     playBtnId:      'btn5p',
     recBtnId:       'btn5r',
+    padSecs:        0,
+    running:        false,
+  },
+  coneRefraction: {
+    runFn:          runConeRefraction,
+    recCanvas:      recC6,
+    recordFilename: 'cone-refraction',
+    playBtnId:      'btn6p',
+    recBtnId:       'btn6r',
     padSecs:        0,
     running:        false,
   },
@@ -995,6 +1261,23 @@ function registerTransition(key) {
   document.head.appendChild(styleEl);
 })();
 
+// Wire cone refraction glass-mode picker — defaults to AB — Bands
+(function() {
+  const btns = document.querySelectorAll('.cgb');
+  const defaultBtn = Array.from(btns).find(b => b.dataset.mode === 'ABV') || btns[0];
+  if (defaultBtn) defaultBtn.classList.add('cgb-active');
+  btns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (TRANSITIONS.coneRefraction.running) return;
+      btns.forEach(b => { b.classList.remove('cgb-active'); b.style.borderColor = ''; b.style.color = ''; });
+      btn.classList.add('cgb-active');
+    });
+  });
+  const styleEl = document.createElement('style');
+  styleEl.textContent = '.cgb.cgb-active { border-color: var(--color-text-primary) !important; color: var(--color-text-primary) !important; }';
+  document.head.appendChild(styleEl);
+})();
+
 Object.keys(TRANSITIONS).forEach(registerTransition);
 
 
@@ -1016,6 +1299,8 @@ drawDefaultA (par_srcC.getContext('2d'), RW, RH);
 drawDefaultB (par_dstC.getContext('2d'), RW, RH);
 drawDefaultA (td_srcC.getContext('2d'),  RW, RH);
 drawDefaultB (td_dstC.getContext('2d'),  RW, RH);
+drawDefaultA (cone_srcC.getContext('2d'), RW, RH);
+drawDefaultB (cone_dstC.getContext('2d'), RW, RH);
 
 // ── Render initial frames to display canvases ────────────────────────────
 ctx1.drawImage(milkC, 0, 0); recCtx1.drawImage(milkC, 0, 0, RW, RH);
@@ -1023,11 +1308,12 @@ ctx2.drawImage(trimC, 0, 0); recCtx2.drawImage(trimC, 0, 0, RW, RH);
 recCtx3.drawImage(bub_srcC, 0, 0); ctx3.drawImage(recC3, 0, 0, W, H);
 recCtx4.drawImage(par_srcC, 0, 0); ctx4.drawImage(recC4, 0, 0, W, H);
 recCtx5.drawImage(td_srcC,  0, 0); ctx5.drawImage(recC5, 0, 0, W, H);
+recCtx6.drawImage(cone_srcC, 0, 0); ctx6.drawImage(recC6, 0, 0, W, H);
 
 // ── File inputs — A = source (all transitions), B = destination (all transitions) ──
 //
-// Source canvases:  milkC, trimC (4K),  bub_srcC, par_srcC, td_srcC (1080p)
-// Dest canvases:   butC,  talC  (4K),  bub_dstC, par_dstC, td_dstC (1080p)
+// Source canvases:  milkC, trimC (4K),  bub_srcC, par_srcC, td_srcC, cone_srcC (1080p)
+// Dest canvases:   butC,  talC  (4K),  bub_dstC, par_dstC, td_dstC, cone_dstC (1080p)
 //
 // On load: image is drawn cover-cropped into every canvas of the correct size,
 // then all idle display canvases are refreshed.
@@ -1038,6 +1324,7 @@ function refreshAllIdle() {
   if (!TRANSITIONS.bubbles.running)  { recCtx3.drawImage(bub_srcC,0,0); ctx3.drawImage(recC3,0,0,W,H); }
   if (!TRANSITIONS.particles.running){ recCtx4.drawImage(par_srcC,0,0); ctx4.drawImage(recC4,0,0,W,H); }
   if (!TRANSITIONS.tileDrop.running) { recCtx5.drawImage(td_srcC, 0,0); ctx5.drawImage(recC5,0,0,W,H); }
+  if (!TRANSITIONS.coneRefraction.running) { recCtx6.drawImage(cone_srcC, 0,0); ctx6.drawImage(recC6,0,0,W,H); }
 }
 
 document.getElementById('fA').addEventListener('change', function() {
@@ -1045,7 +1332,7 @@ document.getElementById('fA').addEventListener('change', function() {
   loadFromFile(this.files[0], img => {
     // Paint into all source canvases at their respective resolutions
     [milkC, trimC].forEach(c => drawCover(c.getContext('2d'), img, W,  H));
-    [bub_srcC, par_srcC, td_srcC].forEach(c => drawCover(c.getContext('2d'), img, RW, RH));
+    [bub_srcC, par_srcC, td_srcC, cone_srcC].forEach(c => drawCover(c.getContext('2d'), img, RW, RH));
     refreshAllIdle();
     setLbl('lblA', this.files[0].name);
   });
@@ -1056,7 +1343,7 @@ document.getElementById('fB').addEventListener('change', function() {
   loadFromFile(this.files[0], img => {
     // Paint into all destination canvases at their respective resolutions
     [butC, talC].forEach(c => drawCover(c.getContext('2d'), img, W,  H));
-    [bub_dstC, par_dstC, td_dstC].forEach(c => drawCover(c.getContext('2d'), img, RW, RH));
+    [bub_dstC, par_dstC, td_dstC, cone_dstC].forEach(c => drawCover(c.getContext('2d'), img, RW, RH));
     setLbl('lblB', this.files[0].name);
   });
 });
