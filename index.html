@@ -8,8 +8,72 @@
   <link rel="icon" type="image/png" sizes="32x32" href="public/favicon-32x32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="public/favicon-16x16.png">
   <link rel="apple-touch-icon" href="public/apple-touch-icon.png">
+  <style>
+    /* ── Design tokens ─────────────────────────────────────────────────────
+       These were only ever supplied by the Claude artifact preview sandbox.
+       Outside that environment (e.g. this file on GitHub Pages) every
+       var(--color-*) reference had nothing to resolve to, which is why all
+       the text rendered black-on-black. Defining them here fixes that for
+       every element in the file, since they're all referenced by name. */
+    :root {
+      --color-background:      #141414;
+      --color-bg-secondary:    #1e1e1e;
+      --color-text-primary:    #f2f2f2;
+      --color-text-secondary:  #c7c7c7;
+      --color-text-tertiary:   #8a8a8a;
+      --color-border-secondary: #3a3a3a;
+      --color-border-tertiary:  #2a2a2a;
+      --color-accent-primary:  #6ea8fe;
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 24px 20px 48px;
+      background: var(--color-background);
+      color: var(--color-text-primary);
+      font-family: var(--font-sans, sans-serif);
+    }
+    #page-wrap {
+      max-width: 960px;
+      margin: 0 auto;
+    }
+    #page-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    #page-header img {
+      width: 40px;
+      height: 40px;
+      border-radius: 8px;
+    }
+    #page-header h1 {
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--color-text-primary);
+      margin: 0;
+    }
+    button {
+      color: var(--color-text-primary);
+      background: var(--color-bg-secondary);
+      border-color: var(--color-border-secondary);
+    }
+    /* sr-only: visually hidden but available to screen readers */
+    .sr-only {
+      position: absolute; width: 1px; height: 1px;
+      padding: 0; margin: -1px; overflow: hidden;
+      clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+    }
+  </style>
 </head>
 <body>
+<div id="page-wrap">
+
+<div id="page-header">
+  <img src="public/apple-touch-icon.png" alt="">
+  <h1>Fat Transitions</h1>
+</div>
 
 <h2 class="sr-only">Fat transitions — config-registry architecture. 4K display, 1080p recording.</h2>
 
@@ -576,103 +640,327 @@ function runSolidify(onDone) {
 
 
 // ── Transition 3 — BUBBLES ───────────────────────────────────────────────
+//
+// PERFORMANCE NOTE: the original version built three fresh CanvasGradient
+// objects per bubble, every frame (up to 80 × 3 × 60fps), plus a full
+// 1920×1080 clear-and-recomposite every frame for a translucent "peek
+// through" effect. Gradient construction and full-canvas compositing are
+// both expensive — that combination was the actual source of the lag.
+//
+// Fix: everything reusable is pre-baked ONCE at the top of the function
+// (a small hue-variant sprite atlas for the bubbles, a sparkle sprite, and
+// a shockwave-ring sprite). Every frame then just stamps those sprites down
+// with drawImage — cheap, GPU-friendly — instead of recomputing gradients.
+// The "peek through destination" effect is now bounded to each bubble's own
+// small bounding box instead of a full-canvas mask/composite pass.
+//
 function runBubbles(onDone) {
   const bx = recCtx3, bw = RW, bh = RH;
-  const NUM = 80;
+  const NUM = 150;          // sprite-based rendering is cheap — more bubbles, same cost class
+
+  // ── Pre-bake bubble sprite atlas (once per run, not per frame) ──────────
+  // A handful of hue variants across a dreamy cyan→violet→pink range. Each
+  // bubble picks its nearest variant, so per-frame cost is one drawImage.
+  const HUE_VARIANTS = 16;
+  const HUE_LO = 150, HUE_HI = 330;
+  const SPRITE_SIZE = 320;
+  const bubbleSprites = [];
+  for (let i = 0; i < HUE_VARIANTS; i++) {
+    const h = HUE_LO + (HUE_HI - HUE_LO) * (i / (HUE_VARIANTS - 1));
+    const sc = mkc(SPRITE_SIZE, SPRITE_SIZE);
+    const sx = sc.getContext('2d');
+    const cx0 = SPRITE_SIZE / 2, cy0 = SPRITE_SIZE / 2, r0 = SPRITE_SIZE * 0.46;
+
+    const film = sx.createRadialGradient(cx0, cy0, 0, cx0, cy0, r0);
+    film.addColorStop(0,    `hsla(${h},60%,85%,0)`);
+    film.addColorStop(0.5,  `hsla(${h+40},70%,80%,0.10)`);
+    film.addColorStop(0.82, `hsla(${h+80},75%,90%,0.24)`);
+    film.addColorStop(1,    `hsla(${h},55%,95%,0)`);
+    sx.beginPath(); sx.arc(cx0, cy0, r0, 0, Math.PI*2); sx.fillStyle = film; sx.fill();
+
+    const rim = sx.createRadialGradient(cx0, cy0, r0*.87, cx0, cy0, r0);
+    rim.addColorStop(0,    'rgba(255,255,255,0)');
+    rim.addColorStop(0.6,  `hsla(${h+60},85%,90%,0.38)`);
+    rim.addColorStop(0.86, 'rgba(255,255,255,0.65)');
+    rim.addColorStop(1,    'rgba(255,255,255,0.08)');
+    sx.beginPath(); sx.arc(cx0, cy0, r0, 0, Math.PI*2); sx.fillStyle = rim; sx.fill();
+
+    const hlx = cx0 - r0*.30, hly = cy0 - r0*.34, hlr = r0*.4;
+    const gl = sx.createRadialGradient(hlx, hly, 0, hlx, hly, hlr);
+    gl.addColorStop(0,   'rgba(255,255,255,0.75)');
+    gl.addColorStop(0.5, 'rgba(255,255,255,0.12)');
+    gl.addColorStop(1,   'rgba(255,255,255,0)');
+    sx.beginPath(); sx.arc(hlx, hly, hlr, 0, Math.PI*2); sx.fillStyle = gl; sx.fill();
+
+    bubbleSprites.push(sc);
+  }
+
+  // ── Pre-bake sparkle sprite (used for pop shards) ────────────────────────
+  const SPARK_SIZE = 48;
+  const sparkC = mkc(SPARK_SIZE, SPARK_SIZE);
+  (() => {
+    const sx = sparkC.getContext('2d');
+    const c0 = SPARK_SIZE/2;
+    sx.translate(c0, c0);
+    const glow = sx.createRadialGradient(0,0,0, 0,0,c0);
+    glow.addColorStop(0,   'rgba(255,255,255,0.9)');
+    glow.addColorStop(0.35,'rgba(255,255,255,0.35)');
+    glow.addColorStop(1,   'rgba(255,255,255,0)');
+    sx.fillStyle = glow; sx.beginPath(); sx.arc(0,0,c0,0,Math.PI*2); sx.fill();
+    sx.fillStyle = 'rgba(255,255,255,0.95)';
+    sx.beginPath();
+    for (let s = 0; s < 4; s++) {
+      const a = s * Math.PI/2;
+      sx.moveTo(0,0);
+      sx.lineTo(Math.cos(a-0.09)*c0*0.92, Math.sin(a-0.09)*c0*0.92);
+      sx.lineTo(Math.cos(a)*c0*0.22, Math.sin(a)*c0*0.22);
+      sx.lineTo(Math.cos(a+0.09)*c0*0.92, Math.sin(a+0.09)*c0*0.92);
+    }
+    sx.closePath(); sx.fill();
+  })();
+
+  // ── Pre-bake shockwave ring sprite (used for pop bursts) ────────────────
+  const RING_SIZE = 240;
+  const ringC = mkc(RING_SIZE, RING_SIZE);
+  (() => {
+    const sx = ringC.getContext('2d');
+    const c0 = RING_SIZE/2;
+    const g = sx.createRadialGradient(c0,c0,c0*0.62, c0,c0,c0);
+    g.addColorStop(0,   'rgba(255,255,255,0)');
+    g.addColorStop(0.78,'rgba(255,255,255,0.85)');
+    g.addColorStop(1,   'rgba(255,255,255,0)');
+    sx.fillStyle = g; sx.beginPath(); sx.arc(c0,c0,c0,0,Math.PI*2); sx.fill();
+  })();
+
+  // ── Pre-bake soft feather mask (used to give each pop's reveal a gentle
+  //    falloff instead of a hard-edged circle — solid centre, fading out
+  //    toward the rim so adjacent pops blend rather than stamping) ────────
+  const FEATHER_SIZE = 256;
+  const featherC = mkc(FEATHER_SIZE, FEATHER_SIZE);
+  (() => {
+    const sx = featherC.getContext('2d');
+    const c0 = FEATHER_SIZE/2;
+    const g = sx.createRadialGradient(c0,c0,0, c0,c0,c0);
+    g.addColorStop(0,    'rgba(255,255,255,1)');
+    g.addColorStop(0.62, 'rgba(255,255,255,1)');
+    g.addColorStop(1,    'rgba(255,255,255,0)');
+    sx.fillStyle = g; sx.fillRect(0,0,FEATHER_SIZE,FEATHER_SIZE);
+  })();
 
   function mkBub() {
+    const hue = HUE_LO + Math.random()*(HUE_HI-HUE_LO);
+    const vyMag = (50+Math.random()*95)*BSH;   // rise speed, px/s
+
+    // Genuine off-screen start — a real gap below the bottom edge so
+    // bubbles visibly glide up into frame rather than appearing to spawn
+    // already on-screen.
+    const offsetFrac = 0.03 + Math.random()*0.11;      // 3–14% of canvas height below the edge
+    const entryTime  = (bh*offsetFrac) / vyMag;         // time just to reach the visible edge
+
+    // How far a bubble rises AFTER it's actually entered frame, skewed
+    // toward smaller values (pow > 1 biases random() toward the low end).
+    // This is what actually fixes "none popping in the bottom third": at
+    // typical rise speed a bubble clears the bottom third in well under a
+    // second, so maxLife needs to be explicitly short for plenty of bubbles
+    // or they'll always pop having already drifted up past it.
+    const postRiseFrac = Math.pow(Math.random(), 1.6) * 1.2;   // up to 1.2× canvas height, skewed low
+    const postTime = Math.min(1.6, Math.max(0.15, (bh*postRiseFrac)/vyMag));
+
     return {
-      x: bw*(.03+Math.random()*.94), y: bh*(1.02+Math.random()*.2),
-      r: (14+Math.random()*48)*BSW,
-      vx: (Math.random()-.5)*12*BSW, vy: -(50+Math.random()*95)*BSH,
-      life: 0, maxLife: 1.5+Math.random()*1.4, born: Math.random()*3.0,
-      hue: 175+Math.random()*70,
+      x: bw*(.03+Math.random()*.94), y: bh*(1+offsetFrac),
+      r: (11+Math.random()*26)*BSW,
+      vx: (Math.random()-.5)*12*BSW, vy: -vyMag,
+      life: 0, maxLife: entryTime + postTime, born: Math.random()*2.6,
+      hue, spriteIdx: Math.round((hue-HUE_LO)/(HUE_HI-HUE_LO)*(HUE_VARIANTS-1)),
+      spin: (Math.random()-.5)*1.4, ang: Math.random()*Math.PI*2,
+      wobPhase: Math.random()*Math.PI*2, wobSpeed: 2.2+Math.random()*1.6,
       pop: false, popT: 0, popR: 0, popX: 0, popY: 0, done: false,
     };
   }
 
   const bubbles = Array.from({length:NUM}, mkBub);
-  const popped = [];
+
+  // ── Persistent reveal layer ──────────────────────────────────────────────
+  // Every time a bubble pops, its patch of B gets stamped permanently into
+  // this canvas (once, at pop time — not re-drawn every frame). Drawn as a
+  // single cheap full-canvas blit on top of the A base each frame, so the
+  // destination genuinely builds up through the popping itself: by the time
+  // the last bubble goes, most of B is already visible from accumulated
+  // pops, not from one hard cut at the very end.
+  const revealedDstC = mkc(RW, RH);
+  const revealedDstX = revealedDstC.getContext('2d');
+
+  // Shockwave bursts spawned on pop — ring + flying shards (pure visual
+  // flourish now; the actual reveal is handled by revealedDstC above)
+  const shards = [];
   let el = 0, last3 = null, doneEl = 0, finished = false;
+
+  // Update + draw all active shockwave bursts — decorative ring + sparks
+  // layered on top of a pop's already-revealed patch.
+  function drawShards(dt) {
+    for (let i = shards.length - 1; i >= 0; i--) {
+      const s = shards[i];
+      s.t += dt;
+      const pf = Math.min(s.t/0.5, 1);
+      if (pf >= 1) { shards.splice(i,1); continue; }
+
+      const rr = s.maxR * (0.4 + pf*1.6);
+      const ringA = (1-pf)*0.9;
+      bx.globalCompositeOperation = 'lighter';
+      bx.globalAlpha = ringA;
+      const ringD = rr*2.1;
+      bx.drawImage(ringC, s.x-ringD/2, s.y-ringD/2, ringD, ringD);
+      bx.globalCompositeOperation = 'source-over';
+      bx.globalAlpha = 1;
+
+      s.parts.forEach(p => {
+        p.x += p.vx*dt; p.y += p.vy*dt; p.vx *= 0.94; p.vy *= 0.94;
+        const pa = Math.max(0, 1-pf);
+        bx.globalCompositeOperation = 'lighter';
+        bx.globalAlpha = pa * 0.85;
+        bx.save();
+        bx.translate(p.x, p.y); bx.rotate(p.rot + s.t*p.spin);
+        bx.filter = `hue-rotate(${p.hueShift}deg)`;
+        bx.drawImage(sparkC, -p.sz/2, -p.sz/2, p.sz, p.sz);
+        bx.filter = 'none';
+        bx.restore();
+        bx.globalCompositeOperation = 'source-over';
+      });
+    }
+    bx.globalAlpha = 1;
+  }
 
   function frm(ts) {
     if (!last3) last3 = ts;
     const dt = Math.min((ts-last3)/1000, .05); last3 = ts; el += dt;
-    bx.drawImage(bub_srcC, 0, 0);
 
-    popped.forEach(p => {
-      if (p.done) return; p.t += dt;
-      const pf = Math.min(p.t/.25, 1);
-      p.r = p.maxR*(1+pf*1.5);
-      if (pf >= 1) { p.r = p.maxR*2.5; p.done = true; }
-    });
-
-    if (popped.length > 0) {
-      bx.save(); bx.beginPath();
-      popped.forEach(p => { bx.arc(p.x, p.y, p.r, 0, Math.PI*2); bx.closePath(); });
-      bx.clip(); bx.drawImage(bub_dstC, 0, 0); bx.restore();
-    }
-
-    let allDone = true;
-    bubbles.forEach(b => {
-      if (b.done) return;
-      if (el < b.born) { allDone = false; return; }
-      if (b.pop) {
-        b.popT += dt;
-        const pf = Math.min(b.popT/.22, 1);
-        if (pf < 1) {
-          allDone = false;
-          const ra = (1-pf)*.65;
-          bx.beginPath(); bx.arc(b.popX, b.popY, b.popR*(1+pf*2.1), 0, Math.PI*2);
-          bx.strokeStyle = `rgba(255,255,255,${ra})`; bx.lineWidth = 2*BSW*(1-pf); bx.stroke();
-          for (let s = 0; s < 6; s++) {
-            const sa = (s/6)*Math.PI*2+b.popT*9, sd = b.popR*(1.1+pf*.9);
-            bx.beginPath(); bx.arc(b.popX+Math.cos(sa)*sd, b.popY+Math.sin(sa)*sd, 1.4*BSW*(1-pf), 0, Math.PI*2);
-            bx.fillStyle = `rgba(255,255,255,${ra*.65})`; bx.fill();
-          }
-        } else { b.done = true; }
-        return;
-      }
-      allDone = false;
-      b.life += dt; b.x += b.vx*dt; b.vx *= 0.996;
-      b.vy += 5*BSH*dt; b.y += b.vy*dt; b.r += 0.25*BSW*dt;
-      const shouldPop = b.y-b.r < -10 || b.life > b.maxLife || (b.y < bh*.12 && Math.random() < .016) || (b.life > b.maxLife*.75 && Math.random() < .007);
-      if (shouldPop) {
-        b.pop = true; b.popT = 0; b.popR = b.r; b.popX = b.x; b.popY = b.y;
-        popped.push({x:b.x, y:b.y, r:b.r, maxR:b.r, t:0, done:false});
-        return;
-      }
-      const h = b.hue, tt = el*1.8+b.born;
-      const film = bx.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.r);
-      film.addColorStop(0, `hsla(${h},60%,85%,0)`); film.addColorStop(0.5, `hsla(${h+40+Math.sin(tt)*30},70%,80%,0.07)`);
-      film.addColorStop(0.82, `hsla(${h+80+Math.cos(tt*1.3)*40},75%,90%,0.2)`); film.addColorStop(1, `hsla(${h},55%,95%,0)`);
-      bx.beginPath(); bx.arc(b.x, b.y, b.r, 0, Math.PI*2); bx.fillStyle = film; bx.fill();
-      const rim = bx.createRadialGradient(b.x, b.y, b.r*.87, b.x, b.y, b.r);
-      rim.addColorStop(0, 'rgba(255,255,255,0)'); rim.addColorStop(0.6, `hsla(${h+60+Math.sin(el*2)*50},80%,90%,0.3)`);
-      rim.addColorStop(0.86, 'rgba(255,255,255,0.55)'); rim.addColorStop(1, 'rgba(255,255,255,0.05)');
-      bx.beginPath(); bx.arc(b.x, b.y, b.r, 0, Math.PI*2); bx.fillStyle = rim; bx.fill();
-      const hx = b.x-b.r*.28, hy = b.y-b.r*.32, hr = b.r*.38;
-      const gl = bx.createRadialGradient(b.x-b.r*.32, b.y-b.r*.38, 0, hx, hy, hr);
-      gl.addColorStop(0, 'rgba(255,255,255,0.6)'); gl.addColorStop(0.5, 'rgba(255,255,255,0.08)'); gl.addColorStop(1, 'rgba(255,255,255,0)');
-      bx.beginPath(); bx.arc(hx, hy, hr, 0, Math.PI*2); bx.fillStyle = gl; bx.fill();
-    });
-
-    bubMaskX.clearRect(0, 0, RW, RH); bubMaskX.fillStyle = '#fff';
-    bubbles.forEach(b => { if (b.done || el < b.born || b.pop) return; bubMaskX.beginPath(); bubMaskX.arc(b.x, b.y, b.r, 0, Math.PI*2); bubMaskX.fill(); });
-    bubOvX.clearRect(0, 0, RW, RH); bubOvX.drawImage(bub_dstC, 0, 0);
-    bubOvX.globalCompositeOperation = 'destination-in'; bubOvX.drawImage(bubMaskC, 0, 0);
-    bubOvX.globalCompositeOperation = 'source-over';
-    bx.globalAlpha = 0.5; bx.drawImage(bubOvC, 0, 0); bx.globalAlpha = 1;
-    ctx3.drawImage(recC3, 0, 0, W, H);
-
-    if ((allDone || el > 7.5) && !finished) { finished = true; doneEl = 0; }
     if (finished) {
+      // ── Resolved — settle in on B ───────────────────────────────────────
+      // By this point most of the canvas is already showing B from the
+      // accumulated pop reveals. Any small unrevealed slivers left over
+      // (bubble coverage is random, so full tiling isn't guaranteed) are
+      // smoothly crossfaded to full B across the hold, rather than snapped —
+      // a safety net, not the primary reveal mechanism.
+      bx.drawImage(bub_srcC, 0, 0);
+      bx.drawImage(revealedDstC, 0, 0);
+      drawShards(dt);
+
       doneEl += dt;
-      if (doneEl >= .4) {
+      const fadeT = Math.min(doneEl/.35, 1);
+      if (fadeT > 0) {
+        bx.globalAlpha = fadeT;
+        bx.drawImage(bub_dstC, 0, 0);
+        bx.globalAlpha = 1;
+      }
+      ctx3.drawImage(recC3, 0, 0, W, H);
+
+      if (fadeT >= 1) {
         recCtx3.drawImage(bub_dstC, 0, 0); ctx3.drawImage(recC3, 0, 0, W, H);
         const reset = () => { recCtx3.drawImage(bub_srcC, 0, 0); ctx3.drawImage(recC3, 0, 0, W, H); };
         onDone ? onDone(reset) : setTimeout(reset, 1600); return;
       }
+      requestAnimationFrame(frm);
+      return;
+    }
+
+    bx.drawImage(bub_srcC, 0, 0);
+    bx.drawImage(revealedDstC, 0, 0);
+    drawShards(dt);
+
+    // Update & draw bubbles
+    let allDone = true;
+    bubbles.forEach(b => {
+      if (b.done) return;
+      if (el < b.born) { allDone = false; return; }
+
+      if (b.pop) {
+        allDone = false;
+        b.done = true;
+        b.pop = false;
+
+        // Permanently stamp this pop's patch of B into the reveal layer —
+        // drawn once, here, not every frame. Kept close to the bubble's own
+        // footprint (a small overshoot for a soft rim, not several times
+        // its size) so B builds up gradually pop-by-pop across the whole
+        // animation rather than a few big early bubbles blanketing most of
+        // the canvas in the first second or two. The edge is feathered via
+        // featherC (destination-in on a small scratch canvas) so overlapping
+        // pops blend softly instead of stamping hard-edged discs.
+        const revealR = b.popR * 1.42;
+        const ps = revealR * 2;
+        const patchC = mkc(ps, ps);
+        const patchX = patchC.getContext('2d');
+        patchX.drawImage(
+          bub_dstC,
+          b.popX-revealR, b.popY-revealR, ps, ps,
+          0, 0, ps, ps
+        );
+        patchX.globalCompositeOperation = 'destination-in';
+        patchX.drawImage(featherC, 0, 0, ps, ps);
+        revealedDstX.drawImage(patchC, b.popX-revealR, b.popY-revealR);
+
+        // Spawn the shockwave burst once, at pop moment
+        const NPARTS = 9;
+        const parts = [];
+        for (let s = 0; s < NPARTS; s++) {
+          const a = (s/NPARTS)*Math.PI*2 + Math.random()*0.4;
+          const spd = (140 + Math.random()*180) * BSW;
+          parts.push({
+            x: b.popX, y: b.popY,
+            vx: Math.cos(a)*spd, vy: Math.sin(a)*spd,
+            sz: (10+Math.random()*14)*BSW,
+            rot: Math.random()*Math.PI*2, spin: (Math.random()-.5)*6,
+            hueShift: (b.hue-190) + (Math.random()-.5)*40,
+          });
+        }
+        shards.push({ x:b.popX, y:b.popY, maxR:b.popR, t:0, parts });
+        return;
+      }
+
+      allDone = false;
+      b.life += dt; b.x += b.vx*dt; b.vx *= 0.996;
+      b.vy += 5*BSH*dt; b.y += b.vy*dt;
+      b.r += 0.25*BSW*dt;
+      b.ang += b.spin*dt;
+
+      const shouldPop = b.y-b.r < -10 || b.life > b.maxLife || (b.y < bh*.12 && Math.random() < .016) || (b.life > b.maxLife*.75 && Math.random() < .007);
+      if (shouldPop) {
+        b.pop = true; b.popR = b.r; b.popX = b.x; b.popY = b.y;
+        return;
+      }
+
+      // Gentle organic wobble — squash/stretch, cheap (just a transform)
+      const wob = 1 + 0.045*Math.sin(el*b.wobSpeed + b.wobPhase);
+      const rx = b.r*wob, ry = b.r/wob;
+
+      // Bounded "peek through" — a faint, slowly shimmering hint of the
+      // destination visible inside each still-floating bubble. Bounded to
+      // the bubble's own bbox, so this is cheap regardless of bubble count.
+      const peekA = 0.10 + 0.08*Math.sin(el*1.6 + b.wobPhase);
+      bx.save();
+      bx.beginPath(); bx.ellipse(b.x, b.y, rx, ry, 0, 0, Math.PI*2); bx.clip();
+      bx.globalAlpha = peekA;
+      bx.drawImage(bub_dstC, b.x-b.r, b.y-b.r, b.r*2, b.r*2, b.x-b.r, b.y-b.r, b.r*2, b.r*2);
+      bx.globalAlpha = 1;
+      bx.restore();
+
+      // Stamp the pre-baked iridescent sprite — one drawImage, spinning slowly
+      bx.save();
+      bx.translate(b.x, b.y);
+      bx.rotate(b.ang);
+      bx.scale(wob, 1/wob);
+      const spr = bubbleSprites[b.spriteIdx];
+      bx.drawImage(spr, -b.r, -b.r, b.r*2, b.r*2);
+      bx.restore();
+    });
+
+    ctx3.drawImage(recC3, 0, 0, W, H);
+
+    if (allDone || el > 5.0) {
+      finished = true; doneEl = 0;
+      // Safety-cap trigger: force-hide any bubbles that hadn't naturally
+      // popped yet, so nothing is left floating once we commit to B.
+      bubbles.forEach(b => { if (!b.done) b.done = true; });
     }
     requestAnimationFrame(frm);
   }
@@ -1361,5 +1649,6 @@ document.getElementById('fB').addEventListener('change', function() {
   });
 });
 </script>
+</div><!-- /page-wrap -->
 </body>
 </html>
