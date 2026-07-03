@@ -189,6 +189,20 @@
     <button id="btn7p" style="font-size:12px;padding:7px 20px;">▶ Play</button>
     <button id="btn7r" style="font-size:12px;padding:7px 20px;border-color:#e05555;color:#e05555;">⏺ Record 1080p</button>
   </div>
+  <!-- Peel angle — read once at play-time by runPagePeel, see DIRECTION -->
+  <div style="display:flex;align-items:center;gap:10px;justify-content:center;margin-top:10px;">
+    <span style="font-size:10px;color:var(--color-text-tertiary);">Angle</span>
+    <svg id="peelAngleArrow" width="26" height="26" viewBox="0 0 26 26" style="flex-shrink:0;">
+      <circle cx="13" cy="13" r="11" fill="none" stroke="var(--color-border-secondary)" stroke-width="1.5"/>
+      <g id="peelAngleArrowG" style="transform-origin:13px 13px;">
+        <line x1="13" y1="13" x2="13" y2="4" stroke="var(--color-accent-primary)" stroke-width="2" stroke-linecap="round"/>
+        <circle cx="13" cy="4" r="2" fill="var(--color-accent-primary)"/>
+      </g>
+    </svg>
+    <input type="range" id="peelAngleSlider" min="0" max="359" step="1" value="314"
+      style="width:180px;touch-action:none;">
+    <span id="peelAngleVal" style="font-size:11px;color:var(--color-text-secondary);min-width:34px;text-align:right;">314°</span>
+  </div>
 </div>
 <p id="status" style="text-align:center;font-size:11px;color:var(--color-text-tertiary);margin:.4rem 0 .5rem;min-height:1.4em;">Display 4K · Shimmer 1280×720 · Records 1080p · EBML duration patched</p>
 </div>
@@ -1558,6 +1572,10 @@ function runConeRefraction(onDone) {
 //                    way it travels. 0 = along the diagonal toward the
 //                    corner geometry naturally favours; try 0/90/180/270
 //                    for the four page corners, or anything between.
+//   DIRECTION      — degrees, now driven by the Angle slider under the
+//                    canvas (read once here, at the moment Play/Record is
+//                    pressed — doesn't change mid-peel if you nudge it
+//                    while the animation's running).
 //   DURATION       — seconds for the full peel.
 //   GLOW_INTENSITY — 0–1.5 (matches the original demo's 0–150% slider).
 //                    How bright the crease glows where it catches light.
@@ -1567,7 +1585,7 @@ function runConeRefraction(onDone) {
 function runPagePeel(onDone) {
 
   // ── Params ──────────────────────────────────────────────────────────────
-  const DIRECTION      = 314;   // degrees — matches the original demo's default
+  const DIRECTION      = parseFloat(document.getElementById('peelAngleSlider').value);
   const DURATION       = 2.2;   // seconds — matches the original demo's default
   const GLOW_INTENSITY = 0.2;   // 20% — requested default (demo's own default was 100%)
 
@@ -2027,6 +2045,66 @@ function registerTransition(key) {
   const styleEl = document.createElement('style');
   styleEl.textContent = '.cgb.cgb-active { border-color: var(--color-text-primary) !important; color: var(--color-text-primary) !important; }';
   document.head.appendChild(styleEl);
+})();
+
+// Wire page peel angle slider — runPagePeel reads its value directly at
+// play-time. This also drives the little compass arrow next to it, and
+// replaces the native drag behaviour with a wrap-around one: a stock
+// <input type="range"> always hard-clamps at min/max, there's no setting
+// that makes it cycle past the end — so dragging is handled manually here
+// instead of letting the browser map cursor position straight to value.
+// Pointerdown is deliberately prevented to stop the native "jump thumb to
+// click position" behaviour from fighting with this; keyboard arrow-key
+// nudging (while the slider is focused) still uses the native input event
+// and clamps normally at 0/359, since only dragging was asked to wrap.
+(function() {
+  const slider = document.getElementById('peelAngleSlider');
+  const val    = document.getElementById('peelAngleVal');
+  const arrowG = document.getElementById('peelAngleArrowG');
+  let lastGood = parseFloat(slider.value);
+
+  function paint(deg) {
+    val.textContent = Math.round(deg) + '°';
+    arrowG.style.transform = 'rotate(' + deg + 'deg)';
+  }
+
+  function setAngle(deg) {
+    deg = ((deg % 360) + 360) % 360;   // wrap into [0, 360)
+    lastGood = deg;
+    slider.value = deg;
+    paint(deg);
+  }
+
+  paint(lastGood);   // initial arrow position on load
+
+  // Keyboard-driven changes (focus + arrow keys) — normal clamped behaviour
+  slider.addEventListener('input', () => {
+    if (TRANSITIONS.pagePeel.running) { slider.value = lastGood; return; }
+    lastGood = parseFloat(slider.value);
+    paint(lastGood);
+  });
+
+  // Pointer-driven changes — relative delta from drag start, wraps freely
+  let dragging = false, dragStartX = 0, dragStartAngle = 0, pxPerDeg = 1;
+
+  slider.addEventListener('pointerdown', e => {
+    if (TRANSITIONS.pagePeel.running) return;
+    e.preventDefault();   // stop native "jump to click position" from also firing
+    dragging = true;
+    dragStartX = e.clientX;
+    dragStartAngle = lastGood;
+    pxPerDeg = slider.offsetWidth / 360;   // full-width drag ≈ one full rotation
+    slider.setPointerCapture(e.pointerId);
+  });
+
+  slider.addEventListener('pointermove', e => {
+    if (!dragging) return;
+    setAngle(dragStartAngle + (e.clientX - dragStartX) / pxPerDeg);
+  });
+
+  const endDrag = () => { dragging = false; };
+  slider.addEventListener('pointerup', endDrag);
+  slider.addEventListener('pointercancel', endDrag);
 })();
 
 Object.keys(TRANSITIONS).forEach(registerTransition);
