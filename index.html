@@ -182,6 +182,14 @@
     <button class="cgb" data-mode="ABV" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">AB — Bands</button>
   </div>
 </div>
+<div style="margin-bottom:14px;">
+  <p style="font-size:11px;font-weight:500;letter-spacing:.1em;color:var(--color-text-secondary);text-align:center;margin:0 0 6px;">PAGE PEEL</p>
+  <canvas id="c7" width="3840" height="2160" style="display:block;width:100%;height:auto;border-radius:8px;border:.5px solid var(--color-border-tertiary);"></canvas>
+  <div style="display:flex;gap:8px;justify-content:center;margin-top:8px;">
+    <button id="btn7p" style="font-size:12px;padding:7px 20px;">▶ Play</button>
+    <button id="btn7r" style="font-size:12px;padding:7px 20px;border-color:#e05555;color:#e05555;">⏺ Record 1080p</button>
+  </div>
+</div>
 <p id="status" style="text-align:center;font-size:11px;color:var(--color-text-tertiary);margin:.4rem 0 .5rem;min-height:1.4em;">Display 4K · Shimmer 1280×720 · Records 1080p · EBML duration patched</p>
 </div>
 
@@ -252,6 +260,15 @@ const CONE_RW2 = Math.round(RW / CONE_RSCALE), CONE_RH2 = Math.round(RH / CONE_R
 const cone_smallC = mkc(CONE_RW2, CONE_RH2), cone_smallCx = cone_smallC.getContext('2d');
 const cone_outBuf = new Uint8ClampedArray(CONE_RW2 * CONE_RH2 * 4);
 
+// Working + recording canvas for page peel
+const recC7 = mkc(RW, RH), recCtx7 = recC7.getContext('2d');
+const peel_srcC = mkc(RW, RH);   // peel "A" scene — the page that peels away
+const peel_dstC = mkc(RW, RH);   // peel "B" scene — revealed underneath
+// The underside of the peeling page — a fixed, plain "back of paper" look.
+// Not tied to A or B (real paper looks the same on the back regardless of
+// what's printed on the front) — painted once at boot, see Section 8.
+const peel_backC = mkc(RW, RH);
+
 // Display canvas contexts
 const c1 = document.getElementById('c1'), ctx1 = c1.getContext('2d');
 const c2 = document.getElementById('c2'), ctx2 = c2.getContext('2d');
@@ -259,6 +276,7 @@ const c3 = document.getElementById('c3'), ctx3 = c3.getContext('2d');
 const c4 = document.getElementById('c4'), ctx4 = c4.getContext('2d');
 const c5 = document.getElementById('c5'), ctx5 = c5.getContext('2d');
 const c6 = document.getElementById('c6'), ctx6 = c6.getContext('2d');
+const c7 = document.getElementById('c7'), ctx7 = c7.getContext('2d');
 
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -780,6 +798,63 @@ function runBubbles(onDone) {
 
   const bubbles = Array.from({length:NUM}, mkBub);
 
+  // ── Predict pop locations, then pre-boost creep targets near any gaps ────
+  // Rather than just hoping the random scatter of pops fully tiles the
+  // canvas (and leaning on the finishing fade to mop up whatever's left),
+  // fast-forward each bubble's own trajectory right now — before the real
+  // animation has drawn a single frame — using the exact same physics as
+  // the live per-frame update. That gives a predicted {x, y, r} for every
+  // eventual pop up front. From there, a coarse grid checks for spots on
+  // the canvas that end up farther from their nearest predicted pop than
+  // that pop's normal creep target would reach — genuine gaps — and
+  // extends that specific spot's target radius just enough to cover it.
+  // So the odd bubble whose neighbourhood is sparse creeps a fair bit
+  // further than average, closing the gap through the normal creep
+  // animation itself instead of the fade safety net having to catch it.
+  //
+  // Note: this doesn't model the small per-frame random early-pop chances
+  // in the live update (b.y<bh*.12 or life>maxLife*.75 triggering early) —
+  // those only ever make a real pop happen a touch sooner than predicted,
+  // never later, so this stays a safe, conservative estimate rather than
+  // an over-confident one.
+  function simulatePop(bub) {
+    const STEP = 1/90;
+    let x = bub.x, y = bub.y, vx = bub.vx, vy = bub.vy, r = bub.r, life = 0;
+    for (let i = 0; i < 4000; i++) {
+      life += STEP;
+      x += vx*STEP; vx *= 0.996;
+      vy += 5*BSH*STEP; y += vy*STEP;
+      r += 0.25*BSW*STEP;
+      if (y - r < -10 || life > bub.maxLife) break;
+    }
+    return { x, y, r };
+  }
+
+  const DEFAULT_TARGET_MUL = 1.8;
+  const predicted = bubbles.map(bub => {
+    const p = simulatePop(bub);
+    return { x: p.x, y: p.y, r: p.r, targetR: p.r * DEFAULT_TARGET_MUL };
+  });
+
+  (function boostGapSpots() {
+    const GRID_COLS = 40, GRID_ROWS = 23;
+    for (let gy = 0; gy < GRID_ROWS; gy++) {
+      for (let gx = 0; gx < GRID_COLS; gx++) {
+        const px = (gx+0.5)/GRID_COLS * RW;
+        const py = (gy+0.5)/GRID_ROWS * RH;
+        let nearest = null, nearestDist = Infinity;
+        for (const spot of predicted) {
+          const d = Math.hypot(px-spot.x, py-spot.y);
+          if (d < nearestDist) { nearestDist = d; nearest = spot; }
+        }
+        if (nearest && nearestDist > nearest.targetR) {
+          const needed = nearestDist + 16;   // small margin for soft-edge overlap
+          if (needed > nearest.targetR) nearest.targetR = needed;
+        }
+      }
+    }
+  })();
+
   // ── Persistent reveal layer ──────────────────────────────────────────────
   // Every time a bubble pops, its patch of B gets stamped permanently into
   // this canvas (once, at pop time — not re-drawn every frame). Drawn as a
@@ -790,25 +865,39 @@ function runBubbles(onDone) {
   const revealedDstC = mkc(RW, RH);
   const revealedDstX = revealedDstC.getContext('2d');
 
+  // Every pop's position + radius, kept around (not just stamped and
+  // forgotten) so the finishing phase can re-grow each spot outward —
+  // that's what makes the ending read as the A border eroding away at the
+  // edges rather than the whole frame fading uniformly.
+  const popSpots = [];
+
+  // Reusable scratch canvas for re-stamping a grown, feather-edged spot
+  // each frame during the finishing phase. Resized per spot rather than
+  // allocating a new canvas element each time.
+  const growScratchC = mkc(4, 4);
+  const growScratchX = growScratchC.getContext('2d');
+
   // Shockwave bursts spawned on pop — ring + flying shards (pure visual
   // flourish now; the actual reveal is handled by revealedDstC above)
   const shards = [];
   let el = 0, last3 = null, doneEl = 0, finished = false;
 
   // Update + draw all active shockwave bursts — decorative ring + sparks
-  // layered on top of a pop's already-revealed patch.
+  // layered on top of a pop's already-revealed patch. Kept deliberately
+  // restrained: with 150 bubbles popping on a tight timeline, anything
+  // brighter/longer here stacks up fast into a flashy glitter-storm.
   function drawShards(dt) {
     for (let i = shards.length - 1; i >= 0; i--) {
       const s = shards[i];
       s.t += dt;
-      const pf = Math.min(s.t/0.5, 1);
+      const pf = Math.min(s.t/0.32, 1);
       if (pf >= 1) { shards.splice(i,1); continue; }
 
       const rr = s.maxR * (0.4 + pf*1.6);
-      const ringA = (1-pf)*0.9;
+      const ringA = (1-pf)*0.5;
       bx.globalCompositeOperation = 'lighter';
       bx.globalAlpha = ringA;
-      const ringD = rr*2.1;
+      const ringD = rr*1.6;
       bx.drawImage(ringC, s.x-ringD/2, s.y-ringD/2, ringD, ringD);
       bx.globalCompositeOperation = 'source-over';
       bx.globalAlpha = 1;
@@ -817,12 +906,10 @@ function runBubbles(onDone) {
         p.x += p.vx*dt; p.y += p.vy*dt; p.vx *= 0.94; p.vy *= 0.94;
         const pa = Math.max(0, 1-pf);
         bx.globalCompositeOperation = 'lighter';
-        bx.globalAlpha = pa * 0.85;
+        bx.globalAlpha = pa * 0.45;
         bx.save();
         bx.translate(p.x, p.y); bx.rotate(p.rot + s.t*p.spin);
-        bx.filter = `hue-rotate(${p.hueShift}deg)`;
         bx.drawImage(sparkC, -p.sz/2, -p.sz/2, p.sz, p.sz);
-        bx.filter = 'none';
         bx.restore();
         bx.globalCompositeOperation = 'source-over';
       });
@@ -830,31 +917,67 @@ function runBubbles(onDone) {
     bx.globalAlpha = 1;
   }
 
+  // Continuously creeps every registered pop spot from baseR toward
+  // targetR over its own growDur, redrawing it (feathered edge, via the
+  // shared scratch canvas) each frame it's still growing. Once a spot
+  // reaches its target it's marked grown and left alone — its last-drawn
+  // state stays permanently baked into revealedDstC, so ongoing cost stays
+  // bounded to however many spots are *currently mid-creep* (roughly a
+  // couple of dozen at once), not the full accumulated total. Called every
+  // frame from both the active phase and the finishing hold, so the same
+  // creep continues seamlessly across that boundary.
+  function updateGrowingSpots(dt) {
+    popSpots.forEach(spot => {
+      if (spot.grown) return;
+      spot.age += dt;
+      const t = Math.min(spot.age/spot.growDur, 1);
+      const easeOut = 1 - Math.pow(1-t, 5);
+      const gr = spot.baseR + (spot.targetR-spot.baseR)*easeOut;
+      const gs = gr*2;
+      growScratchC.width = gs; growScratchC.height = gs;
+      growScratchX.drawImage(bub_dstC, spot.x-gr, spot.y-gr, gs, gs, 0, 0, gs, gs);
+      growScratchX.globalCompositeOperation = 'destination-in';
+      growScratchX.drawImage(featherC, 0, 0, gs, gs);
+      growScratchX.globalCompositeOperation = 'source-over';
+      revealedDstX.drawImage(growScratchC, spot.x-gr, spot.y-gr);
+      if (t >= 1) spot.grown = true;
+    });
+  }
+
   function frm(ts) {
     if (!last3) last3 = ts;
     const dt = Math.min((ts-last3)/1000, .05); last3 = ts; el += dt;
 
     if (finished) {
-      // ── Resolved — settle in on B ───────────────────────────────────────
-      // By this point most of the canvas is already showing B from the
-      // accumulated pop reveals. Any small unrevealed slivers left over
-      // (bubble coverage is random, so full tiling isn't guaranteed) are
-      // smoothly crossfaded to full B across the hold, rather than snapped —
-      // a safety net, not the primary reveal mechanism.
+      // ── Resolved — let any still-creeping spots finish up ────────────────
+      // Most spots have already reached their target size through the same
+      // continuous creep that's been running the whole animation (see
+      // updateGrowingSpots). This phase gives stragglers a little more room
+      // to keep creeping — and, since organic random coverage can't
+      // guarantee it always closes every gap in time, a gentle fade-in of B
+      // rides in underneath partway through this window as a safety net.
+      // Crucially it's a FADE, not a snap: for pixels already showing B
+      // (the vast majority by now) fading B over B is a no-op — no visible
+      // change — so only whatever sliver of A is genuinely still left gets
+      // eased out, smoothly, whether that's a teensy patch or a bigger one.
       bx.drawImage(bub_srcC, 0, 0);
+      updateGrowingSpots(dt);
       bx.drawImage(revealedDstC, 0, 0);
       drawShards(dt);
 
       doneEl += dt;
-      const fadeT = Math.min(doneEl/.35, 1);
+      const HOLD = 0.55;         // total length of this finishing window
+      const FADE_FROM = 0.15;    // let creep run solo for a beat before the safety fade joins in
+      const fadeT = Math.max(0, Math.min((doneEl-FADE_FROM)/(HOLD-FADE_FROM), 1));
       if (fadeT > 0) {
         bx.globalAlpha = fadeT;
         bx.drawImage(bub_dstC, 0, 0);
         bx.globalAlpha = 1;
       }
+
       ctx3.drawImage(recC3, 0, 0, W, H);
 
-      if (fadeT >= 1) {
+      if (doneEl >= HOLD) {
         recCtx3.drawImage(bub_dstC, 0, 0); ctx3.drawImage(recC3, 0, 0, W, H);
         const reset = () => { recCtx3.drawImage(bub_srcC, 0, 0); ctx3.drawImage(recC3, 0, 0, W, H); };
         onDone ? onDone(reset) : setTimeout(reset, 1600); return;
@@ -864,12 +987,13 @@ function runBubbles(onDone) {
     }
 
     bx.drawImage(bub_srcC, 0, 0);
+    updateGrowingSpots(dt);
     bx.drawImage(revealedDstC, 0, 0);
     drawShards(dt);
 
     // Update & draw bubbles
     let allDone = true;
-    bubbles.forEach(b => {
+    bubbles.forEach((b, bi) => {
       if (b.done) return;
       if (el < b.born) { allDone = false; return; }
 
@@ -878,39 +1002,38 @@ function runBubbles(onDone) {
         b.done = true;
         b.pop = false;
 
-        // Permanently stamp this pop's patch of B into the reveal layer —
-        // drawn once, here, not every frame. Kept close to the bubble's own
-        // footprint (a small overshoot for a soft rim, not several times
-        // its size) so B builds up gradually pop-by-pop across the whole
-        // animation rather than a few big early bubbles blanketing most of
-        // the canvas in the first second or two. The edge is feathered via
-        // featherC (destination-in on a small scratch canvas) so overlapping
-        // pops blend softly instead of stamping hard-edged discs.
-        const revealR = b.popR * 1.42;
-        const ps = revealR * 2;
-        const patchC = mkc(ps, ps);
-        const patchX = patchC.getContext('2d');
-        patchX.drawImage(
-          bub_dstC,
-          b.popX-revealR, b.popY-revealR, ps, ps,
-          0, 0, ps, ps
-        );
-        patchX.globalCompositeOperation = 'destination-in';
-        patchX.drawImage(featherC, 0, 0, ps, ps);
-        revealedDstX.drawImage(patchC, b.popX-revealR, b.popY-revealR);
+        // Register this spot for continuous creep-growth (drawn every frame
+        // by updateGrowingSpots, starting now — not stamped instantly at
+        // full size). It begins at roughly the bubble's own footprint and
+        // slowly spreads outward toward its target over the next 0.5–1s
+        // (a bit longer for spots pre-boosted to cover a predicted gap —
+        // see predicted[]/boostGapSpots above), then holds. That per-spot
+        // creep is what makes the reveal read as the A border eroding away
+        // gradually throughout the whole animation, rather than static
+        // discs that only start growing in a phase tacked onto the end.
+        const targetR = predicted[bi].targetR;
+        const boostRatio = targetR / (b.popR * DEFAULT_TARGET_MUL);
+        popSpots.push({
+          x: b.popX, y: b.popY,
+          baseR: b.popR * 0.9,
+          targetR,
+          growDur: Math.min(2.0, (0.6 + Math.random()*0.7) * boostRatio),
+          age: 0, grown: false,
+        });
 
-        // Spawn the shockwave burst once, at pop moment
-        const NPARTS = 9;
+        // Spawn the shockwave burst once, at pop moment — kept small and
+        // sparse (see drawShards) so 150-odd pops over a short timeline
+        // don't pile up into a glittery mess.
+        const NPARTS = 4;
         const parts = [];
         for (let s = 0; s < NPARTS; s++) {
           const a = (s/NPARTS)*Math.PI*2 + Math.random()*0.4;
-          const spd = (140 + Math.random()*180) * BSW;
+          const spd = (110 + Math.random()*130) * BSW;
           parts.push({
             x: b.popX, y: b.popY,
             vx: Math.cos(a)*spd, vy: Math.sin(a)*spd,
-            sz: (10+Math.random()*14)*BSW,
+            sz: (6+Math.random()*6)*BSW,
             rot: Math.random()*Math.PI*2, spin: (Math.random()-.5)*6,
-            hueShift: (b.hue-190) + (Math.random()-.5)*40,
           });
         }
         shards.push({ x:b.popX, y:b.popY, maxR:b.popR, t:0, parts });
@@ -1402,6 +1525,324 @@ function runConeRefraction(onDone) {
   requestAnimationFrame(frm);
 }
 
+// ── Transition 7 — PAGE PEEL ──────────────────────────────────────────────
+//
+// Ported from a standalone demo built separately — a proper physical page
+// peel: a corner lifts and the page rolls back on itself along a straight
+// crease at any angle, with a curved (not straight) leading edge on the
+// flap — the edge that's been dragged through the roll curls inward, the
+// edge that's barely moved stays straight, exactly like a real peeling
+// corner. Layered shadows (drop shadow on the reveal, cast shadow from the
+// floating flap, shading on the curl itself, crease shadow on both sides)
+// plus an optional glow along the crease where it catches the light.
+//
+// SOURCE ORIGIN: this is a resolution/naming port, not a rewrite — the
+// geometry algorithm (corner-reflection maths, curved flap outline via
+// curveCtrl, the peeled-zone polygon) is unchanged from the original.
+// What changed to fit this file:
+//   • W/H (was a 640×480 canvas)      → RW/RH (this file's 1920×1080
+//     working resolution — a different aspect ratio, 16:9 vs 4:3, but
+//     every formula here derives from W/H dynamically, so the geometry
+//     adapts correctly on its own; nothing needed manual reworking there)
+//   • ctx (was the on-page canvas)    → recCtx7
+//   • FRONT/BACK/BG (demo's own imgs) → peel_srcC / peel_backC / peel_dstC
+//   • All ABSOLUTE pixel constants (blur radii, line widths, fixed offsets
+//     — anything that was a bare number tuned by eye for a 640px-wide
+//     canvas) are scaled by PX = RW/640 so they read at the same visual
+//     proportion at this file's higher resolution. Purely proportional
+//     values (ratios like the 0.18 in foldCurv, or the 1.16 overshoot in
+//     getFoldCentre) were already resolution-independent and are untouched.
+//
+// PARAMS — edit freely, only this function is affected:
+//   DIRECTION      — degrees, which corner the peel starts from and which
+//                    way it travels. 0 = along the diagonal toward the
+//                    corner geometry naturally favours; try 0/90/180/270
+//                    for the four page corners, or anything between.
+//   DURATION       — seconds for the full peel.
+//   GLOW_INTENSITY — 0–1.5 (matches the original demo's 0–150% slider).
+//                    How bright the crease glows where it catches light.
+//                    Defaulted to 0.2 (20%) — a lot subtler than the demo's
+//                    original 1.0 (100%) default.
+//
+function runPagePeel(onDone) {
+
+  // ── Params ──────────────────────────────────────────────────────────────
+  const DIRECTION      = 314;   // degrees — matches the original demo's default
+  const DURATION       = 2.2;   // seconds — matches the original demo's default
+  const GLOW_INTENSITY = 0.2;   // 20% — requested default (demo's own default was 100%)
+
+  // Scale factor for absolute pixel constants below, carried over from a
+  // demo built at 640px wide. RW/640 = 3 exactly at this file's 1920px
+  // working resolution.
+  const PX = RW / 640;
+
+  const ease = t => t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3)/2;
+
+  // ── Direction geometry ────────────────────────────────────────────────
+  const BASE_ANGLE = Math.atan2(RH, RW) * 180 / Math.PI;
+
+  function getGeo(deg) {
+    const rad = (BASE_ANGLE + deg) * Math.PI / 180;
+    const nx = Math.cos(rad), ny = Math.sin(rad);
+    const CRS = [{x:0,y:0},{x:RW,y:0},{x:RW,y:RH},{x:0,y:RH}];
+    let sc = CRS[0], best = -Infinity;
+    for (const c of CRS) {
+      const s = (c.x-RW/2)*nx + (c.y-RH/2)*ny;
+      if (s > best) { best = s; sc = c; }
+    }
+    return { nx, ny, fdx:-ny, fdy:nx, sc };
+  }
+
+  function getFoldCentre(t, geo) {
+    const maxD = RW*Math.abs(geo.nx) + RH*Math.abs(geo.ny);
+    const d = t * maxD * 1.16;
+    return { x: geo.sc.x - geo.nx*d, y: geo.sc.y - geo.ny*d };
+  }
+
+  function foldEdgePts(fc, fdx, fdy) {
+    const eps=1e-9, hits=[];
+    const tryS = s => {
+      const x=fc.x+fdx*s, y=fc.y+fdy*s;
+      if(x>=-eps&&x<=RW+eps&&y>=-eps&&y<=RH+eps)
+        hits.push({x:Math.max(0,Math.min(RW,x)),y:Math.max(0,Math.min(RH,y)),s});
+    };
+    if(Math.abs(fdx)>eps){tryS(-fc.x/fdx);tryS((RW-fc.x)/fdx);}
+    if(Math.abs(fdy)>eps){tryS(-fc.y/fdy);tryS((RH-fc.y)/fdy);}
+    hits.sort((a,b)=>a.s-b.s);
+    const u=[];
+    for(const h of hits){const l=u[u.length-1];if(!l||Math.hypot(h.x-l.x,h.y-l.y)>1)u.push(h);}
+    return u.slice(0,2);
+  }
+
+  function angleSort(pts) {
+    const cx=pts.reduce((s,p)=>s+p.x,0)/pts.length;
+    const cy=pts.reduce((s,p)=>s+p.y,0)/pts.length;
+    pts.sort((a,b)=>Math.atan2(a.y-cy,a.x-cx)-Math.atan2(b.y-cy,b.x-cx));
+    return pts;
+  }
+
+  function peeledZone(fp, fc, nx, ny) {
+    const CRS=[{x:0,y:0},{x:RW,y:0},{x:RW,y:RH},{x:0,y:RH}];
+    const pts = fp.map(p=>({x:p.x,y:p.y}));
+    for(const c of CRS) if((c.x-fc.x)*nx+(c.y-fc.y)*ny>0.5) pts.push({x:c.x,y:c.y});
+    return pts.length>=3 ? angleSort(pts) : null;
+  }
+
+  function buildFlap(fp, fc, nx, ny) {
+    const CRS=[{x:0,y:0},{x:RW,y:0},{x:RW,y:RH},{x:0,y:RH}];
+    const all = fp.map(p=>({x:p.x,y:p.y}));
+    const reflected = [];
+    for(const c of CRS) {
+      const d=(c.x-fc.x)*nx+(c.y-fc.y)*ny;
+      if(d>0.5){ reflected.push({x:c.x-2*d*nx, y:c.y-2*d*ny}); }
+    }
+    all.push(...reflected);
+    return { poly: all.length>=3 ? angleSort([...all]) : null, reflected };
+  }
+
+  // Walk the convex flap polygon from p2 to p1 the "long way" (through every
+  // reflected corner) — everything EXCEPT the direct p1-p2 fold edge.
+  function reflPath(poly, p1, p2) {
+    const n=poly.length;
+    const i1=poly.findIndex(p=>p.x===p1.x && p.y===p1.y);
+    const i2=poly.findIndex(p=>p.x===p2.x && p.y===p2.y);
+    if(i1<0||i2<0) return [];
+    const A=[], B=[];
+    let i=(i2+1)%n; while(i!==i1&&A.length<n){A.push(poly[i]);i=(i+1)%n;}
+    i=(i2-1+n)%n;   while(i!==i1&&B.length<n){B.push(poly[i]);i=(i-1+n)%n;}
+    return A.length>=B.length ? A : B;
+  }
+
+  // Same p1→p2→corners→p1 walk as the flap outline, but the p1→p2 leg is
+  // the SAME quadratic bezier used for the flap's crease — keeps the
+  // "background revealed" boundary and the flap's crease boundary
+  // pixel-identical along their shared edge.
+  function appendPeeledPoly(p1, ctrlFold, p2, restPts) {
+    recCtx7.moveTo(p1.x, p1.y);
+    recCtx7.quadraticCurveTo(ctrlFold.x, ctrlFold.y, p2.x, p2.y);
+    for (const pt of restPts) recCtx7.lineTo(pt.x, pt.y);
+    recCtx7.closePath();
+  }
+
+  // Quadratic-curve control point for chord A→B: a true perpendicular
+  // offset from THAT chord's own midpoint (not the fold's), scaled to that
+  // chord's own length, signed toward/away from awayPt depending on invert.
+  function curveCtrl(A, B, awayPt, invert, k, cap) {
+    const dx = B.x - A.x, dy = B.y - A.y;
+    const len = Math.hypot(dx, dy) || 1;
+    let px = -dy / len, py = dx / len;
+    const mx = (A.x + B.x) / 2, my = (A.y + B.y) / 2;
+    const toAway = { x: awayPt.x - mx, y: awayPt.y - my };
+    const pointsTowardAway = (px*toAway.x + py*toAway.y) > 0;
+    if (pointsTowardAway !== !!invert) { px = -px; py = -py; }
+    const mag = Math.min(len * k, cap);
+    return { x: mx + px*mag, y: my + py*mag };
+  }
+
+  // Full flap outline: curved crease, then the two free "cut" edges —
+  // treated asymmetrically on purpose, matching a real peeled corner:
+  //   • p2 → first reflected corner: dragged through the whole roll, so it
+  //     curls INWARD (concave), tucking toward the crease.
+  //   • last reflected corner → p1: barely disturbed, stays straight.
+  function flapPath(p1, ctrlFold, p2, rPath, awayPt) {
+    recCtx7.beginPath();
+    recCtx7.moveTo(p1.x, p1.y);
+    recCtx7.quadraticCurveTo(ctrlFold.x, ctrlFold.y, p2.x, p2.y);
+
+    if (rPath.length >= 1) {
+      const first = rPath[0];
+      const cIn = curveCtrl(p2, first, awayPt, true, 0.18, 24*PX);
+      recCtx7.quadraticCurveTo(cIn.x, cIn.y, first.x, first.y);
+      for (let i = 1; i < rPath.length; i++) recCtx7.lineTo(rPath[i].x, rPath[i].y);
+      recCtx7.lineTo(p1.x, p1.y);
+    }
+    recCtx7.closePath();
+  }
+
+  // ── Frame render ─────────────────────────────────────────────────────────
+  function drawPeelFrame(t) {
+    recCtx7.clearRect(0,0,RW,RH);
+    recCtx7.drawImage(peel_dstC,0,0);
+
+    if (t<=0.002) { recCtx7.drawImage(peel_srcC,0,0); return; }
+
+    const geo = getGeo(DIRECTION);
+    const {nx,ny,fdx,fdy} = geo;
+    const fc  = getFoldCentre(t, geo);
+    const fp  = foldEdgePts(fc, fdx, fdy);
+    if (fp.length<2) return;
+
+    const [p1,p2] = fp;
+    const fMid  = {x:(p1.x+p2.x)/2, y:(p1.y+p2.y)/2};
+    const fLen  = Math.hypot(p2.x-p1.x, p2.y-p1.y);
+
+    const foldCurv = Math.min(fLen * 0.18, 36*PX);
+    const ctrlFold = { x: fMid.x - nx*foldCurv, y: fMid.y - ny*foldCurv };
+
+    const peeled = peeledZone(fp, fc, nx, ny);
+    const {poly:flap} = buildFlap(fp, fc, nx, ny);
+    if (!peeled || !flap) return;
+
+    const rp = reflPath(flap, p1, p2);
+    const peeledCorners = reflPath(peeled, p1, p2);
+
+    const flapCentroid = {
+      x: flap.reduce((s,p)=>s+p.x,0)/flap.length,
+      y: flap.reduce((s,p)=>s+p.y,0)/flap.length
+    };
+
+    const flap_fn = () => flapPath(p1, ctrlFold, p2, rp, flapCentroid);
+    const crease = () => {
+      recCtx7.beginPath();
+      recCtx7.moveTo(p1.x,p1.y);
+      recCtx7.quadraticCurveTo(ctrlFold.x,ctrlFold.y,p2.x,p2.y);
+    };
+
+    // 1. FLAT FRONT PAGE — clipped outside the peeled zone
+    recCtx7.save();
+    recCtx7.beginPath(); recCtx7.rect(0,0,RW,RH); appendPeeledPoly(p1,ctrlFold,p2,peeledCorners); recCtx7.clip('evenodd');
+    recCtx7.drawImage(peel_srcC,0,0);
+    recCtx7.restore();
+
+    // 2. Drop shadow on the revealed background
+    recCtx7.save();
+    recCtx7.beginPath(); appendPeeledPoly(p1,ctrlFold,p2,peeledCorners); recCtx7.clip();
+    const gBg = recCtx7.createLinearGradient(fMid.x,fMid.y, fMid.x+nx*120*PX,fMid.y+ny*120*PX);
+    gBg.addColorStop(0,    'rgba(0,0,0,0.75)');
+    gBg.addColorStop(0.14, 'rgba(0,0,0,0.35)');
+    gBg.addColorStop(0.45, 'rgba(0,0,0,0.10)');
+    gBg.addColorStop(1,    'rgba(0,0,0,0)');
+    recCtx7.fillStyle = gBg; recCtx7.fillRect(0,0,RW,RH);
+    recCtx7.restore();
+
+    // 3. Shadow on the flat page, cast by the floating flap
+    recCtx7.save();
+    recCtx7.beginPath(); recCtx7.rect(0,0,RW,RH); appendPeeledPoly(p1,ctrlFold,p2,peeledCorners); recCtx7.clip('evenodd');
+    recCtx7.filter = `blur(${22*PX}px)`;
+    recCtx7.fillStyle = 'rgba(0,0,0,0.52)';
+    flap_fn(); recCtx7.fill();
+    recCtx7.filter = 'none';
+    recCtx7.restore();
+
+    // 4. Back of the page — the flap itself
+    recCtx7.save();
+    flap_fn(); recCtx7.clip();
+    recCtx7.drawImage(peel_backC,0,0);
+    const gCurl = recCtx7.createLinearGradient(fMid.x,fMid.y, fMid.x-nx*RW, fMid.y-ny*RH);
+    gCurl.addColorStop(0,    'rgba(0,0,0,0.62)');
+    gCurl.addColorStop(0.05, 'rgba(0,0,0,0.38)');
+    gCurl.addColorStop(0.13, 'rgba(0,0,0,0.14)');
+    gCurl.addColorStop(0.28, 'rgba(0,0,0,0.03)');
+    gCurl.addColorStop(1,    'rgba(0,0,0,0)');
+    recCtx7.fillStyle = gCurl; recCtx7.fillRect(0,0,RW,RH);
+    recCtx7.restore();
+
+    // 5. Crease shadow — flat-page side
+    recCtx7.save();
+    recCtx7.beginPath(); recCtx7.rect(0,0,RW,RH); appendPeeledPoly(p1,ctrlFold,p2,peeledCorners); recCtx7.clip('evenodd');
+    recCtx7.filter = `blur(${13*PX}px)`;
+    recCtx7.strokeStyle = 'rgba(0,0,0,0.70)';
+    recCtx7.lineWidth = 40*PX; recCtx7.lineCap = 'round';
+    crease(); recCtx7.stroke();
+    recCtx7.filter = 'none';
+    recCtx7.restore();
+
+    // 6. Crease shadow — inner curl face
+    recCtx7.save();
+    flap_fn(); recCtx7.clip();
+    recCtx7.filter = `blur(${10*PX}px)`;
+    recCtx7.strokeStyle = 'rgba(0,0,0,0.62)';
+    recCtx7.lineWidth = 32*PX; recCtx7.lineCap = 'round';
+    crease(); recCtx7.stroke();
+    recCtx7.filter = 'none';
+    recCtx7.restore();
+
+    // 7. Crease highlight — the fold edge catching light
+    if (GLOW_INTENSITY > 0) {
+      recCtx7.save();
+      recCtx7.lineCap = 'round';
+
+      recCtx7.filter = `blur(${9*PX}px)`;
+      recCtx7.strokeStyle = `rgba(255,255,255,${Math.min(1,0.62*GLOW_INTENSITY).toFixed(3)})`;
+      recCtx7.lineWidth = 18*PX;
+      crease(); recCtx7.stroke();
+      recCtx7.filter = 'none';
+
+      recCtx7.strokeStyle = `rgba(255,255,255,${Math.min(1,0.55*GLOW_INTENSITY).toFixed(3)})`;
+      recCtx7.lineWidth = 5*PX;
+      crease(); recCtx7.stroke();
+
+      recCtx7.strokeStyle = `rgba(255,255,255,${Math.min(1,0.80*GLOW_INTENSITY).toFixed(3)})`;
+      recCtx7.lineWidth = 1.5*PX;
+      crease(); recCtx7.stroke();
+
+      recCtx7.restore();
+    }
+  }
+
+  // ── RAF loop ─────────────────────────────────────────────────────────────
+  let el = 0, last7 = null;
+  function frm(ts) {
+    if (!last7) last7 = ts;
+    const dt = Math.min((ts-last7)/1000, 0.05);
+    last7 = ts; el += dt;
+    const rawT = Math.min(el/DURATION, 1);
+    const t = ease(rawT);
+    drawPeelFrame(t);
+    ctx7.drawImage(recC7, 0, 0, W, H);
+    if (rawT >= 1) {
+      recCtx7.drawImage(peel_dstC, 0, 0); ctx7.drawImage(recC7, 0, 0, W, H);
+      const reset = () => {
+        recCtx7.drawImage(peel_srcC, 0, 0); ctx7.drawImage(recC7, 0, 0, W, H);
+      };
+      onDone ? onDone(reset) : setTimeout(reset, 1600);
+      return;
+    }
+    requestAnimationFrame(frm);
+  }
+  requestAnimationFrame(frm);
+}
+
 // ══════════════════════════════════════════════════════════════════════════
 // SECTION 6 · TRANSITIONS REGISTRY
 // ─────────────────────────────────────────────────────────────────────────
@@ -1465,6 +1906,15 @@ const TRANSITIONS = {
     recordFilename: 'cone-refraction',
     playBtnId:      'btn6p',
     recBtnId:       'btn6r',
+    padSecs:        0,
+    running:        false,
+  },
+  pagePeel: {
+    runFn:          runPagePeel,
+    recCanvas:      recC7,
+    recordFilename: 'page-peel',
+    playBtnId:      'btn7p',
+    recBtnId:       'btn7r',
     padSecs:        0,
     running:        false,
   },
@@ -1602,6 +2052,20 @@ drawDefaultA (td_srcC.getContext('2d'),  RW, RH);
 drawDefaultB (td_dstC.getContext('2d'),  RW, RH);
 drawDefaultA (cone_srcC.getContext('2d'), RW, RH);
 drawDefaultB (cone_dstC.getContext('2d'), RW, RH);
+drawDefaultA (peel_srcC.getContext('2d'), RW, RH);
+drawDefaultB (peel_dstC.getContext('2d'), RW, RH);
+
+// Page peel's fixed "back of paper" texture — plain and unrelated to A/B,
+// same reasoning as real paper: the back looks the same regardless of
+// what's on the front. Painted once here, never touched again.
+(function paintPeelBack() {
+  const g = peel_backC.getContext('2d');
+  g.fillStyle = '#edeae0'; g.fillRect(0, 0, RW, RH);
+  g.strokeStyle = 'rgba(0,0,0,0.025)'; g.lineWidth = 1;
+  for (let y = 0; y < RH; y += 18 * (RW/640)) {
+    g.beginPath(); g.moveTo(0, y); g.lineTo(RW, y); g.stroke();
+  }
+})();
 
 // ── Render initial frames to display canvases ────────────────────────────
 ctx1.drawImage(milkC, 0, 0); recCtx1.drawImage(milkC, 0, 0, RW, RH);
@@ -1610,11 +2074,12 @@ recCtx3.drawImage(bub_srcC, 0, 0); ctx3.drawImage(recC3, 0, 0, W, H);
 recCtx4.drawImage(par_srcC, 0, 0); ctx4.drawImage(recC4, 0, 0, W, H);
 recCtx5.drawImage(td_srcC,  0, 0); ctx5.drawImage(recC5, 0, 0, W, H);
 recCtx6.drawImage(cone_srcC, 0, 0); ctx6.drawImage(recC6, 0, 0, W, H);
+recCtx7.drawImage(peel_srcC, 0, 0); ctx7.drawImage(recC7, 0, 0, W, H);
 
 // ── File inputs — A = source (all transitions), B = destination (all transitions) ──
 //
-// Source canvases:  milkC, trimC (4K),  bub_srcC, par_srcC, td_srcC, cone_srcC (1080p)
-// Dest canvases:   butC,  talC  (4K),  bub_dstC, par_dstC, td_dstC, cone_dstC (1080p)
+// Source canvases:  milkC, trimC (4K),  bub_srcC, par_srcC, td_srcC, cone_srcC, peel_srcC (1080p)
+// Dest canvases:   butC,  talC  (4K),  bub_dstC, par_dstC, td_dstC, cone_dstC, peel_dstC (1080p)
 //
 // On load: image is drawn cover-cropped into every canvas of the correct size,
 // then all idle display canvases are refreshed.
@@ -1626,6 +2091,7 @@ function refreshAllIdle() {
   if (!TRANSITIONS.particles.running){ recCtx4.drawImage(par_srcC,0,0); ctx4.drawImage(recC4,0,0,W,H); }
   if (!TRANSITIONS.tileDrop.running) { recCtx5.drawImage(td_srcC, 0,0); ctx5.drawImage(recC5,0,0,W,H); }
   if (!TRANSITIONS.coneRefraction.running) { recCtx6.drawImage(cone_srcC, 0,0); ctx6.drawImage(recC6,0,0,W,H); }
+  if (!TRANSITIONS.pagePeel.running) { recCtx7.drawImage(peel_srcC, 0,0); ctx7.drawImage(recC7,0,0,W,H); }
 }
 
 document.getElementById('fA').addEventListener('change', function() {
@@ -1633,7 +2099,7 @@ document.getElementById('fA').addEventListener('change', function() {
   loadFromFile(this.files[0], img => {
     // Paint into all source canvases at their respective resolutions
     [milkC, trimC].forEach(c => drawCover(c.getContext('2d'), img, W,  H));
-    [bub_srcC, par_srcC, td_srcC, cone_srcC].forEach(c => drawCover(c.getContext('2d'), img, RW, RH));
+    [bub_srcC, par_srcC, td_srcC, cone_srcC, peel_srcC].forEach(c => drawCover(c.getContext('2d'), img, RW, RH));
     refreshAllIdle();
     setLbl('lblA', this.files[0].name);
   });
@@ -1644,7 +2110,7 @@ document.getElementById('fB').addEventListener('change', function() {
   loadFromFile(this.files[0], img => {
     // Paint into all destination canvases at their respective resolutions
     [butC, talC].forEach(c => drawCover(c.getContext('2d'), img, W,  H));
-    [bub_dstC, par_dstC, td_dstC, cone_dstC].forEach(c => drawCover(c.getContext('2d'), img, RW, RH));
+    [bub_dstC, par_dstC, td_dstC, cone_dstC, peel_dstC].forEach(c => drawCover(c.getContext('2d'), img, RW, RH));
     setLbl('lblB', this.files[0].name);
   });
 });
