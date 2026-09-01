@@ -235,7 +235,7 @@
     </div>
   </div>
 </div>
-<p id="status" style="text-align:center;font-size:11px;color:var(--color-text-tertiary);margin:.4rem 0 .5rem;min-height:1.4em;">Display 4K · Shimmer 1280×720 · Records 1080p · EBML duration patched</p>
+<p id="status" style="text-align:center;font-size:11px;color:var(--color-text-tertiary);margin:.4rem 0 .5rem;min-height:1.4em;">Display 4K · Shimmer 1280×720 · Records 1080p · frame-accurate WebCodecs export (real-time fallback)</p>
 </div>
 
 <script>
@@ -2152,7 +2152,7 @@ function runCrumble(onDone) {
 //
 // Fields:
 //   runFn          — the run function from Section 5
-//   recCanvas      — 1080p canvas that captureStream() records
+//   recCanvas      — 1080p canvas each frame is captured from for recording
 //   recordFilename — download filename (extension auto-detected)
 //   playBtnId      — play button element id
 //   recBtnId       — record button element id
@@ -2239,7 +2239,149 @@ const TRANSITIONS = {
 // runFn — don't edit below this line.
 // ══════════════════════════════════════════════════════════════════════════
 
-function recordCanvas(cfg) {
+/**
+ * recordCanvasProper — offline, frame-accurate capture via WebCodecs
+ * (VideoEncoder) muxed straight into a WebM with webm-muxer.
+ *
+ * captureStream()+MediaRecorder (see recordCanvasLegacy below) grabs
+ * whatever the canvas happens to be showing in real time — it can drop or
+ * duplicate frames under load, and Chrome's MediaRecorder output very
+ * often omits a correct WebM Duration, hence the manual EBML-patching hack
+ * that used to live here. This does it properly instead:
+ *
+ *   1. The transition's own run function is untouched — every runXxx still
+ *      drives itself with requestAnimationFrame and computes dt from the
+ *      timestamp it's given. What changes is *who* supplies that
+ *      timestamp: for the duration of a recording, window.requestAnimationFrame
+ *      is swapped for a version that calls back with synthetic timestamps
+ *      exactly 1000/FPS ms apart, fired via setTimeout(…,0) instead of
+ *      waiting for a real display refresh. Same step size the transition
+ *      would see during normal 60fps playback, so the motion comes out
+ *      pixel-for-pixel identical to what Play produces — it's just no
+ *      longer throttled to real wall-clock time.
+ *   2. After each synthetic tick draws a frame onto cfg.recCanvas, that
+ *      exact frame is grabbed with `new VideoFrame(cfg.recCanvas, …)` and
+ *      handed straight to a VideoEncoder — no capture pipeline in between
+ *      to drop anything.
+ *   3. webm-muxer packages the encoded chunks into a WebM with the correct
+ *      duration baked in from the start, so there's nothing to patch
+ *      afterwards.
+ *
+ * Net effect: recording finishes in roughly however long the machine takes
+ * to encode the frames, not however long the transition + pad actually
+ * play for, and the file's metadata is correct on the first try.
+ *
+ * Throws on any unsupported/failed step so the caller (recordCanvas, below)
+ * can fall back to recordCanvasLegacy.
+ */
+async function recordCanvasProper(cfg) {
+  if (!('VideoEncoder' in window)) throw new Error('WebCodecs not supported');
+
+  const FPS    = 60;   // matches the cadence these transitions were tuned against
+  const width  = cfg.recCanvas.width, height = cfg.recCanvas.height;
+  const codec  = 'vp09.00.41.08';   // VP9, profile 0, level 4.1 (safe for 1080p60), 8-bit
+  const bitrate = 15_000_000;
+
+  const support = await VideoEncoder.isConfigSupported({ codec, width, height, framerate: FPS, bitrate });
+  if (!support || !support.supported) throw new Error('VP9 encoder config unsupported in this browser');
+
+  let muxerModule;
+  try {
+    muxerModule = await import('https://cdn.jsdelivr.net/npm/webm-muxer@latest/build/webm-muxer.mjs');
+  } catch (e) {
+    throw new Error('could not load the video muxer — check your connection');
+  }
+  const { Muxer, ArrayBufferTarget } = muxerModule;
+
+  const target = new ArrayBufferTarget();
+  const muxer  = new Muxer({ target, video: { codec: 'V_VP9', width, height, frameRate: FPS } });
+
+  let encodeErr = null;
+  const videoEncoder = new VideoEncoder({
+    output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+    error:  e => { encodeErr = e; },
+  });
+  videoEncoder.configure({ codec, width, height, framerate: FPS, bitrate });
+
+  const fn = cfg.recordFilename.replace(/\.(mp4|webm)$/i, '') + '.webm';
+  // padSecs: intro/outro hold duration in seconds. Set to 0 in the TRANSITIONS
+  // entry for a transition-only recording with no padding. Defaults to 10.
+  const padSecs   = cfg.padSecs ?? 10;
+  const padFrames = Math.round(padSecs * FPS);
+
+  let frameCount = 0;
+  async function captureFrame() {
+    // Basic backpressure: don't let the encode queue balloon if a heavy
+    // per-pixel transition (e.g. Cone Refraction) can't keep the encoder
+    // fed as fast as frames are being produced.
+    while (videoEncoder.encodeQueueSize > 30) await new Promise(r => setTimeout(r, 0));
+    if (encodeErr) throw encodeErr;
+    const frame = new VideoFrame(cfg.recCanvas, { timestamp: Math.round((frameCount / FPS) * 1e6) });
+    videoEncoder.encode(frame, { keyFrame: frameCount % (FPS * 2) === 0 });
+    frame.close();
+    frameCount++;
+    if (frameCount % 15 === 0) setStatus(`⏺ Rendering — frame ${frameCount}…`);
+  }
+
+  const realRAF = window.requestAnimationFrame;
+  try {
+    if (padFrames > 0) setStatus(`⏺ Rendering intro (${padSecs}s)…`);
+    for (let i = 0; i < padFrames; i++) await captureFrame();
+
+    setStatus('⏺ Rendering transition…');
+    let transitionDone = false, savedReset = null, doneResolve;
+    const donePromise = new Promise(r => { doneResolve = r; });
+
+    let synthTs = 0;
+    window.requestAnimationFrame = (cb) => {
+      setTimeout(async () => {
+        try {
+          synthTs += 1000 / FPS;
+          cb(synthTs);
+          await captureFrame();
+          if (transitionDone) doneResolve(null);
+        } catch (e) {
+          transitionDone = true;
+          doneResolve(e);
+        }
+      }, 0);
+      return 0;
+    };
+
+    cfg.runFn(reset => { transitionDone = true; savedReset = reset; });
+
+    const err = await donePromise;
+    window.requestAnimationFrame = realRAF;
+    if (err) throw err;
+
+    if (padFrames > 0) setStatus(`⏺ Rendering outro (${padSecs}s)…`);
+    for (let i = 0; i < padFrames; i++) await captureFrame();
+
+    await videoEncoder.flush();
+    if (encodeErr) throw encodeErr;
+    muxer.finalize();
+
+    const blob = new Blob([target.buffer], { type: 'video/webm' });
+    const url  = URL.createObjectURL(blob);
+    const a = Object.assign(document.createElement('a'), { href: url, download: fn });
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 3000);
+    setStatus(`✅ ${fn} — ${(frameCount / FPS).toFixed(1)}s · VP9 WebM · frame-accurate offline render`);
+
+    savedReset();
+  } finally {
+    window.requestAnimationFrame = realRAF;   // guaranteed restore even on error
+  }
+}
+
+/**
+ * recordCanvasLegacy — real-time capture via MediaRecorder + captureStream().
+ * Fallback for browsers without WebCodecs (VideoEncoder) support, or if
+ * recordCanvasProper fails for any reason. This is the original method —
+ * unchanged — including the EBML duration patch it needs to work around
+ * Chrome's MediaRecorder frequently omitting a correct WebM Duration.
+ */
+function recordCanvasLegacy(cfg) {
   if (!window.MediaRecorder) { setStatus('⚠️ MediaRecorder not supported — use Chrome or Edge.'); return; }
   const candidates = ['video/mp4;codecs=avc1.640028','video/mp4;codecs=avc1.4D4028','video/mp4;codecs=avc1','video/mp4','video/webm;codecs=vp8','video/webm'];
   const mime = candidates.find(m => MediaRecorder.isTypeSupported(m)) || 'video/webm';
@@ -2257,7 +2399,7 @@ function recordCanvas(cfg) {
     const a = Object.assign(document.createElement('a'), {href:url, download:fn});
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 3000);
-    setStatus(`✅ ${fn} — ${(durationMs/1000).toFixed(1)}s · ${mime.includes('mp4')?'H.264 MP4':'VP8 WebM'} · duration patched`);
+    setStatus(`✅ ${fn} — ${(durationMs/1000).toFixed(1)}s · ${mime.includes('mp4')?'H.264 MP4':'VP8 WebM'} · duration patched (legacy real-time capture)`);
   };
   // padSecs: intro/outro hold duration in seconds. Set to 0 in the TRANSITIONS
   // entry for a transition-only recording with no padding. Defaults to 10.
@@ -2272,6 +2414,15 @@ function recordCanvas(cfg) {
       setTimeout(() => { rec.stop(); resetFn(); }, pad);
     });
   }, pad);
+}
+
+/** Entry point the engine calls — tries the proper offline path first. */
+function recordCanvas(cfg) {
+  recordCanvasProper(cfg).catch(err => {
+    console.error('Frame-accurate export failed, falling back:', err);
+    setStatus(`ℹ️ Frame-accurate export unavailable (${err.message}) — using real-time capture…`);
+    recordCanvasLegacy(cfg);
+  });
 }
 
 /** Wire buttons for one transition entry */
@@ -2290,10 +2441,9 @@ function registerTransition(key) {
     if (cfg.running) return;
     lockBtns(); setStatus('');
     recordCanvas(cfg);
-    // unlock happens after recording finishes — we rely on rec.onstop firing the reset
-    // so we hook into runFn's reset callback to unlock
-    // (recordCanvas passes its own onDone that calls resetFn then rec.stop)
-    // We patch the cfg so after the recording reset we also unlock:
+    // unlock happens after recording finishes — both recordCanvasProper and
+    // recordCanvasLegacy call cfg.runFn(resetFn) exactly like Play does, so
+    // we patch cfg.runFn here to also unlock buttons once that resetFn runs.
     const origRun = cfg.runFn;
     cfg.runFn = (onDone) => origRun(resetFn => {
       onDone((...args) => { resetFn(...args); cfg.runFn = origRun; unlockBtns(); });
