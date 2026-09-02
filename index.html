@@ -2058,7 +2058,10 @@ function runPagePeel(onDone) {
 //                wobble. 100 = wildly staggered release, heavy tumbling,
 //                and a lot of sideways scatter.
 //   Gravity    — fall acceleration, independent of Speed. Low = floaty,
-//                drifting debris. High = heavy chunks that drop fast.
+//                drifting debris. High = heavy chunks that drop fast. Fall
+//                speed ramps up like real gravity then caps at a terminal
+//                velocity, rather than accelerating without limit — see
+//                VMAX below.
 //   Speed      — overall pace of the release/collapse timing. Independent
 //                of Gravity, so a slow release with a heavy fall (or vice
 //                versa) is possible.
@@ -2079,10 +2082,25 @@ function runCrumble(onDone) {
   const maxRotSpeed    = 0.5 + chaos * 3.4;           // rad/s ceiling — wobble at low chaos, tumble at high
   const avgShardSize   = Math.sqrt((RW * RH) / Math.max(1, shards.length));
   const driftAmp       = chaos * avgShardSize * 0.9;  // sideways scatter, scales with shard size + chaos
+  // Terminal velocity. Plain quadratic gravity (dy = ½·g·age²) has no upper
+  // bound on speed — a shard just keeps accelerating for as long as it's
+  // falling, so the fastest, most noticeable motion always happens right at
+  // the very end, right before it vanishes off the bottom of the frame. Real
+  // falling debris doesn't do that — air drag caps it at a terminal speed
+  // fairly quickly. VMAX below is that cap; a shard accelerates exactly as
+  // before up until it would reach VMAX, then continues at that constant
+  // speed rather than keep ramping up. sqrt(gravityFactor) so the Gravity
+  // slider still meaningfully raises the cap without it exploding at 300%.
+  const VMAX           = 1.4 * RH * Math.sqrt(gravityFactor);
+  const AGE_CAP         = VMAX / baseGravPx;   // time at which a gravMult=1 shard would hit VMAX
   // Safety net so a stray shard can't hang forever — sized from the actual
-  // fall time a shard needs at this gravity, plus the release spread, so a
-  // low-gravity/high-speed (or high-gravity/low-speed) combo isn't cut short.
-  const fallTime       = Math.sqrt((2 * RH * 2.2) / baseGravPx);
+  // fall time a shard needs at this gravity (now accounting for the VMAX
+  // cap above, since capping speed also means it takes a bit longer to
+  // clear the frame than uncapped quadratic gravity would), plus the
+  // release spread, so a low-gravity/high-speed (or high-gravity/low-speed)
+  // combo isn't cut short.
+  const distAtCap      = 0.5 * baseGravPx * AGE_CAP * AGE_CAP;
+  const fallTime       = AGE_CAP + Math.max(0, (RH * 2.2) - distAtCap) / VMAX;
   const HARD_CAP       = releaseWindow + fallTime * 1.3 + 1;
 
   shards.forEach(s => {
@@ -2113,7 +2131,14 @@ function runCrumble(onDone) {
         return;
       }
       s.age += dt;
-      const dy = 0.5 * baseGravPx * s.gravMult * s.age * s.age;
+      // AGE_CAP is independent of gravMult (both the per-shard g0 and vMax
+      // scale by it equally, so it cancels out) — free-fall quadratic up to
+      // that point, then constant speed afterward.
+      const g0  = baseGravPx * s.gravMult;
+      const vMaxShard = VMAX * s.gravMult;
+      const dy = s.age <= AGE_CAP
+        ? 0.5 * g0 * s.age * s.age
+        : 0.5 * g0 * AGE_CAP * AGE_CAP + vMaxShard * (s.age - AGE_CAP);
       if (s.by + dy > RH + s.bh) return;   // fully below frame — done with this shard
       allGone = false;
       const dx  = s.driftVX * s.age;
@@ -2598,6 +2623,56 @@ function registerTransition(key) {
   wire('crumbleChaos',     'crumbleChaosVal',     '%');
   wire('crumbleGravity',   'crumbleGravityVal',   '%');
   wire('crumbleSpeed',     'crumbleSpeedVal',     '%');
+})();
+
+// ── Hover + Backspace resets a control to its default ──────────────────────
+// Applies to every plain slider (each one snaps back to whatever value="…"
+// was in its HTML) and to the two button-group pickers — tile grid size and
+// cone refraction glass mode — where hovering any button in the group and
+// pressing Backspace re-selects that group's default preset. No need to
+// click or focus anything first, just hover the control and hit the key.
+// A tiny "reset" hover registry: whichever control the pointer is currently
+// over gets its callback stashed in `hovered`; a single page-level keydown
+// listener fires it on Backspace and stops the browser's own "navigate
+// back on Backspace" behaviour from kicking in.
+(function() {
+  let hovered = null;
+
+  function watch(el, onReset) {
+    el.addEventListener('pointerenter', () => { hovered = onReset; });
+    el.addEventListener('pointerleave', () => { if (hovered === onReset) hovered = null; });
+  }
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key !== 'Backspace' || !hovered) return;
+    e.preventDefault();
+    hovered();
+  });
+
+  // Plain sliders — every <input type="range"> on the page, angle picker
+  // included. Resetting just replays the same 'input' event each slider's
+  // own wiring already listens for, so labels/arrows/etc repaint normally.
+  document.querySelectorAll('input[type="range"]').forEach(slider => {
+    slider.title = 'Hover + Backspace to reset';
+    watch(slider, () => {
+      slider.value = slider.defaultValue;
+      slider.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  });
+
+  // Button-group pickers — hovering any button in the group resets the
+  // whole group's selection to its default preset.
+  function watchGroup(selector, isDefault) {
+    const btns = Array.from(document.querySelectorAll(selector));
+    const defaultBtn = btns.find(isDefault) || btns[0];
+    if (!defaultBtn) return;
+    btns.forEach(btn => {
+      btn.title = 'Hover + Backspace to reset';
+      watch(btn, () => defaultBtn.click());
+    });
+  }
+  watchGroup('.tgb', (b, i, arr) => b === arr[0]);          // default: 16×9
+  watchGroup('.cgb', b => b.dataset.mode === 'ABV');         // default: AB — Bands
 })();
 
 Object.keys(TRANSITIONS).forEach(registerTransition);
