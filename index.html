@@ -2280,10 +2280,43 @@ async function recordCanvasProper(cfg) {
   const FPS    = 60;   // matches the cadence these transitions were tuned against
   const width  = cfg.recCanvas.width, height = cfg.recCanvas.height;
   const codec  = 'vp09.00.41.08';   // VP9, profile 0, level 4.1 (safe for 1080p60), 8-bit
-  const bitrate = 15_000_000;
 
-  const support = await VideoEncoder.isConfigSupported({ codec, width, height, framerate: FPS, bitrate });
-  if (!support || !support.supported) throw new Error('VP9 encoder config unsupported in this browser');
+  // Quality mode, not fixed bitrate. VP9's own per-frame quantizer is its
+  // native equivalent of "CRF" — 0 = best quality/least compression, 63 =
+  // most compression. Rather than locking to a flat bits-per-second target
+  // (which spends the same data budget on a static held frame as on the
+  // busiest chaotic one), this asks every frame to hit the same quality
+  // bar and lets the encoder spend however many bits that actually needs.
+  // 12 sits well into "visually transparent" territory — plenty of headroom
+  // for Shotcut to then re-encode this into your final export without
+  // compounding visible generation loss.
+  const VP9_QUANTIZER = 12;
+
+  // Colour space, explicit and important. Canvas pixels are ordinary full-range
+  // sRGB (0–255) computer-graphics values, same as the still images A/B. VP9
+  // can only store YUV though, so the encoder has to do an RGB→YUV conversion
+  // internally regardless — and if we don't say which matrix/range to use (and
+  // to tag the file with), editors like Shotcut/ffmpeg have to guess on decode.
+  // Their default guess for an untagged clip is limited/"TV" range (16–235),
+  // which — applied to data that was actually encoded full-range — crushes
+  // blacks and blows out highlights: exactly the "snap" at the cut to a plain
+  // (correctly full-range) image clip next to it. Tagging bt709 + fullRange
+  // here makes the encoder do the conversion consistently AND tells webm-muxer
+  // to write matching Colour metadata into the container (and patch VP9's own
+  // internal colour flag on keyframes), so a decoder doesn't have to guess.
+  const colorSpace = { primaries: 'bt709', transfer: 'bt709', matrix: 'bt709', fullRange: true };
+  const encoderConfig = { codec, width, height, framerate: FPS, bitrateMode: 'quantizer', colorSpace };
+
+  let support = await VideoEncoder.isConfigSupported(encoderConfig);
+  if (!support || !support.supported) {
+    // Quantizer mode landed in Chrome 117 (2023) — should be everywhere by
+    // now, but fall back to a generous fixed bitrate on anything older
+    // rather than failing outright.
+    encoderConfig.bitrateMode = 'constant';
+    encoderConfig.bitrate = 15_000_000;
+    support = await VideoEncoder.isConfigSupported(encoderConfig);
+    if (!support || !support.supported) throw new Error('VP9 encoder config unsupported in this browser');
+  }
 
   let muxerModule;
   try {
@@ -2301,7 +2334,7 @@ async function recordCanvasProper(cfg) {
     output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
     error:  e => { encodeErr = e; },
   });
-  videoEncoder.configure({ codec, width, height, framerate: FPS, bitrate });
+  videoEncoder.configure(encoderConfig);
 
   const fn = cfg.recordFilename.replace(/\.(mp4|webm)$/i, '') + '.webm';
   // padSecs: intro/outro hold duration in seconds. Set to 0 in the TRANSITIONS
@@ -2317,7 +2350,9 @@ async function recordCanvasProper(cfg) {
     while (videoEncoder.encodeQueueSize > 30) await new Promise(r => setTimeout(r, 0));
     if (encodeErr) throw encodeErr;
     const frame = new VideoFrame(cfg.recCanvas, { timestamp: Math.round((frameCount / FPS) * 1e6) });
-    videoEncoder.encode(frame, { keyFrame: frameCount % (FPS * 2) === 0 });
+    const encodeOpts = { keyFrame: frameCount % (FPS * 2) === 0 };
+    if (encoderConfig.bitrateMode === 'quantizer') encodeOpts.vp9 = { quantizer: VP9_QUANTIZER };
+    videoEncoder.encode(frame, encodeOpts);
     frame.close();
     frameCount++;
     if (frameCount % 15 === 0) setStatus(`⏺ Rendering — frame ${frameCount}…`);
