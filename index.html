@@ -225,8 +225,8 @@
     </div>
     <div style="display:flex;align-items:center;gap:10px;">
       <span style="font-size:10px;color:var(--color-text-tertiary);width:78px;text-align:right;">Gravity</span>
-      <input type="range" id="crumbleGravity" min="20" max="300" step="5" value="100" style="width:180px;">
-      <span id="crumbleGravityVal" style="font-size:11px;color:var(--color-text-secondary);min-width:44px;">100%</span>
+      <input type="range" id="crumbleGravity" min="20" max="300" step="5" value="200" style="width:180px;">
+      <span id="crumbleGravityVal" style="font-size:11px;color:var(--color-text-secondary);min-width:44px;">200%</span>
     </div>
     <div style="display:flex;align-items:center;gap:10px;">
       <span style="font-size:10px;color:var(--color-text-tertiary);width:78px;text-align:right;">Speed</span>
@@ -2057,11 +2057,11 @@ function runPagePeel(onDone) {
 //   Chaos      — 0 = a tight, near-synchronised collapse with a gentle
 //                wobble. 100 = wildly staggered release, heavy tumbling,
 //                and a lot of sideways scatter.
-//   Gravity    — fall acceleration, independent of Speed. Low = floaty,
-//                drifting debris. High = heavy chunks that drop fast. Fall
-//                speed ramps up like real gravity then caps at a terminal
-//                velocity, rather than accelerating without limit — see
-//                VMAX below.
+//   Gravity    — real acceleration, independent of Speed. Low = floaty,
+//                slow-building drift. High = heavy chunks that snap into a
+//                fast fall. Motion is genuinely ballistic — it keeps
+//                accelerating the whole way down, same as real gravity —
+//                rather than settling into a flat constant speed.
 //   Speed      — overall pace of the release/collapse timing. Independent
 //                of Gravity, so a slow release with a heavy fall (or vice
 //                versa) is possible.
@@ -2078,30 +2078,30 @@ function runCrumble(onDone) {
 
   const TOTAL_DUR      = 2.6 / speedFactor;
   const releaseWindow  = TOTAL_DUR * (0.12 + chaos * 0.68);
-  const baseGravPx     = 2.6 * gravityFactor * RH;    // canvas-heights / s², independent of pace
   const maxRotSpeed    = 0.5 + chaos * 3.4;           // rad/s ceiling — wobble at low chaos, tumble at high
   const avgShardSize   = Math.sqrt((RW * RH) / Math.max(1, shards.length));
   const driftAmp       = chaos * avgShardSize * 0.9;  // sideways scatter, scales with shard size + chaos
-  // Terminal velocity. Plain quadratic gravity (dy = ½·g·age²) has no upper
-  // bound on speed — a shard just keeps accelerating for as long as it's
-  // falling, so the fastest, most noticeable motion always happens right at
-  // the very end, right before it vanishes off the bottom of the frame. Real
-  // falling debris doesn't do that — air drag caps it at a terminal speed
-  // fairly quickly. VMAX below is that cap; a shard accelerates exactly as
-  // before up until it would reach VMAX, then continues at that constant
-  // speed rather than keep ramping up. sqrt(gravityFactor) so the Gravity
-  // slider still meaningfully raises the cap without it exploding at 300%.
-  const VMAX           = 1.4 * RH * Math.sqrt(gravityFactor);
-  const AGE_CAP         = VMAX / baseGravPx;   // time at which a gravMult=1 shard would hit VMAX
-  // Safety net so a stray shard can't hang forever — sized from the actual
-  // fall time a shard needs at this gravity (now accounting for the VMAX
-  // cap above, since capping speed also means it takes a bit longer to
-  // clear the frame than uncapped quadratic gravity would), plus the
-  // release spread, so a low-gravity/high-speed (or high-gravity/low-speed)
-  // combo isn't cut short.
-  const distAtCap      = 0.5 * baseGravPx * AGE_CAP * AGE_CAP;
-  const fallTime       = AGE_CAP + Math.max(0, (RH * 2.2) - distAtCap) / VMAX;
-  const HARD_CAP       = releaseWindow + fallTime * 1.3 + 1;
+  // Constant fall speed, reached almost immediately after release — not
+  // Real ballistic gravity — dy = ½·g·age², the same curve an actual
+  // falling object follows: slow to start, visibly accelerating the whole
+  // way down. Earlier attempts flattened this into a near-constant speed
+  // to chase down a "speeds up like crazy" complaint, but that overshot —
+  // it made every fall look linear, with no weight or snap to it, and the
+  // Gravity/Chaos sliders barely changed anything since there was hardly
+  // any curve left to shape. What actually caused that complaint has since
+  // been fixed at the source: the abrupt pop at the end (now a graceful
+  // cross-fade — see the fade-out block near the bottom of frm()) and
+  // shards generally being too fast in isolation (base gravity below is
+  // tuned gentler than the original). With both of those addressed, real
+  // acceleration is safe to bring back — a piece being fastest right
+  // before it falls out of frame is just correct physics, not a bug.
+  const baseGravPx = 2.2 * gravityFactor * RH;   // canvas-heights / s² — scales directly with the Gravity slider
+  // Safety net so a stray shard can't hang forever — sized generously from
+  // the actual fall time a shard needs at this gravity, plus the release
+  // spread. Not something that should normally trigger; the cross-fade
+  // below means even if it ever does, it won't look like an abrupt pop.
+  const fallTime   = Math.sqrt((2 * RH * 2.2) / baseGravPx);
+  const HARD_CAP   = releaseWindow + fallTime * 1.6 + 1.5;
 
   shards.forEach(s => {
     s.releaseAt = Math.random() * releaseWindow;
@@ -2131,14 +2131,7 @@ function runCrumble(onDone) {
         return;
       }
       s.age += dt;
-      // AGE_CAP is independent of gravMult (both the per-shard g0 and vMax
-      // scale by it equally, so it cancels out) — free-fall quadratic up to
-      // that point, then constant speed afterward.
-      const g0  = baseGravPx * s.gravMult;
-      const vMaxShard = VMAX * s.gravMult;
-      const dy = s.age <= AGE_CAP
-        ? 0.5 * g0 * s.age * s.age
-        : 0.5 * g0 * AGE_CAP * AGE_CAP + vMaxShard * (s.age - AGE_CAP);
+      const dy = 0.5 * baseGravPx * s.gravMult * s.age * s.age;   // ballistic — real acceleration, no cap
       if (s.by + dy > RH + s.bh) return;   // fully below frame — done with this shard
       allGone = false;
       const dx  = s.driftVX * s.age;
@@ -2155,13 +2148,35 @@ function runCrumble(onDone) {
     if (el > HARD_CAP) allGone = true;
 
     if (allGone) {
-      recCtx8.drawImage(crumble_dstC, 0, 0);
-      ctx8.drawImage(recC8, 0, 0, W, H);
-      const reset = () => {
-        recCtx8.drawImage(crumble_srcC, 0, 0);
+      // Cross-fade whatever's currently showing (dst background plus any
+      // shards still mid-flight, whether they finished naturally or got
+      // swept up by the HARD_CAP safety net) into the clean final dst over
+      // a fifth of a second, rather than an instant cut. However fast
+      // things were still moving in this last frame, this smooths it into
+      // the reveal instead of it just vanishing — no more pop.
+      const lastFrame = mkc(RW, RH);
+      lastFrame.getContext('2d').drawImage(recC8, 0, 0);
+      const FADE_DUR = 0.2;
+      let fadeAge = 0, fadeLastT = null;
+      function fadeFrm(fts) {
+        if (!fadeLastT) fadeLastT = fts;
+        fadeAge += (fts - fadeLastT) / 1000;
+        fadeLastT = fts;
+        const p = Math.min(1, fadeAge / FADE_DUR);
+        recCtx8.drawImage(crumble_dstC, 0, 0);
+        recCtx8.save();
+        recCtx8.globalAlpha = 1 - p;
+        recCtx8.drawImage(lastFrame, 0, 0);
+        recCtx8.restore();
         ctx8.drawImage(recC8, 0, 0, W, H);
-      };
-      onDone ? onDone(reset) : setTimeout(reset, 1600);
+        if (p < 1) { requestAnimationFrame(fadeFrm); return; }
+        const reset = () => {
+          recCtx8.drawImage(crumble_srcC, 0, 0);
+          ctx8.drawImage(recC8, 0, 0, W, H);
+        };
+        onDone ? onDone(reset) : setTimeout(reset, 1600);
+      }
+      requestAnimationFrame(fadeFrm);
       return;
     }
     requestAnimationFrame(frm);
@@ -2389,30 +2404,38 @@ async function recordCanvasProper(cfg) {
     for (let i = 0; i < padFrames; i++) await captureFrame();
 
     setStatus('⏺ Rendering transition…');
-    let transitionDone = false, savedReset = null, doneResolve;
-    const donePromise = new Promise(r => { doneResolve = r; });
+    // Drive the transition's own rAF loop with synthetic, evenly-spaced
+    // timestamps — but strictly one tick at a time. requestAnimationFrame
+    // is hijacked to just *record* the callback the transition wants
+    // called next (pendingCb), not to schedule/run it immediately. The
+    // while loop below is the only thing that actually invokes it, and it
+    // always fully awaits captureFrame() — including any backpressure
+    // wait for a slow encoder — before looking at pendingCb again. This
+    // guarantees frame N is completely captured before frame N+1 ever gets
+    // drawn. (An earlier version scheduled each tick via its own
+    // setTimeout independently, which meant a queued-up next tick could
+    // start drawing over the canvas while the previous frame's capture was
+    // still stalled waiting on the encoder — silently duplicating some
+    // frames and dropping others. That's what "choppy" recordings were.)
+    let pendingCb = null, transitionDone = false, savedReset = null;
+    window.requestAnimationFrame = (cb) => { pendingCb = cb; return 0; };
 
     let synthTs = 0;
-    window.requestAnimationFrame = (cb) => {
-      setTimeout(async () => {
-        try {
-          synthTs += 1000 / FPS;
-          cb(synthTs);
-          await captureFrame();
-          if (transitionDone) doneResolve(null);
-        } catch (e) {
-          transitionDone = true;
-          doneResolve(e);
-        }
-      }, 0);
-      return 0;
-    };
-
     cfg.runFn(reset => { transitionDone = true; savedReset = reset; });
+    // cfg.runFn's first action is always requestAnimationFrame(frm), which
+    // just populated pendingCb above — nothing has actually run yet.
 
-    const err = await donePromise;
+    while (!transitionDone) {
+      const cb = pendingCb;
+      pendingCb = null;
+      if (!cb) break;   // shouldn't happen — a transition always re-arms itself until done
+      synthTs += 1000 / FPS;
+      cb(synthTs);            // draws this frame; may synchronously re-arm pendingCb for the next one
+      await captureFrame();   // fully capture/encode THIS frame — including any backpressure wait —
+                               // before the loop goes back and looks at pendingCb again
+      if (frameCount % 4 === 0) await new Promise(r => setTimeout(r, 0));   // keep the UI responsive
+    }
     window.requestAnimationFrame = realRAF;
-    if (err) throw err;
 
     if (padFrames > 0) setStatus(`⏺ Rendering outro (${padSecs}s)…`);
     for (let i = 0; i < padFrames; i++) await captureFrame();
