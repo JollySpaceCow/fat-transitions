@@ -109,10 +109,14 @@
   <div style="display:flex;align-items:center;gap:8px;font-size:12px;padding:7px 16px;border-radius:20px;border:.5px solid var(--color-border-tertiary);background:var(--color-bg-secondary);">
     <input type="file" id="fA" accept="image/*" style="display:none">
     <label for="fA" id="lblA" style="cursor:pointer;color:var(--color-accent-primary);font-weight:500;">📁 A — Source</label>
+    <span style="opacity:.35;">|</span>
+    <button type="button" id="btnATransparent" title="Fill A with a fully transparent image instead of a photo" style="font-size:12px;background:none;border:none;cursor:pointer;color:var(--color-text-secondary);padding:0;">◱ Transparent</button>
   </div>
   <div style="display:flex;align-items:center;gap:8px;font-size:12px;padding:7px 16px;border-radius:20px;border:.5px solid var(--color-border-tertiary);background:var(--color-bg-secondary);">
     <input type="file" id="fB" accept="image/*" style="display:none">
     <label for="fB" id="lblB" style="cursor:pointer;color:var(--color-accent-primary);font-weight:500;">📁 B — Destination</label>
+    <span style="opacity:.35;">|</span>
+    <button type="button" id="btnBTransparent" title="Fill B with a fully transparent image instead of a photo" style="font-size:12px;background:none;border:none;cursor:pointer;color:var(--color-text-secondary);padding:0;">◱ Transparent</button>
   </div>
 </div>
 
@@ -180,6 +184,21 @@
     <button class="cgb" data-mode="B"   style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">B — Destination</button>
     <button class="cgb" data-mode="AB"  style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">AB — Swirl</button>
     <button class="cgb" data-mode="ABV" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">AB — Bands</button>
+  </div>
+  <!-- Whole-frame lens/barrel warp — read live at play-time by runConeRefraction -->
+  <div style="display:flex;align-items:center;gap:10px;justify-content:center;margin-top:10px;">
+    <span style="font-size:10px;color:var(--color-text-tertiary);width:78px;text-align:right;">Lens bulge</span>
+    <input type="range" id="coneLensDistortion" min="0" max="100" step="1" value="0" style="width:180px;">
+    <span id="coneLensDistortionVal" style="font-size:11px;color:var(--color-text-secondary);min-width:44px;">0%</span>
+  </div>
+  <!-- Overscan — pushes the cone's tip above the frame and its horizontal
+       sweep further past the left/right edges, so the tip and the bottom
+       corners don't land exactly on the frame boundary. Read live at
+       play-time by runConeRefraction. -->
+  <div style="display:flex;align-items:center;gap:10px;justify-content:center;margin-top:10px;">
+    <span style="font-size:10px;color:var(--color-text-tertiary);width:78px;text-align:right;">Edge overscan</span>
+    <input type="range" id="coneOverscan" min="0" max="100" step="5" value="40" style="width:180px;">
+    <span id="coneOverscanVal" style="font-size:11px;color:var(--color-text-secondary);min-width:44px;">40%</span>
   </div>
 </div>
 <div style="margin-bottom:14px;">
@@ -304,6 +323,7 @@ const CONE_RSCALE = 2;
 const CONE_RW2 = Math.round(RW / CONE_RSCALE), CONE_RH2 = Math.round(RH / CONE_RSCALE);
 const cone_smallC = mkc(CONE_RW2, CONE_RH2), cone_smallCx = cone_smallC.getContext('2d');
 const cone_outBuf = new Uint8ClampedArray(CONE_RW2 * CONE_RH2 * 4);
+const cone_warpBuf = new Uint8ClampedArray(CONE_RW2 * CONE_RH2 * 4);   // scratch buffer for the whole-frame lens pass below
 
 // Working + recording canvas for page peel
 const recC7 = mkc(RW, RH), recCtx7 = recC7.getContext('2d');
@@ -516,6 +536,15 @@ function applyShim(src, dstCtx, amp_w, spd) {
     }
   }
   SHX.putImageData(new ImageData(shimBuf, SHW, SHH), 0, 0);
+  // Clear first — this function always means "replace dstCtx's content with
+  // a shimmered version of src", never "composite on top of what's there".
+  // Skipping this was fine as long as src was an opaque photo (drawImage
+  // fully overwrites regardless), but a transparent src can't erase old
+  // pixels on its own — source-over compositing with alpha=0 is a no-op —
+  // so without this, previous frames' content just never got cleared,
+  // leaving a "ghost trail" behind anything moving (the Solitaire-win-
+  // animation look).
+  dstCtx.clearRect(0, 0, W, H);
   dstCtx.drawImage(shimC, 0, 0, W, H);
 }
 
@@ -695,6 +724,7 @@ function runSplash(onDone) {
   function frm(ts) {
     if (!last) last = ts;
     const dt = Math.min((ts-last)/1000, .05); last = ts; pT += dt;
+    ctx1.clearRect(0, 0, W, H);   // see applyShim's comment on why this must run every frame, not just when butC is transparent
     ctx1.drawImage(butC, 0, 0);
     MKX.clearRect(0, 0, W, H);
     if (revR > 1) {
@@ -768,10 +798,15 @@ function runSplash(onDone) {
       ctx1.beginPath(); ctx1.arc(IX, IY, 3*SD+r.mR*prog, 0, Math.PI*2);
       ctx1.strokeStyle = `rgba(255,255,255,${al})`; ctx1.lineWidth = 1.6*SD; ctx1.stroke();
     });
+    recCtx1.clearRect(0, 0, RW, RH);
     recCtx1.drawImage(c1, 0, 0, RW, RH);
     if (phase === 'done') {
-      ctx1.drawImage(butC, 0, 0); recCtx1.drawImage(butC, 0, 0, RW, RH);
-      const reset = () => { ctx1.drawImage(milkC, 0, 0); recCtx1.drawImage(milkC, 0, 0, RW, RH); };
+      ctx1.clearRect(0, 0, W, H); ctx1.drawImage(butC, 0, 0);
+      recCtx1.clearRect(0, 0, RW, RH); recCtx1.drawImage(butC, 0, 0, RW, RH);
+      const reset = () => {
+        ctx1.clearRect(0, 0, W, H); ctx1.drawImage(milkC, 0, 0);
+        recCtx1.clearRect(0, 0, RW, RH); recCtx1.drawImage(milkC, 0, 0, RW, RH);
+      };
       onDone ? onDone(reset) : setTimeout(reset, 1600);
       return;
     }
@@ -812,6 +847,7 @@ function runSolidify(onDone) {
       const ha = intensity*.068, hg = ctx2.createLinearGradient(0, 0, 0, H);
       hg.addColorStop(0, `rgba(255,148,28,${ha*1.25})`); hg.addColorStop(.5, `rgba(255,90,4,${ha*.58})`); hg.addColorStop(1, `rgba(255,148,28,${ha})`);
       ctx2.fillStyle = hg; ctx2.fillRect(0, 0, W, H);
+      recCtx2.clearRect(0, 0, RW, RH);
       recCtx2.drawImage(c2, 0, 0, RW, RH);
       if (el >= 2.25) { phase = 'solidify'; el = 0; }
       requestAnimationFrame(frm); return;
@@ -820,6 +856,7 @@ function runSolidify(onDone) {
     seeds.forEach(s => { if (!s.on && el >= s.delay) s.on = true; if (s.on && s.r < BIGR) s.r += s.spd*dt; });
     MKX.clearRect(0, 0, W, H); MKX.fillStyle = '#fff';
     seeds.forEach(s => { if (s.on && s.r > 1) { blob(MKX, s); MKX.fill(); } });
+    ctx2.clearRect(0, 0, W, H);   // see applyShim's comment on why this must run every frame
     ctx2.drawImage(talC, 0, 0);
     const sL = phase === 'solidify' ? Math.max(0, 1-el/1.7) : 0;
     if (sL > .025) { applyShim(trimC, TPX, sL*8.5*SW, tot*3.9); }
@@ -838,10 +875,15 @@ function runSolidify(onDone) {
       });
     }
     if (phase === 'solidify' && el > 3.8) { phase = 'fade'; el = 0; }
+    recCtx2.clearRect(0, 0, RW, RH);
     recCtx2.drawImage(c2, 0, 0, RW, RH);
     if (phase === 'fade' && el >= .55) {
-      ctx2.drawImage(talC, 0, 0); recCtx2.drawImage(talC, 0, 0, RW, RH);
-      const reset = () => { ctx2.drawImage(trimC, 0, 0); recCtx2.drawImage(trimC, 0, 0, RW, RH); };
+      ctx2.clearRect(0, 0, W, H); ctx2.drawImage(talC, 0, 0);
+      recCtx2.clearRect(0, 0, RW, RH); recCtx2.drawImage(talC, 0, 0, RW, RH);
+      const reset = () => {
+        ctx2.clearRect(0, 0, W, H); ctx2.drawImage(trimC, 0, 0);
+        recCtx2.clearRect(0, 0, RW, RH); recCtx2.drawImage(trimC, 0, 0, RW, RH);
+      };
       onDone ? onDone(reset) : setTimeout(reset, 1600); return;
     }
     requestAnimationFrame(frm);
@@ -1153,6 +1195,7 @@ function runBubbles(onDone) {
       // (the vast majority by now) fading B over B is a no-op — no visible
       // change — so only whatever sliver of A is genuinely still left gets
       // eased out, smoothly, whether that's a teensy patch or a bigger one.
+      bx.clearRect(0, 0, bw, bh);
       bx.drawImage(bub_srcC, 0, 0);
       updateGrowingSpots(dt);
       bx.drawImage(revealedDstC, 0, 0);
@@ -1168,17 +1211,23 @@ function runBubbles(onDone) {
         bx.globalAlpha = 1;
       }
 
+      ctx3.clearRect(0, 0, W, H);
       ctx3.drawImage(recC3, 0, 0, W, H);
 
       if (doneEl >= HOLD) {
-        recCtx3.drawImage(bub_dstC, 0, 0); ctx3.drawImage(recC3, 0, 0, W, H);
-        const reset = () => { recCtx3.drawImage(bub_srcC, 0, 0); ctx3.drawImage(recC3, 0, 0, W, H); };
+        recCtx3.clearRect(0, 0, bw, bh); recCtx3.drawImage(bub_dstC, 0, 0);
+        ctx3.clearRect(0, 0, W, H); ctx3.drawImage(recC3, 0, 0, W, H);
+        const reset = () => {
+          recCtx3.clearRect(0, 0, bw, bh); recCtx3.drawImage(bub_srcC, 0, 0);
+          ctx3.clearRect(0, 0, W, H); ctx3.drawImage(recC3, 0, 0, W, H);
+        };
         onDone ? onDone(reset) : setTimeout(reset, 1600); return;
       }
       requestAnimationFrame(frm);
       return;
     }
 
+    bx.clearRect(0, 0, bw, bh);
     bx.drawImage(bub_srcC, 0, 0);
     updateGrowingSpots(dt);
     bx.drawImage(revealedDstC, 0, 0);
@@ -1270,6 +1319,7 @@ function runBubbles(onDone) {
       bx.restore();
     });
 
+    ctx3.clearRect(0, 0, W, H);
     ctx3.drawImage(recC3, 0, 0, W, H);
 
     if (allDone || el > 5.0) {
@@ -1319,6 +1369,7 @@ function runParticles(onDone) {
 
     if (!allLanded) {
       const srcA = Math.max(0, 1-el/1.2);
+      recCtx4.clearRect(0, 0, RW, RH);
       if (srcA > 0) { recCtx4.drawImage(par_srcC, 0, 0); }
       else { recCtx4.fillStyle = '#000'; recCtx4.fillRect(0, 0, RW, RH); }
       if (srcA > 0 && srcA < 1) { recCtx4.globalAlpha = 1-srcA; recCtx4.fillStyle = '#000'; recCtx4.fillRect(0, 0, RW, RH); recCtx4.globalAlpha = 1; }
@@ -1336,6 +1387,7 @@ function runParticles(onDone) {
         recCtx4.fillRect(px-r, py-r, r*2, r*2);
       });
       recCtx4.globalAlpha = 1;
+      ctx4.clearRect(0, 0, W, H);
       ctx4.drawImage(recC4, 0, 0, W, H);
       if (landed) allLanded = true;
     } else {
@@ -1350,10 +1402,15 @@ function runParticles(onDone) {
         });
         recCtx4.globalAlpha = 1;
       }
+      ctx4.clearRect(0, 0, W, H);
       ctx4.drawImage(recC4, 0, 0, W, H);
       if (fa >= 1) {
-        recCtx4.clearRect(0, 0, RW, RH); recCtx4.drawImage(par_dstC, 0, 0); ctx4.drawImage(recC4, 0, 0, W, H);
-        const reset = () => { recCtx4.drawImage(par_srcC, 0, 0); ctx4.drawImage(recC4, 0, 0, W, H); };
+        recCtx4.clearRect(0, 0, RW, RH); recCtx4.drawImage(par_dstC, 0, 0);
+        ctx4.clearRect(0, 0, W, H); ctx4.drawImage(recC4, 0, 0, W, H);
+        const reset = () => {
+          recCtx4.clearRect(0, 0, RW, RH); recCtx4.drawImage(par_srcC, 0, 0);
+          ctx4.clearRect(0, 0, W, H); ctx4.drawImage(recC4, 0, 0, W, H);
+        };
         onDone ? onDone(reset) : setTimeout(reset, 1600); return;
       }
     }
@@ -1421,6 +1478,7 @@ function _tileDropEngine(p, onDone) {
     lastT = ts; el += dt;
 
     // Layer 1 — dst scene always underneath
+    recCtx.clearRect(0, 0, RW, RH);
     recCtx.drawImage(dstC, 0, 0);
 
     let allGone = true;
@@ -1457,13 +1515,18 @@ function _tileDropEngine(p, onDone) {
       );
     });
 
+    dispCtx.clearRect(0, 0, W, H);
     dispCtx.drawImage(recCtx.canvas, 0, 0, W, H);
 
     if (allGone) {
+      recCtx.clearRect(0, 0, RW, RH);
       recCtx.drawImage(dstC, 0, 0);
+      dispCtx.clearRect(0, 0, W, H);
       dispCtx.drawImage(recCtx.canvas, 0, 0, W, H);
       const reset = () => {
+        recCtx.clearRect(0, 0, RW, RH);
         recCtx.drawImage(srcC, 0, 0);
+        dispCtx.clearRect(0, 0, W, H);
         dispCtx.drawImage(recCtx.canvas, 0, 0, W, H);
       };
       onDone ? onDone(reset) : setTimeout(reset, 1600);
@@ -1529,6 +1592,10 @@ function runConeRefraction(onDone) {
   const REF_STR    = 305;
   const CHROM      = 14;
   const CONE_ANGLE = 20;    // degrees
+  // Antialiasing feather width (full-res px) for the cone's silhouette edges
+  // — see the distR/distL blend below. Scaled off CONE_RSCALE so it stays
+  // roughly one small-buffer pixel wide regardless of render scale.
+  const AA_W = CONE_RSCALE * 2.5;
 
   // Glass mode — read from the active .cgb button, default to Bands
   const activeBtn = document.querySelector('.cgb.cgb-active');
@@ -1544,16 +1611,31 @@ function runConeRefraction(onDone) {
   const tanA   = Math.tan(CONE_ANGLE * Math.PI / 180);
   const maxHW  = RH * tanA;
 
+  // Overscan — without this, the cone's tip is mathematically pinned to
+  // exactly row 0 every single frame (r_base = py·tanA is literally zero
+  // there), and the horizontal sweep is timed so the widest row's corners
+  // are tangent to x=0/x=RW at the exact instant the sweep starts/ends.
+  // Both read as very precise/calculated rather than like a shape that
+  // naturally extends beyond what's in frame. OVERSCAN_V pushes the true
+  // apex up above the visible frame (so row 0 already has some width,
+  // never a sharp point) and OVERSCAN_H gives the sweep extra slack beyond
+  // maxHW so the bottom corners cross the left/right edges with room to
+  // spare instead of exactly at the mathematical tangent point.
+  const overscanPct = parseInt(document.getElementById('coneOverscan').value, 10) / 100;
+  const OVERSCAN_V = overscanPct * RH * 0.35;
+  const OVERSCAN_H = overscanPct * maxHW * 0.6;
+
   function easeInOut(t) { return t < .5 ? 2*t*t : -1 + (4-2*t)*t; }
 
   function drawFrame(t_progress, elapsed) {
-    const cone_cx = -maxHW + t_progress * (RW + maxHW * 2);
+    const sweepHW = maxHW + OVERSCAN_H;
+    const cone_cx = -sweepHW + t_progress * (RW + sweepHW * 2);
     const spin    = elapsed * SPIN_RATE;
 
     for (let py2 = 0; py2 < CONE_RH2; py2++) {
       const py = py2 * CONE_RSCALE;      // full-res logical y
-      const t_cone = py / RH;            // 0=tip(top), 1=mouth(bottom)
-      const r_base = py * tanA;          // half-width of cone at this row
+      const t_cone = (py + OVERSCAN_V) / RH;   // 0=tip(off-screen above when overscan>0), 1=mouth(bottom)
+      const r_base = (py + OVERSCAN_V) * tanA; // half-width of cone at this row
 
       const ph = t_cone * Math.PI;
       const r_wavy = r_base < 1 ? 0 : r_base * (1
@@ -1568,14 +1650,25 @@ function runConeRefraction(onDone) {
         const si4 = (py  * RW       + px ) * 4;     // full-res srcPix/dstPix read index
         const hx  = px - cone_cx;
 
-        if (hx > r_wavy) {
+        // Antialiasing — distR/distL are signed distances (full-res px) into
+        // the glass region from the right/left silhouette edges. A pixel
+        // safely beyond -AA_W on either side is definitely flat A or flat B
+        // and takes the cheap early-exit path exactly as before; anything
+        // within AA_W of an edge (including the true glass interior) falls
+        // through to the full glass computation below and gets feathered
+        // against the flat colour at the end, instead of a hard binary
+        // cutoff that makes the cone's edge look jagged/pixely.
+        const distR = r_wavy - hx;
+        const distL = hx + r_wavy;
+
+        if (distR <= -AA_W) {
           cone_outBuf[oi4]   = srcPix[si4];
           cone_outBuf[oi4+1] = srcPix[si4+1];
           cone_outBuf[oi4+2] = srcPix[si4+2];
           cone_outBuf[oi4+3] = 255;
           continue;
         }
-        if (hx < -r_wavy) {
+        if (distL <= -AA_W) {
           cone_outBuf[oi4]   = dstPix[si4];
           cone_outBuf[oi4+1] = dstPix[si4+1];
           cone_outBuf[oi4+2] = dstPix[si4+2];
@@ -1683,16 +1776,73 @@ function runConeRefraction(onDone) {
         const caustic = Math.pow(Math.max(0, 1 - abs_hxn / 0.18), 3)
                       * 80 * (0.5 + 0.5 * Math.sin(caustic_angle));
 
-        cone_outBuf[oi4]   = Math.min(255, dr + rim + caustic) | 0;
-        cone_outBuf[oi4+1] = Math.min(255, dg + rim * 0.9 + caustic) | 0;
-        cone_outBuf[oi4+2] = Math.min(255, db + rim + caustic) | 0;
+        let outR = Math.min(255, dr + rim + caustic);
+        let outG = Math.min(255, dg + rim * 0.9 + caustic);
+        let outB = Math.min(255, db + rim + caustic);
+
+        // Feather the glass colour back to flat A/B near the silhouette
+        // edges (see distR/distL above) instead of a hard cutoff.
+        if (distR < AA_W) {
+          const t = Math.max(0, Math.min(1, (AA_W - distR) / (2 * AA_W)));
+          const m = t * t * (3 - 2 * t);   // smoothstep
+          outR = outR * (1 - m) + srcPix[si4]   * m;
+          outG = outG * (1 - m) + srcPix[si4+1] * m;
+          outB = outB * (1 - m) + srcPix[si4+2] * m;
+        }
+        if (distL < AA_W) {
+          const t = Math.max(0, Math.min(1, (AA_W - distL) / (2 * AA_W)));
+          const m = t * t * (3 - 2 * t);   // smoothstep
+          outR = outR * (1 - m) + dstPix[si4]   * m;
+          outG = outG * (1 - m) + dstPix[si4+1] * m;
+          outB = outB * (1 - m) + dstPix[si4+2] * m;
+        }
+
+        cone_outBuf[oi4]   = outR | 0;
+        cone_outBuf[oi4+1] = outG | 0;
+        cone_outBuf[oi4+2] = outB | 0;
         cone_outBuf[oi4+3] = 255;
       }
     }
 
+    // ── Lens distortion — whole-frame barrel warp ──────────────────────────
+    // A camera-lens-style bulge applied to the ENTIRE finished frame — the
+    // glass beam and the A/B photos alike — as a final pass over the small
+    // render buffer, the same structural approach Grok's version used.
+    // (An earlier version of this tried to warp only the beam's own
+    // geometry and leave the photos untouched, using a multiply-based
+    // formula (sample = center + offset·(1+k·r²)). That formula pushes the
+    // sample position *outside* the valid buffer range as r→edge for k>0,
+    // which then has to clamp — and clamping means multiple output pixels
+    // collapse onto the same source pixel, which is exactly the "stretched
+    // pixel / cone stops before the edge" artifact. This version instead
+    // divides — sample = center + offset/(1+k·r²) — which for k≥0 always
+    // pulls the sample *inward* toward center, so it can never leave the
+    // buffer and never needs to clamp. Simpler, and structurally can't
+    // produce that artifact.)
+    const barrelPct = parseInt(document.getElementById('coneLensDistortion').value, 10) / 100;
+    if (barrelPct > 0.001) {
+      const BARREL_K = barrelPct * 0.48;
+      const cx = CONE_RW2 * 0.5, cy = CONE_RH2 * 0.5;
+      const maxR = Math.hypot(cx, cy);
+      for (let y = 0; y < CONE_RH2; y++) {
+        for (let x = 0; x < CONE_RW2; x++) {
+          const nx = (x - cx) / maxR, ny = (y - cy) / maxR;
+          const inv = 1 / (1 + BARREL_K * (nx * nx + ny * ny));
+          const sx = Math.max(0, Math.min(CONE_RW2 - 1, Math.round(cx + (x - cx) * inv)));
+          const sy = Math.max(0, Math.min(CONE_RH2 - 1, Math.round(cy + (y - cy) * inv)));
+          const si = (sy * CONE_RW2 + sx) * 4, di = (y * CONE_RW2 + x) * 4;
+          cone_warpBuf[di]   = cone_outBuf[si];
+          cone_warpBuf[di+1] = cone_outBuf[si+1];
+          cone_warpBuf[di+2] = cone_outBuf[si+2];
+          cone_warpBuf[di+3] = 255;
+        }
+      }
+    }
+    const finalBuf = barrelPct > 0.001 ? cone_warpBuf : cone_outBuf;
+
     // Small render → recording canvas (1080p) and display canvas (4K),
     // both scaled up from the same small source via hardware-accelerated blit.
-    cone_smallCx.putImageData(new ImageData(cone_outBuf, CONE_RW2, CONE_RH2), 0, 0);
+    cone_smallCx.putImageData(new ImageData(finalBuf, CONE_RW2, CONE_RH2), 0, 0);
     recCtx6.drawImage(cone_smallC, 0, 0, CONE_RW2, CONE_RH2, 0, 0, RW, RH);
     ctx6.drawImage(cone_smallC, 0, 0, CONE_RW2, CONE_RH2, 0, 0, W, H);
   }
@@ -1706,9 +1856,11 @@ function runConeRefraction(onDone) {
     const t = easeInOut(rawT);
     drawFrame(t, el);
     if (rawT >= 1) {
-      recCtx6.drawImage(cone_dstC, 0, 0); ctx6.drawImage(recC6, 0, 0, W, H);
+      recCtx6.clearRect(0, 0, RW, RH); recCtx6.drawImage(cone_dstC, 0, 0);
+      ctx6.clearRect(0, 0, W, H); ctx6.drawImage(recC6, 0, 0, W, H);
       const reset = () => {
-        recCtx6.drawImage(cone_srcC, 0, 0); ctx6.drawImage(recC6, 0, 0, W, H);
+        recCtx6.clearRect(0, 0, RW, RH); recCtx6.drawImage(cone_srcC, 0, 0);
+        ctx6.clearRect(0, 0, W, H); ctx6.drawImage(recC6, 0, 0, W, H);
       };
       onDone ? onDone(reset) : setTimeout(reset, 1600);
       return;
@@ -2026,11 +2178,14 @@ function runPagePeel(onDone) {
     const rawT = Math.min(el/DURATION, 1);
     const t = ease(rawT);
     drawPeelFrame(t);
+    ctx7.clearRect(0, 0, W, H);
     ctx7.drawImage(recC7, 0, 0, W, H);
     if (rawT >= 1) {
-      recCtx7.drawImage(peel_dstC, 0, 0); ctx7.drawImage(recC7, 0, 0, W, H);
+      recCtx7.clearRect(0, 0, RW, RH); recCtx7.drawImage(peel_dstC, 0, 0);
+      ctx7.clearRect(0, 0, W, H); ctx7.drawImage(recC7, 0, 0, W, H);
       const reset = () => {
-        recCtx7.drawImage(peel_srcC, 0, 0); ctx7.drawImage(recC7, 0, 0, W, H);
+        recCtx7.clearRect(0, 0, RW, RH); recCtx7.drawImage(peel_srcC, 0, 0);
+        ctx7.clearRect(0, 0, W, H); ctx7.drawImage(recC7, 0, 0, W, H);
       };
       onDone ? onDone(reset) : setTimeout(reset, 1600);
       return;
@@ -2057,11 +2212,11 @@ function runPagePeel(onDone) {
 //   Chaos      — 0 = a tight, near-synchronised collapse with a gentle
 //                wobble. 100 = wildly staggered release, heavy tumbling,
 //                and a lot of sideways scatter.
-//   Gravity    — real acceleration, independent of Speed. Low = floaty,
-//                slow-building drift. High = heavy chunks that snap into a
-//                fast fall. Motion is genuinely ballistic — it keeps
-//                accelerating the whole way down, same as real gravity —
-//                rather than settling into a flat constant speed.
+//   Gravity    — fall acceleration, independent of Speed. Low = floaty,
+//                drifting debris. High = heavy chunks that drop fast. Fall
+//                speed ramps up like real gravity then caps at a terminal
+//                velocity, rather than accelerating without limit — see
+//                VMAX below.
 //   Speed      — overall pace of the release/collapse timing. Independent
 //                of Gravity, so a slow release with a heavy fall (or vice
 //                versa) is possible.
@@ -2081,12 +2236,11 @@ function runCrumble(onDone) {
   const maxRotSpeed    = 0.5 + chaos * 3.4;           // rad/s ceiling — wobble at low chaos, tumble at high
   const avgShardSize   = Math.sqrt((RW * RH) / Math.max(1, shards.length));
   const driftAmp       = chaos * avgShardSize * 0.9;  // sideways scatter, scales with shard size + chaos
-  // Constant fall speed, reached almost immediately after release — not
   // Real ballistic gravity — dy = ½·g·age², the same curve an actual
   // falling object follows: slow to start, visibly accelerating the whole
-  // way down. Earlier attempts flattened this into a near-constant speed
-  // to chase down a "speeds up like crazy" complaint, but that overshot —
-  // it made every fall look linear, with no weight or snap to it, and the
+  // way down. Earlier attempts flattened this into a near-constant speed to
+  // chase down a "speeds up like crazy" complaint, but that overshot — it
+  // made every fall look linear, with no weight or snap to it, and the
   // Gravity/Chaos sliders barely changed anything since there was hardly
   // any curve left to shape. What actually caused that complaint has since
   // been fixed at the source: the abrupt pop at the end (now a graceful
@@ -2120,6 +2274,7 @@ function runCrumble(onDone) {
     lastT = ts; el += dt;
 
     // Layer 1 — dst scene always underneath
+    recCtx8.clearRect(0, 0, RW, RH);
     recCtx8.drawImage(crumble_dstC, 0, 0);
 
     let allGone = true;
@@ -2143,6 +2298,7 @@ function runCrumble(onDone) {
       recCtx8.restore();
     });
 
+    ctx8.clearRect(0, 0, W, H);
     ctx8.drawImage(recC8, 0, 0, W, H);
 
     if (el > HARD_CAP) allGone = true;
@@ -2163,15 +2319,19 @@ function runCrumble(onDone) {
         fadeAge += (fts - fadeLastT) / 1000;
         fadeLastT = fts;
         const p = Math.min(1, fadeAge / FADE_DUR);
+        recCtx8.clearRect(0, 0, RW, RH);
         recCtx8.drawImage(crumble_dstC, 0, 0);
         recCtx8.save();
         recCtx8.globalAlpha = 1 - p;
         recCtx8.drawImage(lastFrame, 0, 0);
         recCtx8.restore();
+        ctx8.clearRect(0, 0, W, H);
         ctx8.drawImage(recC8, 0, 0, W, H);
         if (p < 1) { requestAnimationFrame(fadeFrm); return; }
         const reset = () => {
+          recCtx8.clearRect(0, 0, RW, RH);
           recCtx8.drawImage(crumble_srcC, 0, 0);
+          ctx8.clearRect(0, 0, W, H);
           ctx8.drawImage(recC8, 0, 0, W, H);
         };
         onDone ? onDone(reset) : setTimeout(reset, 1600);
@@ -2347,6 +2507,24 @@ async function recordCanvasProper(cfg) {
   const colorSpace = { primaries: 'bt709', transfer: 'bt709', matrix: 'bt709', fullRange: true };
   const encoderConfig = { codec, width, height, framerate: FPS, bitrateMode: 'quantizer', colorSpace };
 
+  // Alpha channel — only requested when A or B is actually set to
+  // "Transparent" (see setSlotTransparent in Section 8), since alpha-aware
+  // VP9 encoding is genuinely slower and there's no reason to pay that cost
+  // for an ordinary opaque-photo recording. If the browser can't do it,
+  // fall through to a normal opaque recording rather than failing the
+  // whole export — better a solid-background file than none at all.
+  let needsAlpha = aIsTransparent || bIsTransparent;
+  if (needsAlpha) {
+    const alphaConfig = { ...encoderConfig, alpha: 'keep' };
+    const alphaSupport = await VideoEncoder.isConfigSupported(alphaConfig);
+    if (alphaSupport && alphaSupport.supported) {
+      encoderConfig.alpha = 'keep';
+    } else {
+      needsAlpha = false;
+      setStatus('ℹ️ This browser can\u2019t encode VP9 with alpha — recording without transparency.');
+    }
+  }
+
   let support = await VideoEncoder.isConfigSupported(encoderConfig);
   if (!support || !support.supported) {
     // Quantizer mode landed in Chrome 117 (2023) — should be everywhere by
@@ -2367,7 +2545,7 @@ async function recordCanvasProper(cfg) {
   const { Muxer, ArrayBufferTarget } = muxerModule;
 
   const target = new ArrayBufferTarget();
-  const muxer  = new Muxer({ target, video: { codec: 'V_VP9', width, height, frameRate: FPS } });
+  const muxer  = new Muxer({ target, video: { codec: 'V_VP9', width, height, frameRate: FPS, alpha: needsAlpha } });
 
   let encodeErr = null;
   const videoEncoder = new VideoEncoder({
@@ -2404,38 +2582,30 @@ async function recordCanvasProper(cfg) {
     for (let i = 0; i < padFrames; i++) await captureFrame();
 
     setStatus('⏺ Rendering transition…');
-    // Drive the transition's own rAF loop with synthetic, evenly-spaced
-    // timestamps — but strictly one tick at a time. requestAnimationFrame
-    // is hijacked to just *record* the callback the transition wants
-    // called next (pendingCb), not to schedule/run it immediately. The
-    // while loop below is the only thing that actually invokes it, and it
-    // always fully awaits captureFrame() — including any backpressure
-    // wait for a slow encoder — before looking at pendingCb again. This
-    // guarantees frame N is completely captured before frame N+1 ever gets
-    // drawn. (An earlier version scheduled each tick via its own
-    // setTimeout independently, which meant a queued-up next tick could
-    // start drawing over the canvas while the previous frame's capture was
-    // still stalled waiting on the encoder — silently duplicating some
-    // frames and dropping others. That's what "choppy" recordings were.)
-    let pendingCb = null, transitionDone = false, savedReset = null;
-    window.requestAnimationFrame = (cb) => { pendingCb = cb; return 0; };
+    let transitionDone = false, savedReset = null, doneResolve;
+    const donePromise = new Promise(r => { doneResolve = r; });
 
     let synthTs = 0;
-    cfg.runFn(reset => { transitionDone = true; savedReset = reset; });
-    // cfg.runFn's first action is always requestAnimationFrame(frm), which
-    // just populated pendingCb above — nothing has actually run yet.
+    window.requestAnimationFrame = (cb) => {
+      setTimeout(async () => {
+        try {
+          synthTs += 1000 / FPS;
+          cb(synthTs);
+          await captureFrame();
+          if (transitionDone) doneResolve(null);
+        } catch (e) {
+          transitionDone = true;
+          doneResolve(e);
+        }
+      }, 0);
+      return 0;
+    };
 
-    while (!transitionDone) {
-      const cb = pendingCb;
-      pendingCb = null;
-      if (!cb) break;   // shouldn't happen — a transition always re-arms itself until done
-      synthTs += 1000 / FPS;
-      cb(synthTs);            // draws this frame; may synchronously re-arm pendingCb for the next one
-      await captureFrame();   // fully capture/encode THIS frame — including any backpressure wait —
-                               // before the loop goes back and looks at pendingCb again
-      if (frameCount % 4 === 0) await new Promise(r => setTimeout(r, 0));   // keep the UI responsive
-    }
+    cfg.runFn(reset => { transitionDone = true; savedReset = reset; });
+
+    const err = await donePromise;
     window.requestAnimationFrame = realRAF;
+    if (err) throw err;
 
     if (padFrames > 0) setStatus(`⏺ Rendering outro (${padSecs}s)…`);
     for (let i = 0; i < padFrames; i++) await captureFrame();
@@ -2449,7 +2619,7 @@ async function recordCanvasProper(cfg) {
     const a = Object.assign(document.createElement('a'), { href: url, download: fn });
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 3000);
-    setStatus(`✅ ${fn} — ${(frameCount / FPS).toFixed(1)}s · VP9 WebM · frame-accurate offline render`);
+    setStatus(`✅ ${fn} — ${(frameCount / FPS).toFixed(1)}s · VP9 WebM${needsAlpha ? ' + alpha' : ''} · frame-accurate offline render${needsAlpha ? ' — if your editor shows black instead of transparent, it likely needs libvpx-vp9 as its VP9 decoder' : ''}`);
 
     savedReset();
   } finally {
@@ -2466,6 +2636,11 @@ async function recordCanvasProper(cfg) {
  */
 function recordCanvasLegacy(cfg) {
   if (!window.MediaRecorder) { setStatus('⚠️ MediaRecorder not supported — use Chrome or Edge.'); return; }
+  if (aIsTransparent || bIsTransparent) {
+    // captureStream()+MediaRecorder composites onto an opaque background —
+    // there's no alpha-preserving path here, unlike recordCanvasProper.
+    setStatus('ℹ️ Note: this fallback recorder can\u2019t preserve transparency — background will be solid.');
+  }
   const candidates = ['video/mp4;codecs=avc1.640028','video/mp4;codecs=avc1.4D4028','video/mp4;codecs=avc1','video/mp4','video/webm;codecs=vp8','video/webm'];
   const mime = candidates.find(m => MediaRecorder.isTypeSupported(m)) || 'video/webm';
   const ext  = mime.startsWith('video/mp4') ? '.mp4' : '.webm';
@@ -2646,6 +2821,8 @@ function registerTransition(key) {
   wire('crumbleChaos',     'crumbleChaosVal',     '%');
   wire('crumbleGravity',   'crumbleGravityVal',   '%');
   wire('crumbleSpeed',     'crumbleSpeedVal',     '%');
+  wire('coneLensDistortion', 'coneLensDistortionVal', '%');
+  wire('coneOverscan', 'coneOverscanVal', '%');
 })();
 
 // ── Hover + Backspace resets a control to its default ──────────────────────
@@ -2757,14 +2934,14 @@ recCtx8.drawImage(crumble_srcC, 0, 0); ctx8.drawImage(recC8, 0, 0, W, H);
 // then all idle display canvases are refreshed.
 
 function refreshAllIdle() {
-  if (!TRANSITIONS.splash.running)   { ctx1.drawImage(milkC,    0,0); recCtx1.drawImage(milkC,    0,0,RW,RH); }
-  if (!TRANSITIONS.solidify.running) { ctx2.drawImage(trimC,    0,0); recCtx2.drawImage(trimC,    0,0,RW,RH); }
-  if (!TRANSITIONS.bubbles.running)  { recCtx3.drawImage(bub_srcC,0,0); ctx3.drawImage(recC3,0,0,W,H); }
-  if (!TRANSITIONS.particles.running){ recCtx4.drawImage(par_srcC,0,0); ctx4.drawImage(recC4,0,0,W,H); }
-  if (!TRANSITIONS.tileDrop.running) { recCtx5.drawImage(td_srcC, 0,0); ctx5.drawImage(recC5,0,0,W,H); }
-  if (!TRANSITIONS.coneRefraction.running) { recCtx6.drawImage(cone_srcC, 0,0); ctx6.drawImage(recC6,0,0,W,H); }
-  if (!TRANSITIONS.pagePeel.running) { recCtx7.drawImage(peel_srcC, 0,0); ctx7.drawImage(recC7,0,0,W,H); }
-  if (!TRANSITIONS.crumble.running)  { recCtx8.drawImage(crumble_srcC, 0,0); ctx8.drawImage(recC8,0,0,W,H); }
+  if (!TRANSITIONS.splash.running)   { ctx1.clearRect(0,0,W,H); ctx1.drawImage(milkC, 0,0); recCtx1.clearRect(0,0,RW,RH); recCtx1.drawImage(milkC, 0,0,RW,RH); }
+  if (!TRANSITIONS.solidify.running) { ctx2.clearRect(0,0,W,H); ctx2.drawImage(trimC, 0,0); recCtx2.clearRect(0,0,RW,RH); recCtx2.drawImage(trimC, 0,0,RW,RH); }
+  if (!TRANSITIONS.bubbles.running)  { recCtx3.clearRect(0,0,RW,RH); recCtx3.drawImage(bub_srcC,0,0); ctx3.clearRect(0,0,W,H); ctx3.drawImage(recC3,0,0,W,H); }
+  if (!TRANSITIONS.particles.running){ recCtx4.clearRect(0,0,RW,RH); recCtx4.drawImage(par_srcC,0,0); ctx4.clearRect(0,0,W,H); ctx4.drawImage(recC4,0,0,W,H); }
+  if (!TRANSITIONS.tileDrop.running) { recCtx5.clearRect(0,0,RW,RH); recCtx5.drawImage(td_srcC, 0,0); ctx5.clearRect(0,0,W,H); ctx5.drawImage(recC5,0,0,W,H); }
+  if (!TRANSITIONS.coneRefraction.running) { recCtx6.clearRect(0,0,RW,RH); recCtx6.drawImage(cone_srcC, 0,0); ctx6.clearRect(0,0,W,H); ctx6.drawImage(recC6,0,0,W,H); }
+  if (!TRANSITIONS.pagePeel.running) { recCtx7.clearRect(0,0,RW,RH); recCtx7.drawImage(peel_srcC, 0,0); ctx7.clearRect(0,0,W,H); ctx7.drawImage(recC7,0,0,W,H); }
+  if (!TRANSITIONS.crumble.running)  { recCtx8.clearRect(0,0,RW,RH); recCtx8.drawImage(crumble_srcC, 0,0); ctx8.clearRect(0,0,W,H); ctx8.drawImage(recC8,0,0,W,H); }
 }
 
 document.getElementById('fA').addEventListener('change', function() {
@@ -2775,6 +2952,7 @@ document.getElementById('fA').addEventListener('change', function() {
     [bub_srcC, par_srcC, td_srcC, cone_srcC, peel_srcC, crumble_srcC].forEach(c => drawCover(c.getContext('2d'), img, RW, RH));
     refreshAllIdle();
     setLbl('lblA', this.files[0].name);
+    aIsTransparent = false;
   });
 });
 
@@ -2785,8 +2963,61 @@ document.getElementById('fB').addEventListener('change', function() {
     [butC, talC].forEach(c => drawCover(c.getContext('2d'), img, W,  H));
     [bub_dstC, par_dstC, td_dstC, cone_dstC, peel_dstC, crumble_dstC].forEach(c => drawCover(c.getContext('2d'), img, RW, RH));
     setLbl('lblB', this.files[0].name);
+    bIsTransparent = false;
   });
 });
+
+// ── "Transparent" option for A/B ────────────────────────────────────────────
+//
+// Fills every source (A) or destination (B) canvas with nothing — fully
+// transparent pixels — instead of a photo, so a transition can crumble/peel/
+// dissolve away to (or in from) nothing rather than another image. Every
+// canvas in this app already has an alpha channel by default (plain
+// `getContext('2d')`, never created with {alpha:false}), so clearRect() is
+// all that's needed to make a slot genuinely transparent.
+//
+// aIsTransparent/bIsTransparent are read by recordCanvasProper (Section 7)
+// to decide whether to ask the encoder to keep an alpha channel at all —
+// there's no reason to pay the (real) cost of alpha-aware VP9 encoding for
+// an ordinary opaque-photo recording.
+//
+// Two things worth knowing if you use this:
+//  1. A few transitions do direct per-pixel math on the source/destination
+//     (Bubbles' material blend, Cone Refraction's light bending) rather
+//     than plain compositing. A cleared canvas's RGB channels read as
+//     (0,0,0) with alpha 0 — plain compositing (drawImage) handles that
+//     correctly and shows nothing, but pixel-math effects that don't
+//     account for alpha could tint their result slightly dark in the
+//     transparent areas. The straightforward ones (Splash, Solidify,
+//     Particles, Tile Drop, Page Peel, Crumble) are plain compositing and
+//     should be clean.
+//  2. VP9-with-alpha in a WebM is real but a bit fragile downstream: some
+//     ffmpeg builds default to a native VP9 decoder that silently discards
+//     alpha (needs libvpx-vp9 specifically), and quite a few standalone
+//     video players don't render WebM alpha at all and will just show
+//     black. Worth a quick test import before relying on it.
+let aIsTransparent = false, bIsTransparent = false;
+
+function setSlotTransparent(which) {
+  if (which === 'A') {
+    [milkC, trimC].forEach(c => c.getContext('2d').clearRect(0, 0, c.width, c.height));
+    [bub_srcC, par_srcC, td_srcC, cone_srcC, peel_srcC, crumble_srcC].forEach(c => c.getContext('2d').clearRect(0, 0, RW, RH));
+    refreshAllIdle();
+    document.getElementById('fA').value = '';
+    const el = document.getElementById('lblA');
+    el.textContent = '◱ Transparent'; el.style.color = '#4a9e5c';
+    aIsTransparent = true;
+  } else {
+    [butC, talC].forEach(c => c.getContext('2d').clearRect(0, 0, c.width, c.height));
+    [bub_dstC, par_dstC, td_dstC, cone_dstC, peel_dstC, crumble_dstC].forEach(c => c.getContext('2d').clearRect(0, 0, RW, RH));
+    document.getElementById('fB').value = '';
+    const el = document.getElementById('lblB');
+    el.textContent = '◱ Transparent'; el.style.color = '#4a9e5c';
+    bIsTransparent = true;
+  }
+}
+document.getElementById('btnATransparent').addEventListener('click', () => setSlotTransparent('A'));
+document.getElementById('btnBTransparent').addEventListener('click', () => setSlotTransparent('B'));
 </script>
 </div><!-- /page-wrap -->
 </body>
