@@ -270,6 +270,20 @@
     </div>
   </div>
 </div>
+<div style="margin-bottom:14px;">
+  <p style="font-size:11px;font-weight:500;letter-spacing:.1em;color:var(--color-text-secondary);text-align:center;margin:0 0 6px;">RIPPLE REFRACTION</p>
+  <canvas id="c10" width="3840" height="2160" style="display:block;width:100%;height:auto;border-radius:8px;border:.5px solid var(--color-border-tertiary);"></canvas>
+  <div style="display:flex;gap:8px;justify-content:center;margin-top:8px;">
+    <button id="btn10p" style="font-size:12px;padding:7px 20px;">▶ Play</button>
+    <button id="btn10r" style="font-size:12px;padding:7px 20px;border-color:#e05555;color:#e05555;">⏺ Record 1080p</button>
+  </div>
+  <!-- Refraction-mode picker — sets which image the ripple's band refracts -->
+  <div style="display:flex;gap:6px;justify-content:center;align-items:center;flex-wrap:wrap;margin-top:10px;">
+    <span style="font-size:10px;color:var(--color-text-tertiary);">Shows:</span>
+    <button class="ripgb" data-mode="A" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">A — Source</button>
+    <button class="ripgb" data-mode="B" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">B — Destination</button>
+  </div>
+</div>
 <p id="status" style="text-align:center;font-size:11px;color:var(--color-text-tertiary);margin:.4rem 0 .5rem;min-height:1.4em;">Display 4K · Shimmer 1280×720 · Records 1080p · frame-accurate WebCodecs export (real-time fallback)</p>
 </div>
 
@@ -360,6 +374,19 @@ const recC9 = mkc(RW, RH), recCtx9 = recC9.getContext('2d');
 const cube_srcC = mkc(RW, RH);   // cube assembly "A" scene — idle backdrop, covered piece by piece
 const cube_dstC = mkc(RW, RH);   // cube assembly "B" scene — what the blocks assemble into
 
+// Working + recording canvas for ripple refraction
+const recC10 = mkc(RW, RH), recCtx10 = recC10.getContext('2d');
+const rip_srcC = mkc(RW, RH);   // ripple "A" scene
+const rip_dstC = mkc(RW, RH);   // ripple "B" scene
+
+// Reduced-res render buffer for ripple refraction — same reasoning as Cone
+// Refraction above: per-pixel trig is too costly at full 1080p/frame, so it
+// renders small then lets the browser upscale.
+const RIP_RSCALE = 2;
+const RIP_RW2 = Math.round(RW / RIP_RSCALE), RIP_RH2 = Math.round(RH / RIP_RSCALE);
+const rip_smallC = mkc(RIP_RW2, RIP_RH2), rip_smallCx = rip_smallC.getContext('2d');
+const rip_outBuf = new Uint8ClampedArray(RIP_RW2 * RIP_RH2 * 4);
+
 // Display canvas contexts
 const c1 = document.getElementById('c1'), ctx1 = c1.getContext('2d');
 const c2 = document.getElementById('c2'), ctx2 = c2.getContext('2d');
@@ -370,6 +397,7 @@ const c6 = document.getElementById('c6'), ctx6 = c6.getContext('2d');
 const c7 = document.getElementById('c7'), ctx7 = c7.getContext('2d');
 const c8 = document.getElementById('c8'), ctx8 = c8.getContext('2d');
 const c9 = document.getElementById('c9'), ctx9 = c9.getContext('2d');
+const c10 = document.getElementById('c10'), ctx10 = c10.getContext('2d');
 
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -1357,84 +1385,210 @@ function runBubbles(onDone) {
 
 
 // ── Transition 4 — PARTICLE MATERIALISATION ──────────────────────────────
+//
+// A swarm of square particles swirls in from all directions and assembles
+// into the dst image on a black void (src fades to black over the first
+// ~1.2s).
+//
+// SEAMLESS FINISH: the swarm is flat-colour squares (cheap), but there is
+// no global "blocky → hi-res" dissolve at the end. Instead the REAL dst
+// image resolves underneath each grid cell while that cell's own particle
+// settles home (its flat square fades out as the true pixels fade in), so
+// detail appears progressively, cell by cell, all through the landing
+// phase. By the time the last particle finishes, every cell is already
+// showing the true image at full opacity and the frame IS the final image
+// — nothing left to swap.
+//
+// HOW THE REVEAL IS DRAWN CHEAPLY: one PSW×PSH alpha "mask" (one texel per
+// cell), written straight into an ImageData each frame, is scaled up and
+// used with 'destination-in' to cut the true dst image down to just the
+// cells that have arrived. That's 2 full-frame composites per frame no
+// matter how many particles there are — versus thousands of tiny image
+// draws.
+//
+// PERFORMANCE: the old version ran 129,600 particles, each doing a colour-
+// string parse + fillRect every frame, then drew the whole lot AGAIN for a
+// 0.4s dissolve. This runs 32,400, batches them by colour so fillStyle is
+// set a few hundred times rather than 32k, and stops drawing a particle
+// the instant it has landed.
+//
+// PSW/PSH must divide RW/RH evenly. 240×135 → 8px cells. Raise for a
+// denser swarm (e.g. 320×180 → 6px cells, 57,600) at the cost of frame time.
 function runParticles(onDone) {
-  // Sample dst at 480×270 → ~6000 particles, plenty dense at 1080p
-  const PSW = 480, PSH = 270;
-  const sampC = mkc(PSW, PSH), sampX = sampC.getContext('2d');
-  sampX.drawImage(par_dstC, 0, 0, PSW, PSH);
-  const imgData = sampX.getImageData(0, 0, PSW, PSH).data;
+  const PSW = 240, PSH = 135;
+  const CW = RW / PSW, CH = RH / PSH;   // cell size in px (8×8)
 
+  // Start of the per-particle crossfade, as a fraction of its own flight.
+  // easeOut3 has the particle ~99% of the way home by t≈0.8, so it is
+  // effectively in place for the whole crossfade.
+  const XF0 = 0.6;
+  const smooth = u => u*u*(3-2*u);
+
+  const dstFull = par_dstC.getContext('2d').getImageData(0, 0, RW, RH).data;
+
+  // One pass over dst: mean colour per cell (of non-transparent pixels),
+  // whether the cell has any content, and whether dst has ANY translucent
+  // pixel. If it does, the black void under the swarm must fade away at
+  // the end (otherwise transparent areas would pop from black to clear).
+  // For a fully opaque dst the transition simply ends when the last
+  // particle lands.
+  let needsBgFade = false;
+  const buckets = new Map();
   const parts = [];
   const pcx = RW*.5, pcy = RH*.5;
-  const R_LAND = RW/PSW*0.8;   // one sample → gapless at 1080p
-  const R_FAR  = R_LAND*8;
+  const R_LAND = CW / 2;        // landed half-size → exactly one cell
+  const R_FAR  = R_LAND * 6;
 
-  for (let idx = 0; idx < PSW*PSH; idx++) {
-    const d4 = idx*4; if (imgData[d4+3] < 12) continue;
-    const px = idx%PSW, py = Math.floor(idx/PSW);
-    const tx = (px+0.5)/PSW*RW, ty = (py+0.5)/PSH*RH;
-    const dx = tx-pcx, dy = ty-pcy, dist = Math.hypot(dx, dy)||1;
-    const ang = Math.atan2(dy, dx) + (Math.random()-.5)*3.5;
-    const spread = 0.8+Math.random()*2.8;
-    const sx = pcx + Math.cos(ang)*dist*spread + (Math.random()-.5)*RW*.35;
-    const sy = pcy + Math.sin(ang)*dist*spread + (Math.random()-.5)*RH*.35;
-    const normD = dist/Math.hypot(pcx, pcy);
-    parts.push({tx, ty, sx, sy, col:`rgb(${imgData[d4]},${imgData[d4+1]},${imgData[d4+2]})`, delay:normD*0.5+Math.random()*.5, arrive:1.8+Math.random()*1.4});
+  for (let cy = 0; cy < PSH; cy++) {
+    for (let cx = 0; cx < PSW; cx++) {
+      let r = 0, g = 0, b = 0, n = 0;
+      for (let y = cy*CH; y < cy*CH + CH; y++) {
+        let i = (y*RW + cx*CW) * 4;
+        for (let x = 0; x < CW; x++, i += 4) {
+          const a = dstFull[i+3];
+          if (a < 255) needsBgFade = true;
+          if (a > 0) { r += dstFull[i]; g += dstFull[i+1]; b += dstFull[i+2]; n++; }
+        }
+      }
+      if (!n) continue;                       // fully transparent cell: no particle
+      r = Math.round(r/n); g = Math.round(g/n); b = Math.round(b/n);
+
+      const tx = (cx + 0.5) * CW, ty = (cy + 0.5) * CH;
+      const dx = tx-pcx, dy = ty-pcy, dist = Math.hypot(dx, dy)||1;
+      const ang = Math.atan2(dy, dx) + (Math.random()-.5)*3.5;
+      const spread = 0.8+Math.random()*2.8;
+      const normD = dist/Math.hypot(pcx, pcy);
+      const p = {
+        tx, ty,
+        sx: pcx + Math.cos(ang)*dist*spread + (Math.random()-.5)*RW*.35,
+        sy: pcy + Math.sin(ang)*dist*spread + (Math.random()-.5)*RH*.35,
+        ci: cy*PSW + cx,                       // cell index into the reveal mask
+        delay: normD*0.5+Math.random()*.5,
+        arrive: 1.8+Math.random()*1.4,
+        t: -1, m: 0,
+      };
+      // Batch by quantised colour (4 bits/channel) so fillStyle is set per
+      // bucket, not per particle.
+      const key = ((r>>4)<<8) | ((g>>4)<<4) | (b>>4);
+      let bk = buckets.get(key);
+      if (!bk) { bk = { col: `rgb(${r},${g},${b})`, list: [] }; buckets.set(key, bk); }
+      bk.list.push(p);
+    }
+  }
+  const bucketList = Array.from(buckets.values());
+
+  // Reveal mask (1 texel per cell) + scratch canvas for the masked dst.
+  const maskC = mkc(PSW, PSH), maskX = maskC.getContext('2d');
+  const maskImg = maskX.createImageData(PSW, PSH), maskData = maskImg.data;
+  const tmpC = mkc(RW, RH), tmpX = tmpC.getContext('2d');
+  let maskAny = false;
+
+  function drawTrueLayer() {
+    maskX.putImageData(maskImg, 0, 0);
+    tmpX.globalCompositeOperation = 'source-over';
+    tmpX.clearRect(0, 0, RW, RH);
+    tmpX.drawImage(par_dstC, 0, 0);
+    tmpX.globalCompositeOperation = 'destination-in';
+    // Smooth upscale = soft reveal for opaque images. With transparency in
+    // dst it would bleed the mask's empty cells into the edge pixels of
+    // their neighbours and dim a halo around every cut-out, so use crisp
+    // (nearest) scaling there instead.
+    tmpX.imageSmoothingEnabled = !needsBgFade;
+    tmpX.drawImage(maskC, 0, 0, RW, RH);
+    tmpX.globalCompositeOperation = 'source-over';
+    recCtx4.drawImage(tmpC, 0, 0);
   }
 
   let el = 0, last4 = null, allLanded = false, settleEl = 0;
   function easeOut3(t) { return 1 - Math.pow(1-t, 3); }
+
+  function finish() {
+    recCtx4.clearRect(0, 0, RW, RH); recCtx4.drawImage(par_dstC, 0, 0);
+    ctx4.clearRect(0, 0, W, H); ctx4.drawImage(recC4, 0, 0, W, H);
+    const reset = () => {
+      recCtx4.clearRect(0, 0, RW, RH); recCtx4.drawImage(par_srcC, 0, 0);
+      ctx4.clearRect(0, 0, W, H); ctx4.drawImage(recC4, 0, 0, W, H);
+    };
+    onDone ? onDone(reset) : setTimeout(reset, 1600);
+  }
 
   function frm(ts) {
     if (!last4) last4 = ts;
     const dt = Math.min((ts-last4)/1000, .05); last4 = ts; el += dt;
 
     if (!allLanded) {
+      // Pass 1 — advance every particle; feed its cell's reveal-mask texel;
+      // drop it from its bucket once landed (in-place compaction).
+      let remaining = 0;
+      for (let bi = 0; bi < bucketList.length; bi++) {
+        const L = bucketList[bi].list; let j = 0;
+        for (let i = 0; i < L.length; i++) {
+          const p = L[i];
+          if (el < p.delay) { p.t = -1; p.m = 0; }
+          else {
+            p.t = Math.min((el - p.delay)/p.arrive, 1);
+            if (p.t >= XF0) {
+              const m = p.t >= 1 ? 1 : smooth((p.t-XF0)/(1-XF0));
+              p.m = m;
+              maskData[p.ci*4 + 3] = Math.round(m*255);
+              maskAny = true;
+              if (p.t >= 1) continue;          // landed → mask is 255, stop drawing it
+            } else p.m = 0;
+          }
+          L[j++] = p;
+        }
+        L.length = j; remaining += j;
+      }
+
+      // Background: src fading to black, then pure black.
       const srcA = Math.max(0, 1-el/1.2);
       recCtx4.clearRect(0, 0, RW, RH);
-      if (srcA > 0) { recCtx4.drawImage(par_srcC, 0, 0); }
-      else { recCtx4.fillStyle = '#000'; recCtx4.fillRect(0, 0, RW, RH); }
-      if (srcA > 0 && srcA < 1) { recCtx4.globalAlpha = 1-srcA; recCtx4.fillStyle = '#000'; recCtx4.fillRect(0, 0, RW, RH); recCtx4.globalAlpha = 1; }
-      let landed = true;
-      parts.forEach(p => {
-        if (el < p.delay) { landed = false; return; }
-        const age = el-p.delay, t = Math.min(age/p.arrive, 1);
-        if (t < 1) landed = false;
-        const et = easeOut3(t), swirl = (1-t)*(1-t);
-        const px = p.sx + (p.tx-p.sx)*et + swirl*80*Math.sin(el*3.8+p.delay*9);
-        const py = p.sy + (p.ty-p.sy)*et + swirl*80*Math.cos(el*3.2+p.delay*7);
-        const r = R_FAR + (R_LAND-R_FAR)*et;
-        recCtx4.fillStyle = p.col;
-        recCtx4.globalAlpha = Math.min(1, age/.3)*(0.55+et*.45);
-        recCtx4.fillRect(px-r, py-r, r*2, r*2);
-      });
+      if (srcA > 0) {
+        recCtx4.drawImage(par_srcC, 0, 0);
+        if (srcA < 1) { recCtx4.globalAlpha = 1-srcA; recCtx4.fillStyle = '#000'; recCtx4.fillRect(0, 0, RW, RH); recCtx4.globalAlpha = 1; }
+      } else { recCtx4.fillStyle = '#000'; recCtx4.fillRect(0, 0, RW, RH); }
+
+      // The real image, resolved only in the cells that have arrived.
+      if (maskAny) drawTrueLayer();
+
+      // Pass 2 — the swarm, flat squares, batched by colour.
+      for (let bi = 0; bi < bucketList.length; bi++) {
+        const bk = bucketList[bi], L = bk.list;
+        if (!L.length) continue;
+        recCtx4.fillStyle = bk.col;
+        for (let i = 0; i < L.length; i++) {
+          const p = L[i];
+          if (p.t < 0) continue;
+          const t = p.t, age = el - p.delay;
+          const a = Math.min(1, age/.3) * (0.55 + easeOut3(t)*.45) * (1 - p.m);
+          if (a < 0.004) continue;
+          const et = easeOut3(t), swirl = (1-t)*(1-t);
+          const px = p.sx + (p.tx-p.sx)*et + swirl*80*Math.sin(el*3.8+p.delay*9);
+          const py = p.sy + (p.ty-p.sy)*et + swirl*80*Math.cos(el*3.2+p.delay*7);
+          const r = R_FAR + (R_LAND-R_FAR)*et;
+          recCtx4.globalAlpha = a;
+          recCtx4.fillRect(px-r, py-r, r*2, r*2);
+        }
+      }
       recCtx4.globalAlpha = 1;
       ctx4.clearRect(0, 0, W, H);
       ctx4.drawImage(recC4, 0, 0, W, H);
-      if (landed) allLanded = true;
-    } else {
-      settleEl += dt;
-      const fa = Math.min(settleEl/.4, 1);
-      recCtx4.clearRect(0, 0, RW, RH);
-      recCtx4.globalAlpha = fa; recCtx4.drawImage(par_dstC, 0, 0); recCtx4.globalAlpha = 1;
-      if (fa < 0.99) {
-        parts.forEach(p => {
-          recCtx4.fillStyle = p.col; recCtx4.globalAlpha = (1-fa)*0.9;
-          recCtx4.fillRect(p.tx-R_LAND, p.ty-R_LAND, R_LAND*2, R_LAND*2);
-        });
-        recCtx4.globalAlpha = 1;
+
+      if (remaining === 0) {
+        allLanded = true;
+        if (!needsBgFade) { finish(); return; }
       }
+    } else {
+      // Only reached when dst has translucent areas: fade the black void
+      // out from under the (already fully revealed) image.
+      settleEl += dt;
+      const fa = Math.min(settleEl/.35, 1);
+      recCtx4.clearRect(0, 0, RW, RH);
+      recCtx4.globalAlpha = 1-fa; recCtx4.fillStyle = '#000'; recCtx4.fillRect(0, 0, RW, RH); recCtx4.globalAlpha = 1;
+      drawTrueLayer();
       ctx4.clearRect(0, 0, W, H);
       ctx4.drawImage(recC4, 0, 0, W, H);
-      if (fa >= 1) {
-        recCtx4.clearRect(0, 0, RW, RH); recCtx4.drawImage(par_dstC, 0, 0);
-        ctx4.clearRect(0, 0, W, H); ctx4.drawImage(recC4, 0, 0, W, H);
-        const reset = () => {
-          recCtx4.clearRect(0, 0, RW, RH); recCtx4.drawImage(par_srcC, 0, 0);
-          ctx4.clearRect(0, 0, W, H); ctx4.drawImage(recC4, 0, 0, W, H);
-        };
-        onDone ? onDone(reset) : setTimeout(reset, 1600); return;
-      }
+      if (fa >= 1) { finish(); return; }
     }
     requestAnimationFrame(frm);
   }
@@ -2514,6 +2668,152 @@ function runCubeAssembly(onDone) {
   requestAnimationFrame(frm);
 }
 
+// ── Transition 10 — RIPPLE REFRACTION ────────────────────────────────────
+//
+// A single ring expands outward from the centre of frame at a constant
+// speed. Ahead of its leading edge sits flat A; behind it sits flat B; the
+// ring itself is a thin refractive band carrying several concentric
+// wavelets that displace whatever falls inside it — and, unlike a plain
+// blend, that band shows a genuine refracted view of ONE chosen image (the
+// "Shows" buttons below the canvas), the way a sheet of glass or a ripple
+// of water bends the light from what's underneath rather than dissolving
+// into it. "Shows B" (default) makes the water look like it's revealing
+// the destination image through its own ripples; "Shows A" makes it look
+// like the source image is still there, just seen through disturbed
+// water, right up until the ring passes and B appears flat underneath.
+//
+// IMPORTANT — the wavelet phase is a function of POSITION RELATIVE TO THE
+// RING ONLY (bnorm below), never of raw elapsed time on its own. Any term
+// added straight from `el` ticks at the same rate for every pixel
+// regardless of where the ring currently is, which desyncs the wavelets
+// from the wavefront they're supposed to belong to — they end up sliding
+// past it instead of travelling outward together with it. Keeping phase
+// purely a function of bnorm guarantees every concentric wavelet expands
+// in exact lockstep with the main ring, the way real ripples do.
+//
+// PARAMS — edit freely, only this function is affected:
+//   RING_SPEED     — how fast the ring expands, px/s at full 1080p res
+//   BAND_HALF      — half-width of the refractive band, px — also sets
+//                    how long any one pixel spends inside it (2×BAND_HALF/RING_SPEED)
+//   REF_STR        — peak refraction displacement, px (Cone Refraction uses ~300)
+//   CHROM          — chromatic aberration strength
+//   RIPPLE_CYCLES  — how many concentric wavelets fit across the band
+//
+// PERFORMANCE: same reasoning as Cone Refraction — per-pixel trig is too
+// costly at full 1080p/frame in plain JS, so this renders at RIP_RW2×RIP_RH2
+// (see Section 1) into rip_smallC, then lets the browser's hardware-
+// accelerated scaling upscale that onto both output canvases.
+//
+function runRippleRefraction(onDone) {
+  const RING_SPEED    = 275;  // px/s at 1080p res — a full sweep now takes ~5s, not ~1.5s
+  const BAND_HALF     = 170;  // wide band → ~1.24s dwell time per pixel, long enough to actually watch it ripple
+  const REF_STR       = 150;  // peak pixel displacement — Cone Refraction uses ~300, this is a gentler cousin
+  const CHROM         = 12;
+  const RIPPLE_CYCLES = 4;    // concentric wavelets across the band width
+
+  // Which image the band refracts — read from the active .ripgb button.
+  const activeBtn = document.querySelector('.ripgb.ripgb-active');
+  const mode = activeBtn ? activeBtn.dataset.mode : 'B';
+
+  const srcPix = rip_srcC.getContext('2d').getImageData(0, 0, RW, RH).data;
+  const dstPix = rip_dstC.getContext('2d').getImageData(0, 0, RW, RH).data;
+  const REF_PIX = mode === 'A' ? srcPix : dstPix;
+
+  const cx0 = RW / 2, cy0 = RH / 2;
+  const halfDiag = Math.hypot(RW, RH) / 2;
+  const DURATION = (halfDiag / RING_SPEED) * 1.25;
+
+  function drawFrame(el) {
+    const ringR = el * RING_SPEED;
+
+    for (let py2 = 0; py2 < RIP_RH2; py2++) {
+      const py = py2 * RIP_RSCALE;
+      for (let px2 = 0; px2 < RIP_RW2; px2++) {
+        const px  = px2 * RIP_RSCALE;
+        const oi4 = (py2 * RIP_RW2 + px2) * 4;
+        const si4 = (py  * RW      + px ) * 4;
+
+        const dx = px - cx0, dy = py - cy0;
+        const dist   = Math.hypot(dx, dy);
+        const reveal = ringR - dist; // >0 once the ring has swept past this pixel
+
+        if (reveal <= -BAND_HALF) {
+          rip_outBuf[oi4]   = srcPix[si4];
+          rip_outBuf[oi4+1] = srcPix[si4+1];
+          rip_outBuf[oi4+2] = srcPix[si4+2];
+          rip_outBuf[oi4+3] = 255;
+          continue;
+        }
+        if (reveal >= BAND_HALF) {
+          rip_outBuf[oi4]   = dstPix[si4];
+          rip_outBuf[oi4+1] = dstPix[si4+1];
+          rip_outBuf[oi4+2] = dstPix[si4+2];
+          rip_outBuf[oi4+3] = 255;
+          continue;
+        }
+
+        // ── Inside the refractive band — a real warp of REF_PIX ──────────
+        // bnorm alone drives everything below — no `el` term — so a given
+        // wavelet crest always sits at a fixed distance behind the leading
+        // edge and travels outward at exactly RING_SPEED, same as the ring.
+        const bnorm = reveal / BAND_HALF;                    // -1 (leading edge) .. +1 (trailing edge)
+        const envelope = 1 - bnorm * bnorm;                   // smooth parabola: 0 at both edges, 1 at centre
+        const mag   = REF_STR * envelope;
+        const phase = bnorm * Math.PI * RIPPLE_CYCLES;        // concentric wavelets, purely spatial
+        const d     = dist || 1;
+        const ux = dx / d, uy = dy / d;
+        const disp = mag * Math.sin(phase);
+
+        const gx = Math.max(0, Math.min(RW - 1, Math.round(px + ux * disp)));
+        const gy = Math.max(0, Math.min(RH - 1, Math.round(py + uy * disp)));
+        const rx = Math.max(0, Math.min(RW - 1, Math.round(px + ux * (disp + CHROM))));
+        const ry = Math.max(0, Math.min(RH - 1, Math.round(py + uy * (disp + CHROM))));
+        const bx = Math.max(0, Math.min(RW - 1, Math.round(px + ux * (disp - CHROM))));
+        const by = Math.max(0, Math.min(RH - 1, Math.round(py + uy * (disp - CHROM))));
+
+        let outR = REF_PIX[(ry * RW + rx) * 4    ];
+        let outG = REF_PIX[(gy * RW + gx) * 4 + 1];
+        let outB = REF_PIX[(by * RW + bx) * 4 + 2];
+
+        // A bright glint at each wavelet's crest, not just the band centre.
+        const crest = envelope * Math.pow(Math.max(0, Math.sin(phase)), 5) * 55;
+        outR = Math.min(255, outR + crest);
+        outG = Math.min(255, outG + crest);
+        outB = Math.min(255, outB + crest);
+
+        rip_outBuf[oi4]   = outR | 0;
+        rip_outBuf[oi4+1] = outG | 0;
+        rip_outBuf[oi4+2] = outB | 0;
+        rip_outBuf[oi4+3] = 255;
+      }
+    }
+
+    rip_smallCx.putImageData(new ImageData(rip_outBuf, RIP_RW2, RIP_RH2), 0, 0);
+    recCtx10.drawImage(rip_smallC, 0, 0, RIP_RW2, RIP_RH2, 0, 0, RW, RH);
+    ctx10.drawImage(rip_smallC, 0, 0, RIP_RW2, RIP_RH2, 0, 0, W, H);
+  }
+
+  let el = 0, lastT = null;
+  function frm(ts) {
+    if (!lastT) lastT = ts;
+    const dt = Math.min((ts - lastT) / 1000, 0.05);
+    lastT = ts; el += dt;
+    drawFrame(el);
+    if (el >= DURATION) {
+      recCtx10.clearRect(0, 0, RW, RH); recCtx10.drawImage(rip_dstC, 0, 0);
+      ctx10.clearRect(0, 0, W, H); ctx10.drawImage(recC10, 0, 0, W, H);
+      const reset = () => {
+        recCtx10.clearRect(0, 0, RW, RH); recCtx10.drawImage(rip_srcC, 0, 0);
+        ctx10.clearRect(0, 0, W, H); ctx10.drawImage(recC10, 0, 0, W, H);
+      };
+      onDone ? onDone(reset) : setTimeout(reset, 1600);
+      return;
+    }
+    requestAnimationFrame(frm);
+  }
+  requestAnimationFrame(frm);
+}
+
 // ══════════════════════════════════════════════════════════════════════════
 // SECTION 6 · TRANSITIONS REGISTRY
 // ─────────────────────────────────────────────────────────────────────────
@@ -2536,6 +2836,7 @@ const TRANSITIONS = {
     recordFilename: 'milk-to-butter',
     playBtnId:      'btn1p',
     recBtnId:       'btn1r',
+    padSecs:        0,
     running:        false,
   },
   solidify: {
@@ -2544,6 +2845,7 @@ const TRANSITIONS = {
     recordFilename: 'trimmings-to-tallow',
     playBtnId:      'btn2p',
     recBtnId:       'btn2r',
+    padSecs:        0,
     running:        false,
   },
   bubbles: {
@@ -2552,6 +2854,7 @@ const TRANSITIONS = {
     recordFilename: 'bubbles',
     playBtnId:      'btn3p',
     recBtnId:       'btn3r',
+    padSecs:        0,
     running:        false,
   },
   particles: {
@@ -2560,6 +2863,7 @@ const TRANSITIONS = {
     recordFilename: 'particles',
     playBtnId:      'btn4p',
     recBtnId:       'btn4r',
+    padSecs:        0,
     running:        false,
   },
   tileDrop: {
@@ -2604,6 +2908,15 @@ const TRANSITIONS = {
     recordFilename: 'cube-assembly',
     playBtnId:      'btn9p',
     recBtnId:       'btn9r',
+    padSecs:        0,
+    running:        false,
+  },
+  rippleRefraction: {
+    runFn:          runRippleRefraction,
+    recCanvas:      recC10,
+    recordFilename: 'ripple-refraction',
+    playBtnId:      'btn10p',
+    recBtnId:       'btn10r',
     padSecs:        0,
     running:        false,
   },
@@ -2761,30 +3074,39 @@ async function recordCanvasProper(cfg) {
     for (let i = 0; i < padFrames; i++) await captureFrame();
 
     setStatus('⏺ Rendering transition…');
-    let transitionDone = false, savedReset = null, doneResolve;
-    const donePromise = new Promise(r => { doneResolve = r; });
+    let transitionDone = false, savedReset = null;
 
-    let synthTs = 0;
-    window.requestAnimationFrame = (cb) => {
-      setTimeout(async () => {
-        try {
-          synthTs += 1000 / FPS;
-          cb(synthTs);
-          await captureFrame();
-          if (transitionDone) doneResolve(null);
-        } catch (e) {
-          transitionDone = true;
-          doneResolve(e);
-        }
-      }, 0);
-      return 0;
-    };
+    // Strictly one frame at a time: draw → capture → only THEN draw the next.
+    //
+    // requestAnimationFrame is swapped for a shim that merely queues the
+    // callback; the loop below plays the browser's role. It fires every
+    // callback registered for the coming frame with one shared synthetic
+    // timestamp (exactly like a real rAF tick), waits for that frame to be
+    // fully captured (captureFrame() also waits while the encoder is
+    // backed up), and only then lets the transition draw again.
+    //
+    // The previous shim ran each callback in its own setTimeout and did
+    // `cb(); await captureFrame();` — but cb() re-registers rAF straight
+    // away, so the NEXT frame started drawing onto the shared canvas while
+    // captureFrame() was still parked on encoder backpressure. Any
+    // transition that renders faster than the VP9 encoder can encode (which
+    // is most of them, once they're cheap) filled the queue, and from then
+    // on frames were grabbed AFTER later frames had overdrawn the canvas:
+    // the animation looked normal, then fast-forwarded to the end and
+    // parked on the finished image.
+    let synthTs = 0, pending = [];
+    window.requestAnimationFrame = (cb) => { pending.push(cb); return 0; };
 
     cfg.runFn(reset => { transitionDone = true; savedReset = reset; });
 
-    const err = await donePromise;
+    while (!transitionDone) {
+      if (!pending.length) { await new Promise(r => setTimeout(r, 0)); continue; }
+      const cbs = pending; pending = [];
+      synthTs += 1000 / FPS;
+      for (const cb of cbs) cb(synthTs);
+      await captureFrame();
+    }
     window.requestAnimationFrame = realRAF;
-    if (err) throw err;
 
     if (padFrames > 0) setStatus(`⏺ Rendering outro (${padSecs}s)…`);
     for (let i = 0; i < padFrames; i++) await captureFrame();
@@ -2926,6 +3248,23 @@ function registerTransition(key) {
   document.head.appendChild(styleEl);
 })();
 
+// Wire ripple refraction "Shows" picker — defaults to B (Destination)
+(function() {
+  const btns = document.querySelectorAll('.ripgb');
+  const defaultBtn = Array.from(btns).find(b => b.dataset.mode === 'B') || btns[0];
+  if (defaultBtn) defaultBtn.classList.add('ripgb-active');
+  btns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (TRANSITIONS.rippleRefraction.running) return;
+      btns.forEach(b => { b.classList.remove('ripgb-active'); b.style.borderColor = ''; b.style.color = ''; });
+      btn.classList.add('ripgb-active');
+    });
+  });
+  const styleEl = document.createElement('style');
+  styleEl.textContent = '.ripgb.ripgb-active { border-color: var(--color-text-primary) !important; color: var(--color-text-primary) !important; }';
+  document.head.appendChild(styleEl);
+})();
+
 // Wire page peel angle slider — runPagePeel reads its value directly at
 // play-time. This also drives the little compass arrow next to it, and
 // replaces the native drag behaviour with a wrap-around one: a stock
@@ -3053,6 +3392,7 @@ function registerTransition(key) {
   }
   watchGroup('.tgb', (b, i, arr) => b === arr[0]);          // default: 16×9
   watchGroup('.cgb', b => b.dataset.mode === 'ABV');         // default: AB — Bands
+  watchGroup('.ripgb', b => b.dataset.mode === 'B');         // default: B — Destination
 })();
 
 Object.keys(TRANSITIONS).forEach(registerTransition);
@@ -3084,6 +3424,8 @@ drawDefaultA (crumble_srcC.getContext('2d'), RW, RH);
 drawDefaultB (crumble_dstC.getContext('2d'), RW, RH);
 drawDefaultA (cube_srcC.getContext('2d'), RW, RH);
 drawDefaultB (cube_dstC.getContext('2d'), RW, RH);
+drawDefaultA (rip_srcC.getContext('2d'), RW, RH);
+drawDefaultB (rip_dstC.getContext('2d'), RW, RH);
 
 // Page peel's fixed "back of paper" texture — plain and unrelated to A/B,
 // same reasoning as real paper: the back looks the same regardless of
@@ -3107,11 +3449,12 @@ recCtx6.drawImage(cone_srcC, 0, 0); ctx6.drawImage(recC6, 0, 0, W, H);
 recCtx7.drawImage(peel_srcC, 0, 0); ctx7.drawImage(recC7, 0, 0, W, H);
 recCtx8.drawImage(crumble_srcC, 0, 0); ctx8.drawImage(recC8, 0, 0, W, H);
 recCtx9.drawImage(cube_srcC, 0, 0); ctx9.drawImage(recC9, 0, 0, W, H);
+recCtx10.drawImage(rip_srcC, 0, 0); ctx10.drawImage(recC10, 0, 0, W, H);
 
 // ── File inputs — A = source (all transitions), B = destination (all transitions) ──
 //
-// Source canvases:  milkC, trimC (4K),  bub_srcC, par_srcC, td_srcC, cone_srcC, peel_srcC, crumble_srcC, cube_srcC (1080p)
-// Dest canvases:   butC,  talC  (4K),  bub_dstC, par_dstC, td_dstC, cone_dstC, peel_dstC, crumble_dstC, cube_dstC (1080p)
+// Source canvases:  milkC, trimC (4K),  bub_srcC, par_srcC, td_srcC, cone_srcC, peel_srcC, crumble_srcC, cube_srcC, rip_srcC (1080p)
+// Dest canvases:   butC,  talC  (4K),  bub_dstC, par_dstC, td_dstC, cone_dstC, peel_dstC, crumble_dstC, cube_dstC, rip_dstC (1080p)
 //
 // On load: image is drawn cover-cropped into every canvas of the correct size,
 // then all idle display canvases are refreshed.
@@ -3126,6 +3469,7 @@ function refreshAllIdle() {
   if (!TRANSITIONS.pagePeel.running) { recCtx7.clearRect(0,0,RW,RH); recCtx7.drawImage(peel_srcC, 0,0); ctx7.clearRect(0,0,W,H); ctx7.drawImage(recC7,0,0,W,H); }
   if (!TRANSITIONS.crumble.running)  { recCtx8.clearRect(0,0,RW,RH); recCtx8.drawImage(crumble_srcC, 0,0); ctx8.clearRect(0,0,W,H); ctx8.drawImage(recC8,0,0,W,H); }
   if (!TRANSITIONS.cubeAssembly.running) { recCtx9.clearRect(0,0,RW,RH); recCtx9.drawImage(cube_srcC, 0,0); ctx9.clearRect(0,0,W,H); ctx9.drawImage(recC9,0,0,W,H); }
+  if (!TRANSITIONS.rippleRefraction.running) { recCtx10.clearRect(0,0,RW,RH); recCtx10.drawImage(rip_srcC, 0,0); ctx10.clearRect(0,0,W,H); ctx10.drawImage(recC10,0,0,W,H); }
 }
 
 document.getElementById('fA').addEventListener('change', function() {
@@ -3133,7 +3477,7 @@ document.getElementById('fA').addEventListener('change', function() {
   loadFromFile(this.files[0], img => {
     // Paint into all source canvases at their respective resolutions
     [milkC, trimC].forEach(c => drawCover(c.getContext('2d'), img, W,  H));
-    [bub_srcC, par_srcC, td_srcC, cone_srcC, peel_srcC, crumble_srcC, cube_srcC].forEach(c => drawCover(c.getContext('2d'), img, RW, RH));
+    [bub_srcC, par_srcC, td_srcC, cone_srcC, peel_srcC, crumble_srcC, cube_srcC, rip_srcC].forEach(c => drawCover(c.getContext('2d'), img, RW, RH));
     refreshAllIdle();
     setLbl('lblA', this.files[0].name);
     aIsTransparent = false;
@@ -3145,7 +3489,7 @@ document.getElementById('fB').addEventListener('change', function() {
   loadFromFile(this.files[0], img => {
     // Paint into all destination canvases at their respective resolutions
     [butC, talC].forEach(c => drawCover(c.getContext('2d'), img, W,  H));
-    [bub_dstC, par_dstC, td_dstC, cone_dstC, peel_dstC, crumble_dstC, cube_dstC].forEach(c => drawCover(c.getContext('2d'), img, RW, RH));
+    [bub_dstC, par_dstC, td_dstC, cone_dstC, peel_dstC, crumble_dstC, cube_dstC, rip_dstC].forEach(c => drawCover(c.getContext('2d'), img, RW, RH));
     setLbl('lblB', this.files[0].name);
     bIsTransparent = false;
   });
@@ -3185,7 +3529,7 @@ let aIsTransparent = false, bIsTransparent = false;
 function setSlotTransparent(which) {
   if (which === 'A') {
     [milkC, trimC].forEach(c => c.getContext('2d').clearRect(0, 0, c.width, c.height));
-    [bub_srcC, par_srcC, td_srcC, cone_srcC, peel_srcC, crumble_srcC, cube_srcC].forEach(c => c.getContext('2d').clearRect(0, 0, RW, RH));
+    [bub_srcC, par_srcC, td_srcC, cone_srcC, peel_srcC, crumble_srcC, cube_srcC, rip_srcC].forEach(c => c.getContext('2d').clearRect(0, 0, RW, RH));
     refreshAllIdle();
     document.getElementById('fA').value = '';
     const el = document.getElementById('lblA');
@@ -3193,7 +3537,7 @@ function setSlotTransparent(which) {
     aIsTransparent = true;
   } else {
     [butC, talC].forEach(c => c.getContext('2d').clearRect(0, 0, c.width, c.height));
-    [bub_dstC, par_dstC, td_dstC, cone_dstC, peel_dstC, crumble_dstC, cube_dstC].forEach(c => c.getContext('2d').clearRect(0, 0, RW, RH));
+    [bub_dstC, par_dstC, td_dstC, cone_dstC, peel_dstC, crumble_dstC, cube_dstC, rip_dstC].forEach(c => c.getContext('2d').clearRect(0, 0, RW, RH));
     document.getElementById('fB').value = '';
     const el = document.getElementById('lblB');
     el.textContent = '◱ Transparent'; el.style.color = '#4a9e5c';
