@@ -2933,7 +2933,7 @@ const TRANSITIONS = {
 
 /**
  * recordCanvasProper — offline, frame-accurate capture via WebCodecs
- * (VideoEncoder) muxed straight into a WebM with webm-muxer.
+ * (VideoEncoder) muxed straight into a WebM with Mediabunny.
  *
  * captureStream()+MediaRecorder (see recordCanvasLegacy below) grabs
  * whatever the canvas happens to be showing in real time — it can drop or
@@ -2955,7 +2955,7 @@ const TRANSITIONS = {
  *      exact frame is grabbed with `new VideoFrame(cfg.recCanvas, …)` and
  *      handed straight to a VideoEncoder — no capture pipeline in between
  *      to drop anything.
- *   3. webm-muxer packages the encoded chunks into a WebM with the correct
+ *   3. Mediabunny packages the encoded chunks into a WebM with the correct
  *      duration baked in from the start, so there's nothing to patch
  *      afterwards.
  *
@@ -2973,16 +2973,28 @@ async function recordCanvasProper(cfg) {
   const width  = cfg.recCanvas.width, height = cfg.recCanvas.height;
   const codec  = 'vp09.00.41.08';   // VP9, profile 0, level 4.1 (safe for 1080p60), 8-bit
 
-  // Quality mode, not fixed bitrate. VP9's own per-frame quantizer is its
-  // native equivalent of "CRF" — 0 = best quality/least compression, 63 =
-  // most compression. Rather than locking to a flat bits-per-second target
-  // (which spends the same data budget on a static held frame as on the
-  // busiest chaotic one), this asks every frame to hit the same quality
-  // bar and lets the encoder spend however many bits that actually needs.
-  // 12 sits well into "visually transparent" territory — plenty of headroom
-  // for Shotcut to then re-encode this into your final export without
-  // compounding visible generation loss.
-  const VP9_QUANTIZER = 12;
+  // Quality mode, not fixed bitrate. bitrateMode: 'quantizer' below is what
+  // makes this a constant-QUALITY encode — the same family as x264/x265's
+  // "CRF" or the classic MPEG "qscale" — rather than a constant-BITRATE one.
+  // A flat bits-per-second target spends the same data budget on a static
+  // held frame as on the busiest chaotic one; asking every frame to hit the
+  // same quality bar and letting the encoder spend however many bits that
+  // needs is what actually gets you consistent quality throughout.
+  //
+  // VP9_QUANTIZER itself is that per-frame quality knob — but it is NOT a
+  // percentage the way some tools' "qscale %" sliders are. It's VP9's own
+  // absolute quantizer index, 0–63, lower = higher quality/less compression,
+  // with 0 being effectively lossless. There's no universal "CRF 18" or
+  // "qscale 75%" translation between codecs, only a rough correspondence —
+  // this is VP9's native scale, full stop.
+  // 4 sits right at the near-lossless end of that scale: for indistinguishable
+  // quality (the goal here, since this is a mezzanine file for Shotcut to
+  // re-encode from, not the final delivery), that's the number to use — it
+  // costs noticeably more disk space per second than a "just very good"
+  // value like 12 used to be, but that's the correct trade for this file's
+  // job. Go as low as 0 if a particular source shows any compression
+  // artifact you can still see at 4.
+  const VP9_QUANTIZER = 4;
 
   // Colour space, explicit and important. Canvas pixels are ordinary full-range
   // sRGB (0–255) computer-graphics values, same as the still images A/B. VP9
@@ -2993,23 +3005,60 @@ async function recordCanvasProper(cfg) {
   // which — applied to data that was actually encoded full-range — crushes
   // blacks and blows out highlights: exactly the "snap" at the cut to a plain
   // (correctly full-range) image clip next to it. Tagging bt709 + fullRange
-  // here makes the encoder do the conversion consistently AND tells webm-muxer
+  // here makes the encoder do the conversion consistently AND tells Mediabunny
   // to write matching Colour metadata into the container (and patch VP9's own
   // internal colour flag on keyframes), so a decoder doesn't have to guess.
   const colorSpace = { primaries: 'bt709', transfer: 'bt709', matrix: 'bt709', fullRange: true };
   const encoderConfig = { codec, width, height, framerate: FPS, bitrateMode: 'quantizer', colorSpace };
 
+  // isConfigSupported() is known to report a config as supported when
+  // actually using it then genuinely fails — a real, currently-tracked
+  // Firefox WebCodecs bug (a Mozilla bug thread on exactly this names
+  // Mediabunny's own official live-recording demo as affected by it in
+  // Firefox while working fine in Chromium). Quantizer-mode bitrate control
+  // and alpha encoding are both less-common options, exactly the kind that
+  // tend to hit this. The only way to actually trust a config is to use it:
+  // configure a real throwaway encoder, push one real frame through with
+  // the exact per-frame options the real recording will use, and see if the
+  // whole round trip genuinely completes rather than just asking first.
+  async function probeEncoderConfig(config, encodeOpts) {
+    const staticCheck = await VideoEncoder.isConfigSupported(config).catch(() => null);
+    if (!staticCheck || !staticCheck.supported) return false;
+    return new Promise(resolve => {
+      let settled = false, sawError = false;
+      const finish = ok => { if (!settled) { settled = true; resolve(ok); } };
+      const safety = setTimeout(() => finish(false), 4000);
+      try {
+        const enc = new VideoEncoder({
+          output: () => {},
+          error: () => { sawError = true; finish(false); },
+        });
+        enc.configure(config);
+        const testCanvas = new OffscreenCanvas(config.width, config.height);
+        testCanvas.getContext('2d').fillRect(0, 0, config.width, config.height);
+        const frame = new VideoFrame(testCanvas, { timestamp: 0 });
+        enc.encode(frame, { keyFrame: true, ...encodeOpts });
+        frame.close();
+        enc.flush()
+          .then(() => { clearTimeout(safety); enc.close(); finish(!sawError); })
+          .catch(() => { clearTimeout(safety); try { enc.close(); } catch (e2) {} finish(false); });
+      } catch (e) {
+        clearTimeout(safety); finish(false);
+      }
+    });
+  }
+
   // Alpha channel — only requested when A or B is actually set to
   // "Transparent" (see setSlotTransparent in Section 8), since alpha-aware
   // VP9 encoding is genuinely slower and there's no reason to pay that cost
-  // for an ordinary opaque-photo recording. If the browser can't do it,
-  // fall through to a normal opaque recording rather than failing the
-  // whole export — better a solid-background file than none at all.
+  // for an ordinary opaque-photo recording. If the browser can't actually
+  // do it, fall through to a normal opaque recording rather than failing
+  // the whole export — better a solid-background file than none at all.
   let needsAlpha = aIsTransparent || bIsTransparent;
   if (needsAlpha) {
     const alphaConfig = { ...encoderConfig, alpha: 'keep' };
-    const alphaSupport = await VideoEncoder.isConfigSupported(alphaConfig);
-    if (alphaSupport && alphaSupport.supported) {
+    const alphaWorks = await probeEncoderConfig(alphaConfig, { vp9: { quantizer: VP9_QUANTIZER } });
+    if (alphaWorks) {
       encoderConfig.alpha = 'keep';
     } else {
       needsAlpha = false;
@@ -3017,32 +3066,79 @@ async function recordCanvasProper(cfg) {
     }
   }
 
-  let support = await VideoEncoder.isConfigSupported(encoderConfig);
-  if (!support || !support.supported) {
-    // Quantizer mode landed in Chrome 117 (2023) — should be everywhere by
-    // now, but fall back to a generous fixed bitrate on anything older
-    // rather than failing outright.
+  let quantizerWorks = await probeEncoderConfig(encoderConfig, { vp9: { quantizer: VP9_QUANTIZER } });
+  if (!quantizerWorks) {
+    // Quantizer mode landed in Chrome 117 (2023) and is well-supported
+    // there, but fall back to a generous fixed bitrate on any browser that
+    // can't actually do it rather than failing outright.
     encoderConfig.bitrateMode = 'constant';
     encoderConfig.bitrate = 15_000_000;
-    support = await VideoEncoder.isConfigSupported(encoderConfig);
-    if (!support || !support.supported) throw new Error('VP9 encoder config unsupported in this browser');
+    const constantWorks = await probeEncoderConfig(encoderConfig, {});
+    if (!constantWorks) throw new Error('VP9 encoder config unsupported in this browser');
   }
 
-  let muxerModule;
+  // webm-muxer — the muxing library this project used until now — has NO
+  // code path that writes a video track's alpha side data at all. Its
+  // addVideoChunk() only ever reads meta.decoderConfig; the alpha bitstream
+  // Chrome hands back in each chunk's metadata (meta.alphaSideData) was
+  // simply discarded. The container still claimed "this track has alpha"
+  // (the AlphaMode flag was set from the `alpha: needsAlpha` track option),
+  // it just never contained any — so a "Transparent" export always came out
+  // opaque no matter how correctly VideoEncoder itself was configured. This
+  // was confirmed directly by reading webm-muxer 5.1.4's source: its video
+  // path never passes an `additions` argument through to the block writer,
+  // unlike its (unused, for us) subtitle path, which does.
+  //
+  // Mediabunny is webm-muxer's own recommended successor (webm-muxer's
+  // README says as much) and actually implements this: give it an
+  // EncodedPacket whose sideData.alpha carries that same alpha bitstream,
+  // and it lands in the file as real WebM BlockAdditions. Verified by
+  // muxing a packet with synthetic alpha bytes and reading the resulting
+  // file back with Mediabunny's own demuxer — the alpha bytes round-tripped
+  // exactly.
+  let mediabunny;
   try {
-    muxerModule = await import('https://cdn.jsdelivr.net/npm/webm-muxer@latest/build/webm-muxer.mjs');
+    // Loading the raw multi-file module tree (dist/modules/src/index.js and
+    // its ~20 sibling files, each a separate relative import) is the riskier
+    // way to pull this off a CDN — any one of those files hiccuping (a CORS
+    // quirk, a stale cache, a redirect jsdelivr's relative-import resolution
+    // doesn't like) fails the whole import. jsdelivr's `+esm` endpoint
+    // bundles the package into a single dependency-resolved file server-side
+    // instead, which is the same job a bundler would do locally — one
+    // request, nothing left for the browser to resolve on its own.
+    mediabunny = await import('https://cdn.jsdelivr.net/npm/mediabunny@1.60.0/+esm');
   } catch (e) {
-    throw new Error('could not load the video muxer — check your connection');
+    // Surface the REAL browser error (a 404, a CORS failure, a parse error —
+    // whatever it actually was) instead of a made-up generic one, since a
+    // guessed message here is exactly what makes a failure like this hard to
+    // diagnose after the fact.
+    throw new Error(`could not load the video muxer (${e.message || e}) — check your connection`);
   }
-  const { Muxer, ArrayBufferTarget } = muxerModule;
+  const { Output, WebMOutputFormat, BufferTarget, EncodedVideoPacketSource, EncodedPacket } = mediabunny;
 
-  const target = new ArrayBufferTarget();
-  const muxer  = new Muxer({ target, video: { codec: 'V_VP9', width, height, frameRate: FPS, alpha: needsAlpha } });
+  const target = new BufferTarget();
+  const output = new Output({ format: new WebMOutputFormat(), target });
+  const videoSource = new EncodedVideoPacketSource('vp9');
+  output.addVideoTrack(videoSource, {
+    canBeTransparent: needsAlpha,
+    frameRate: FPS,
+    decoderConfig: { codec, codedWidth: width, codedHeight: height, colorSpace },
+  });
+  await output.start();
 
   let encodeErr = null;
+  const pendingWrites = [];
   const videoEncoder = new VideoEncoder({
-    output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
-    error:  e => { encodeErr = e; },
+    output: (chunk, meta) => {
+      const sideData = meta && meta.alphaSideData ? { alpha: new Uint8Array(meta.alphaSideData) } : undefined;
+      const packet = EncodedPacket.fromEncodedChunk(chunk, sideData);
+      // Fire-and-forget from WebCodecs' perspective (its output callback
+      // isn't awaited), but every write is still tracked and awaited below
+      // before finalize() — so nothing can be missed, and finalize() can't
+      // race ahead of a write that's still in flight.
+      pendingWrites.push(videoSource.add(packet, meta).catch(e => { encodeErr = encodeErr || e; }));
+    },
+    error: e => { encodeErr = e; },
   });
   videoEncoder.configure(encoderConfig);
 
@@ -3112,8 +3208,9 @@ async function recordCanvasProper(cfg) {
     for (let i = 0; i < padFrames; i++) await captureFrame();
 
     await videoEncoder.flush();
+    await Promise.all(pendingWrites);   // every add() call VideoEncoder ever triggered has now landed
     if (encodeErr) throw encodeErr;
-    muxer.finalize();
+    await output.finalize();
 
     const blob = new Blob([target.buffer], { type: 'video/webm' });
     const url  = URL.createObjectURL(blob);
