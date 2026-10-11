@@ -318,7 +318,16 @@
     <button id="btn9p" style="font-size:12px;padding:7px 20px;">▶ Play</button>
     <button id="btn9r" style="font-size:12px;padding:7px 20px;border-color:#e05555;color:#e05555;">⏺ Record 1080p</button>
   </div>
-  <!-- Cube Assembly settings — read live from this slider by runCubeAssembly at play-time -->
+  <!-- Cube Assembly mode picker — read live by runCubeAssembly at play-time -->
+  <div style="display:flex;gap:6px;justify-content:center;align-items:center;flex-wrap:wrap;margin-top:10px;">
+    <span style="font-size:10px;color:var(--color-text-tertiary);">Mode:</span>
+    <button class="cubemode" data-mode="swarm" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">Swarm</button>
+    <button class="cubemode" data-mode="exploded" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">Exploded Snap</button>
+    <button class="cubemode" data-mode="flip" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">Flip</button>
+    <button class="cubemode" data-mode="warp" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">Warp Assemble</button>
+    <button class="cubemode" data-mode="skyline" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">Skyline</button>
+  </div>
+  <!-- Cube Assembly settings — read live from this slider by runCubeAssembly at play-time (Swarm + Skyline) -->
   <div style="display:flex;flex-direction:column;gap:8px;align-items:center;margin-top:10px;">
     <div style="display:flex;align-items:center;gap:10px;">
       <span style="font-size:10px;color:var(--color-text-tertiary);width:78px;text-align:right;">Snap curve</span>
@@ -2734,38 +2743,48 @@ function runCrumble(onDone) {
   requestAnimationFrame(frm);
 }
 
-// ── Transition 9 — CUBE ASSEMBLY ─────────────────────────────────────────
+// ── Transition 9 — CUBE ASSEMBLY (four modes) ────────────────────────────
 //
-// A 16×9 grid of solid, shaded blocks flies in from scattered directions and
-// tumbles into place, snapping together into the dst image. Unlike
-// Particles (flat colour swatches sampled from dst), each block here is a
-// genuine crop of dst rendered as a pseudo-3D cube: the front face is that
-// crop, plus a lighter "top" and darker "side" parallelogram whose offset
-// shrinks to zero exactly as the block lands — so the extrusion visually
-// flattens into a plain tile the instant it seats. No WebGL, just two extra
-// flat polygons per block, drawn with plain 2D canvas transforms.
+// The B image is cut into a 16×9 grid of solid, shaded blocks — each a
+// genuine crop of B with a lighter "top" and darker "side" face whose depth
+// shrinks to zero as the block seats, so it flattens into a plain tile.
+// A mode picker under the canvas chooses how they arrive:
 //
-// Release order sweeps diagonally (top-left → bottom-right) rather than
-// radiating from the centre like Tile Drop/Crumble, so it reads as a
-// distinct rhythm sitting next to those. Landing uses an overshoot-then-
-// settle ease (blocks fly slightly past their slot, then snap back) plus a
-// brief squash-stretch right on impact, and the whole thing finishes with a
-// single ring pulse from the centre once the last block seats.
+//   Swarm          blocks fly in from all around and tumble home, sweeping
+//                  diagonally (the original). The Snap curve slider shapes it.
+//   Exploded Snap  blocks fly into a spaced-out blueprint layout over a
+//                  dimmed A, hang there bobbing, pull back for a beat, then
+//                  slam together in one synchronised hit with a camera jolt.
+//   Flip           every block is a two-sided panel; they flip over to show B
+//                  in a wave, alternating axes in a checkerboard (Rubik's feel).
+//   Warp Assemble  true-3D cubes tumble in from behind the audience, behind the screen and the
+//                  sides, spiral into a floating tilted slab of B, then whoosh to fill the screen.
+//   Skyline        columns rise from the bottom edge and build up like a city
+//                  going up, kicking dust off each block as it lands.
+//
+// Transparent A / B are honoured in every mode (see eraseSlot and the
+// aIsTransparent / bIsTransparent guards).
 //
 function runCubeAssembly(onDone) {
   const COLS = 16, ROWS = 9;
   const tileW = RW / COLS, tileH = RH / ROWS;
   const MAXZ = Math.min(tileW, tileH) * 0.55;
+  const g = recCtx9;
 
-  // Snap curve — 0% is the original overshoot-and-settle bounce (each block
-  // flies past its slot slightly then eases back), 50% is constant-speed
-  // linear motion, 100% is the exponential rush (sits nearly still, then
-  // races to its slot right at the end). All per-block, not release order.
+  const activeBtn = document.querySelector('.cubemode.cubemode-active');
+  const mode = activeBtn ? activeBtn.dataset.mode : 'swarm';
+
+  // Snap curve (Swarm + Skyline) — 0% overshoot-and-settle bounce, 50% linear,
+  // 100% exponential rush. Per-block, not release order.
   const snapPct = parseInt(document.getElementById('cubeSnapCurve').value, 10);
   const S = (snapPct - 50) / 50; // -1 (bounce) .. 0 (linear) .. +1 (exponential)
 
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const smooth = t => t * t * (3 - 2 * t);
   const easeOutCubic = t => 1 - Math.pow(1 - t, 3);
+  const easeInQuint = t => t * t * t * t * t;
+  const easeInOutCubic = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
   const easeOutBack = t => {
     const bk1 = 1.70158, bk3 = bk1 + 1;
     return 1 + bk3 * Math.pow(t - 1, 3) + bk1 * Math.pow(t - 1, 2);
@@ -2775,115 +2794,445 @@ function runCubeAssembly(onDone) {
     const lt = (p - 0.8) / 0.2, s = Math.sin(lt * Math.PI);
     return { sx: 1 + 0.15 * s, sy: 1 - 0.15 * s };
   };
+  // Position/height curves shared by Swarm and Skyline.
+  function snapCurves(raw) {
+    if (S <= 0) {
+      const mix = -S;
+      return { t: raw + (easeOutBack(raw) - raw) * mix, e: raw + (easeOutCubic(raw) - raw) * mix };
+    }
+    const t = Math.pow(raw, 1 + S * 4);
+    return { t, e: t };
+  }
+
+  // Transparent-B holdout: a block has no pixels to cover A with, so the
+  // block's slot of A is erased instead (alpha 0..1).
+  function eraseSlot(col, row, a) {
+    if (a <= 0) return;
+    const x0 = Math.floor(col * tileW) - 1, y0 = Math.floor(row * tileH) - 1;
+    const x1 = Math.ceil((col + 1) * tileW) + 1, y1 = Math.ceil((row + 1) * tileH) + 1;
+    g.save();
+    g.globalCompositeOperation = 'destination-out';
+    g.globalAlpha = a; g.fillStyle = '#000';
+    g.fillRect(x0, y0, x1 - x0, y1 - y0);
+    g.restore();
+  }
+
+  // One shaded block: optional extruded top/side faces, then the B crop.
+  function drawBlock(tile, px, py, rot, sx, sy, z) {
+    g.save();
+    g.translate(px, py); g.rotate(rot); g.scale(sx, sy);
+    const w = tileW, h = tileH;
+    if (z > 0.5) {
+      g.fillStyle = 'rgba(30,28,25,0.4)';
+      g.beginPath();
+      g.moveTo(w/2, -h/2); g.lineTo(w/2 + z*0.7, -h/2 - z*0.5);
+      g.lineTo(w/2 + z*0.7, h/2 - z*0.5); g.lineTo(w/2, h/2);
+      g.closePath(); g.fill();
+      g.fillStyle = 'rgba(255,255,255,0.38)';
+      g.beginPath();
+      g.moveTo(-w/2, -h/2); g.lineTo(w/2, -h/2);
+      g.lineTo(w/2 + z*0.7, -h/2 - z*0.5); g.lineTo(-w/2 + z*0.7, -h/2 - z*0.5);
+      g.closePath(); g.fill();
+    }
+    g.drawImage(cube_dstC, tile.col * tileW, tile.row * tileH, tileW, tileH, -w/2, -h/2, w, h);
+    g.restore();
+  }
 
   const tiles = [];
   for (let row = 0; row < ROWS; row++) {
     for (let col = 0; col < COLS; col++) {
-      const cx = col * tileW + tileW / 2, cy = row * tileH + tileH / 2;
-      const angle  = Math.random() * Math.PI * 2;
-      const radius = Math.max(RW, RH) * (0.85 + Math.random() * 0.55);
-      const diag   = (col + row) / (COLS + ROWS - 2);
-      tiles.push({
-        col, row, cx, cy,
-        sx: cx + Math.cos(angle) * radius,
-        sy: cy + Math.sin(angle) * radius,
-        rot0:  (Math.random() * 2 - 1) * Math.PI * 0.85,
-        delay: diag * 1.3 + Math.random() * 0.3,
-        dur:   0.5 + Math.random() * 0.3,
-      });
+      tiles.push({ col, row, cx: col * tileW + tileW / 2, cy: row * tileH + tileH / 2 });
     }
   }
 
-  let el = 0, lastT = null;
+  // ═════════════════════════ per-mode setup + render ═════════════════════
+  let render;   // (el, dt) → true when the whole thing has finished
 
+  if (mode === 'exploded') {
+    // ── Exploded Snap ──────────────────────────────────────────────────
+    const LAY = 0.78, ES = 0.6;                 // layout spread / piece scale while apart
+    const SLAM0 = 1.55, SLAMDUR = 0.2, SLAMJIT = 0.05, TAIL = 0.4;
+    const END = SLAM0 + SLAMJIT + SLAMDUR;
+    const fcx = RW / 2, fcy = RH / 2, halfDiag = Math.hypot(fcx, fcy);
+    tiles.forEach(t => {
+      const ang = Math.random() * Math.PI * 2, rad = Math.max(RW, RH) * (0.8 + Math.random() * 0.5);
+      t.exx = fcx + (t.cx - fcx) * LAY; t.exy = fcy + (t.cy - fcy) * LAY;
+      t.stx = t.cx + Math.cos(ang) * rad; t.sty = t.cy + Math.sin(ang) * rad;
+      t.rot0 = (Math.random() * 2 - 1) * Math.PI * 0.8;
+      t.fd = Math.random() * 0.42; t.fdur = 0.55;
+      t.sd = (Math.hypot(t.cx - fcx, t.cy - fcy) / halfDiag) * SLAMJIT;
+      t.ph = Math.random() * 6.283; t.u = 0;
+    });
+    render = el => {
+      const since = el - END;
+      g.save();
+      if (since > 0) {                           // camera jolt on impact, decaying
+        const d = Math.exp(-since * 12), sh = 0.014 * d;
+        if (sh > 0.0004) {
+          g.translate(fcx + Math.sin(since * 70) * 10 * d, fcy + Math.cos(since * 57) * 7 * d);
+          g.scale(1 + sh, 1 + sh); g.translate(-fcx, -fcy);
+        }
+      }
+      g.drawImage(cube_srcC, 0, 0);
+      const dimA = 0.55 * smooth(clamp(el / 0.9, 0, 1));   // blueprint dim; source-atop only touches existing A pixels
+      g.save(); g.globalCompositeOperation = 'source-atop';
+      g.fillStyle = `rgba(0,0,0,${dimA})`; g.fillRect(0, 0, RW, RH); g.restore();
+
+      tiles.forEach(t => { t.u = easeInQuint(clamp((el - SLAM0 - t.sd) / SLAMDUR, 0, 1)); });
+      if (bIsTransparent) tiles.forEach(t => eraseSlot(t.col, t.row, t.u));
+
+      const ant = easeInOutCubic(clamp((el - (SLAM0 - 0.22)) / 0.22, 0, 1));   // pull-back before the hit
+      tiles.forEach(t => {
+        const fly = clamp((el - t.fd) / t.fdur, 0, 1);
+        if (fly <= 0) return;
+        const fe = easeOutCubic(fly);
+        let px = lerp(t.stx, t.exx, fe), py = lerp(t.sty, t.exy, fe);
+        const rot = t.rot0 * (1 - fe);
+        let sc = ES;
+        let z = MAXZ * (0.85 + 0.12 * Math.sin(el * 3.2 + t.ph) * fe);
+        // anticipation: drift outward + shrink a touch
+        px = fcx + (px - fcx) * (1 + 0.06 * ant); py = fcy + (py - fcy) * (1 + 0.06 * ant);
+        sc *= 1 - 0.08 * ant;
+        // slam
+        px = lerp(px, t.cx, t.u); py = lerp(py, t.cy, t.u);
+        sc = lerp(sc, 1, t.u); z = lerp(z, 0, t.u);
+        drawBlock(t, px, py, rot * (1 - t.u), sc, sc, z);
+      });
+      if (since > 0 && since < 0.25) {            // impact flash
+        g.save(); g.globalCompositeOperation = 'source-atop';
+        g.fillStyle = `rgba(255,255,255,${0.3 * Math.exp(-since * 22)})`; g.fillRect(0, 0, RW, RH); g.restore();
+      }
+      g.restore();
+      return el > END + TAIL;
+    };
+
+  } else if (mode === 'flip') {
+    // ── Flip (Rubik's) ─────────────────────────────────────────────────
+    const FDUR = 0.75;
+    tiles.forEach(t => {
+      t.delay = t.col * 0.07 + t.row * 0.018 + Math.random() * 0.12;
+      t.vert = (t.col + t.row) % 2 === 0;        // checkerboard of flip axes
+    });
+    render = el => {
+      g.drawImage(cube_srcC, 0, 0);
+      let doneCount = 0;
+      const w = tileW, h = tileH;
+      tiles.forEach(t => {
+        const raw = clamp((el - t.delay) / FDUR, 0, 1);
+        if (raw <= 0) return;
+        if (raw >= 1) doneCount++;
+        // Empty slot behind the panel: dark for opaque A, erased if B is transparent, nothing if A is.
+        if (bIsTransparent) eraseSlot(t.col, t.row, 1);
+        else if (!aIsTransparent) {
+          g.fillStyle = '#0b0d11';
+          g.fillRect(Math.floor(t.col * tileW) - 1, Math.floor(t.row * tileH) - 1, Math.ceil(tileW) + 2, Math.ceil(tileH) + 2);
+        }
+        const th = Math.PI * easeInOutCubic(raw);
+        const c = Math.cos(th), s = Math.sin(th);
+        const showB = th >= Math.PI / 2;
+        const edge = Math.max(Math.abs(c), 0.0008), lift = 1 + 0.12 * s;
+        g.save();
+        g.translate(t.cx, t.cy);
+        g.scale((t.vert ? edge : 1) * lift, (t.vert ? 1 : edge) * lift);
+        g.drawImage(showB ? cube_dstC : cube_srcC, t.col * tileW, t.row * tileH, tileW, tileH, -w/2, -h/2, w, h);
+        if (!(showB ? bIsTransparent : aIsTransparent)) {   // shade the panel as it turns away from the light
+          g.fillStyle = `rgba(0,0,0,${0.42 * s})`; g.fillRect(-w/2, -h/2, w, h);
+        }
+        g.restore();
+      });
+      return doneCount === tiles.length;
+    };
+
+  } else if (mode === 'skyline') {
+    // ── Skyline ────────────────────────────────────────────────────────
+    const DUR = 0.6, OFF = RH + tileH;           // each column starts one frame-height below
+    tiles.forEach(t => {
+      // columns sweep left→right with jitter; inside a column the TOP block leads so the
+      // column stretches up and closes from the bottom (no block ever passes through another)
+      t.delay = t.col * 0.07 + (t.colJit = 0) + t.row * 0.055;
+      t.landed = false;
+    });
+    const colJit = Array.from({ length: COLS }, () => Math.random() * 0.25);
+    tiles.forEach(t => { t.delay += colJit[t.col]; });
+    // pre-baked soft dust sprite
+    const puffC = mkc(64, 64), pg = puffC.getContext('2d');
+    const grad = pg.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grad.addColorStop(0, 'rgba(236,228,214,0.65)'); grad.addColorStop(1, 'rgba(236,228,214,0)');
+    pg.fillStyle = grad; pg.fillRect(0, 0, 64, 64);
+    const puffs = [];
+    render = (el, dt) => {
+      g.drawImage(cube_srcC, 0, 0);
+      let doneCount = 0;
+      if (bIsTransparent) tiles.forEach(t => eraseSlot(t.col, t.row, clamp(((el - t.delay) / DUR - 0.6) / 0.4, 0, 1)));
+      tiles.forEach(t => {
+        const raw = clamp((el - t.delay) / DUR, 0, 1);
+        if (raw <= 0) return;
+        if (raw >= 1) {
+          doneCount++;
+          if (!t.landed) {                        // landing → kick dust out of both bottom corners
+            t.landed = true;
+            // dust only where a column meets the ground (bottom row) — puffs on every block read as a polka-dot grid
+            for (let k = 0; k < (t.row === ROWS - 1 ? 2 : 0); k++) {
+              const dir = k === 0 ? -1 : 1;
+              puffs.push({ x: t.cx + dir * tileW * 0.45, y: t.cy + tileH * 0.5, vx: dir * (50 + Math.random() * 80),
+                           vy: -(6 + Math.random() * 18), age: 0, life: 0.55 + Math.random() * 0.3, r0: tileW * (0.3 + Math.random() * 0.25) });
+            }
+          }
+        }
+        const cv = snapCurves(raw);
+        const py = lerp(t.cy + OFF, t.cy, cv.t);
+        const sq = squash(raw);
+        drawBlock(t, t.cx, py, 0, sq.sx, sq.sy, MAXZ * 0.8 * (1 - cv.e));
+      });
+      for (let i = puffs.length - 1; i >= 0; i--) {
+        const p = puffs[i];
+        p.age += dt; if (p.age >= p.life) { puffs.splice(i, 1); continue; }
+        p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.97;
+        const k = p.age / p.life, r = p.r0 * (1 + k * 1.8);
+        g.save(); g.globalAlpha = (1 - k) * 0.6;
+        g.drawImage(puffC, p.x - r, p.y - r, r * 2, r * 2);
+        g.restore();
+      }
+      return doneCount === tiles.length && puffs.length === 0;
+    };
+
+  } else if (mode === 'warp') {
+    // ── Warp Assemble ──────────────────────────────────────────────────
+    // True 3D: every block is a real cube tumbling through perspective. They
+    // arrive from behind the audience (huge, rushing past the lens), from far
+    // behind the screen, and from the sides / above / below, spiralling in
+    // while spinning chaotically, and lock together into a floating, slightly
+    // tilted slab of B. The slab then whooshes toward you and fills the screen.
+    const F = 1400;                              // focal length (px) — scale at z=0 is exactly 1
+    const SL = 0.55;                             // slab scale while it floats
+    const D0 = tileW * 0.5;                      // cube depth (shrinks to 0 in the final rush)
+    const ARRIVE_END = 1.9, W0 = 2.15, WDUR = 0.5, TAIL = 0.45;
+    const WEND = W0 + WDUR;
+    const ccx = RW / 2, ccy = RH / 2;
+
+    // ── tiny 3×3 matrix helpers (row-major arrays) ──
+    const mul = (a, b) => [
+      a[0]*b[0]+a[1]*b[3]+a[2]*b[6], a[0]*b[1]+a[1]*b[4]+a[2]*b[7], a[0]*b[2]+a[1]*b[5]+a[2]*b[8],
+      a[3]*b[0]+a[4]*b[3]+a[5]*b[6], a[3]*b[1]+a[4]*b[4]+a[5]*b[7], a[3]*b[2]+a[4]*b[5]+a[5]*b[8],
+      a[6]*b[0]+a[7]*b[3]+a[8]*b[6], a[6]*b[1]+a[7]*b[4]+a[8]*b[7], a[6]*b[2]+a[7]*b[5]+a[8]*b[8]];
+    const rotX = a => { const c = Math.cos(a), s = Math.sin(a); return [1,0,0, 0,c,-s, 0,s,c]; };
+    const rotY = a => { const c = Math.cos(a), s = Math.sin(a); return [c,0,s, 0,1,0, -s,0,c]; };
+    const rotZ = a => { const c = Math.cos(a), s = Math.sin(a); return [c,-s,0, s,c,0, 0,0,1]; };
+    const apply = (m, v) => [m[0]*v[0]+m[1]*v[1]+m[2]*v[2], m[3]*v[0]+m[4]*v[1]+m[5]*v[2], m[6]*v[0]+m[7]*v[1]+m[8]*v[2]];
+
+    // Average colour of each block's B crop → colour for its non-textured faces.
+    const avgC = mkc(1, 1), avgX = avgC.getContext('2d', { willReadFrequently: true });
+    const LIGHT = (() => { const l = [-0.4, -0.65, -0.65], n = Math.hypot(...l); return l.map(v => v / n); })();
+
+    tiles.forEach(t => {
+      avgX.clearRect(0, 0, 1, 1);
+      avgX.drawImage(cube_dstC, t.col * tileW, t.row * tileH, tileW, tileH, 0, 0, 1, 1);
+      const d = avgX.getImageData(0, 0, 1, 1).data;
+      t.rgb = d[3] > 20 ? [d[0], d[1], d[2]] : [190, 200, 215];   // transparent B → neutral glass-ish faces
+      t.ox = t.cx - ccx; t.oy = t.cy - ccy;
+      // where it comes from
+      const kind = Math.random(); let xs, ys, zs;
+      if (kind < 0.4) {                          // from behind the audience — big, rushing past the lens
+        const a = Math.random() * 6.283, r = RW * (0.25 + Math.random() * 0.35);
+        xs = Math.cos(a) * r; ys = Math.sin(a) * r * 0.75; zs = -F * (0.5 + Math.random() * 0.35);
+      } else if (kind < 0.7) {                   // from far behind the screen — small, growing
+        const a = Math.random() * 6.283, r = RW * (0.4 + Math.random() * 0.7);
+        xs = Math.cos(a) * r; ys = Math.sin(a) * r * 0.7; zs = F * (1.5 + Math.random() * 1.8);
+      } else {                                   // from the sides / above / below
+        const side = Math.floor(Math.random() * 4), j = (Math.random() * 2 - 1);
+        if (side === 0) { xs = -RW * (0.8 + Math.random() * 0.5); ys = j * RH * 0.8; }
+        else if (side === 1) { xs = RW * (0.8 + Math.random() * 0.5); ys = j * RH * 0.8; }
+        else if (side === 2) { ys = -RH * (0.9 + Math.random() * 0.6); xs = j * RW * 0.7; }
+        else { ys = RH * (0.9 + Math.random() * 0.6); xs = j * RW * 0.7; }
+        zs = F * (-0.25 + Math.random() * 0.9);
+      }
+      t.xs = xs; t.ys = ys; t.zs = zs;
+      t.delay = Math.random() * 0.7; t.dur = 0.95 + Math.random() * 0.3;
+      t.A = [1, 2, 3].map(() => (Math.random() < 0.5 ? -1 : 1) * Math.PI * (2.5 + Math.random() * 4.5));   // chaotic spin
+      t.sw = (Math.random() < 0.5 ? -1 : 1) * (1.2 + Math.random() * 2.0);                                  // spiral amount
+      t.depth = 0;
+    });
+
+    // One cube at flight progress `raw` (ghost = trail copy, alpha scaled).
+    function cubeState(t, raw, slab) {
+      const e = 1 - Math.pow(1 - raw, 4);                    // fast out of the dark, settles into place
+      const k = 1 - e;
+      const tx = slab.sf * t.ox, ty = slab.sf * t.oy;
+      const tp = apply(slab.R, [tx, ty, 0]);                 // slab-rotated target
+      let X = lerp(t.xs, tp[0], e), Y = lerp(t.ys, tp[1], e), Z = lerp(t.zs, tp[2] + slab.D / 2, e);
+      const ang = t.sw * Math.pow(k, 1.5), ca = Math.cos(ang), sa = Math.sin(ang);   // spiral around the view axis
+      const X2 = X * ca - Y * sa, Y2 = X * sa + Y * ca; X = X2; Y = Y2;
+      const R = mul(slab.R, mul(rotZ(t.A[2] * k), mul(rotY(t.A[1] * k), rotX(t.A[0] * k))));
+      return { X, Y, Z, R };
+    }
+
+    // Faces: [normal, 4 local corners (TL,TR,BR,BL order as seen from outside)], front first.
+    const FACES = (s, h) => [
+      { n: [0, 0, -1], v: [[-s,-s,-h],[ s,-s,-h],[ s, s,-h],[-s, s,-h]], front: true },
+      { n: [0, 0,  1], v: [[ s,-s, h],[-s,-s, h],[-s, s, h],[ s, s, h]] },
+      { n: [-1, 0, 0], v: [[-s,-s, h],[-s,-s,-h],[-s, s,-h],[-s, s, h]] },
+      { n: [ 1, 0, 0], v: [[ s,-s,-h],[ s,-s, h],[ s, s, h],[ s, s,-h]] },
+      { n: [0, -1, 0], v: [[-s,-s, h],[ s,-s, h],[ s,-s,-h],[-s,-s,-h]] },
+      { n: [0,  1, 0], v: [[-s, s,-h],[ s, s,-h],[ s, s, h],[-s, s, h]] },
+    ];
+
+    function drawCube(t, st, s, hD, alpha) {
+      const h = hD / 2;
+      const proj = (v) => {
+        const w = apply(st.R, v), X = w[0] + st.X, Y = w[1] + st.Y, Z = w[2] + st.Z;
+        const d = F + Z; if (d < 60) return null;               // behind the lens
+        const k = F / d; return { x: ccx + X * k, y: ccy + Y * k, X, Y, Z };
+      };
+      g.save(); g.globalAlpha = alpha;
+      const faces = FACES(s, Math.max(h, 0.01));
+      const items = [];
+      for (const f of faces) {
+        if (!f.front && h < 0.6 && !f.n[2]) { /* paper-thin: skip side walls */ }
+        const nrm = apply(st.R, f.n);
+        const pts = f.v.map(proj);
+        if (pts.some(p => !p)) continue;
+        const cX = (pts[0].X + pts[2].X) / 2, cY = (pts[0].Y + pts[2].Y) / 2, cZ = (pts[0].Z + pts[2].Z) / 2;
+        if (nrm[0] * (0 - cX) + nrm[1] * (0 - cY) + nrm[2] * (-F - cZ) <= 0) continue;   // facing away
+        items.push({ f, nrm, pts, depth: cZ });
+      }
+      items.sort((a, b) => b.depth - a.depth);
+      for (const it of items) {
+        const lit = 0.5 + 0.5 * Math.max(0, it.nrm[0] * LIGHT[0] + it.nrm[1] * LIGHT[1] + it.nrm[2] * LIGHT[2]);
+        const p = it.pts;
+        if (it.f.front) {
+          const dx1 = (p[1].x - p[0].x) / tileW, dy1 = (p[1].y - p[0].y) / tileW;
+          const dx2 = (p[3].x - p[0].x) / tileH, dy2 = (p[3].y - p[0].y) / tileH;
+          g.save(); g.transform(dx1, dy1, dx2, dy2, p[0].x, p[0].y);
+          g.drawImage(cube_dstC, t.col * tileW, t.row * tileH, tileW, tileH, 0, 0, tileW, tileH);
+          g.restore();
+          if (lit < 0.97 && !bIsTransparent) {
+            g.fillStyle = `rgba(0,0,0,${(1 - lit) * 0.55})`;
+            g.beginPath(); g.moveTo(p[0].x, p[0].y); for (let i = 1; i < 4; i++) g.lineTo(p[i].x, p[i].y); g.closePath(); g.fill();
+          }
+        } else {
+          const c = t.rgb;
+          g.fillStyle = `rgb(${(c[0] * lit * 0.85) | 0},${(c[1] * lit * 0.85) | 0},${(c[2] * lit * 0.85) | 0})`;
+          g.beginPath(); g.moveTo(p[0].x, p[0].y); for (let i = 1; i < 4; i++) g.lineTo(p[i].x, p[i].y); g.closePath(); g.fill();
+        }
+      }
+      g.restore();
+      return items.length ? items[0].depth : 0;
+    }
+
+    // streak directions for the final rush
+    const streaks = Array.from({ length: 56 }, () => ({ a: Math.random() * 6.283, r0: 0.18 + Math.random() * 0.35, len: 0.25 + Math.random() * 0.5, w: 1 + Math.random() * 2.2 }));
+    const diag = Math.hypot(ccx, ccy);
+
+    render = el => {
+      const since = el - WEND;
+      const u = clamp((el - W0) / WDUR, 0, 1);                 // rush progress
+      // slab state: floats tilted & small, then rushes to fill the screen face-on
+      let sf;
+      if (u < 0.78) sf = lerp(SL, 1.06, Math.pow(u / 0.78, 3)); else sf = lerp(1.06, 1, smooth((u - 0.78) / 0.22));
+      const tilt = 1 - smooth(u);
+      const gam = (0.34 + 0.05 * Math.sin(el * 1.7)) * tilt, bet = (-0.14 + 0.03 * Math.sin(el * 1.3 + 1)) * tilt;
+      const slab = { sf, R: mul(rotX(bet), rotY(gam)), D: D0 * (1 - smooth(u)) };
+
+      g.save();
+      if (since > 0) {                                          // jolt as it fills the screen
+        const d = Math.exp(-since * 12), sh = 0.012 * d;
+        if (sh > 0.0004) {
+          g.translate(ccx + Math.sin(since * 70) * 9 * d, ccy + Math.cos(since * 57) * 6 * d);
+          g.scale(1 + sh, 1 + sh); g.translate(-ccx, -ccy);
+        }
+      }
+      g.drawImage(cube_srcC, 0, 0);
+      const dimA = 0.55 * smooth(clamp(el / 1.2, 0, 1)) * (1 - smooth(u));
+      g.save(); g.globalCompositeOperation = 'source-atop';
+      g.fillStyle = `rgba(0,0,0,${dimA})`; g.fillRect(0, 0, RW, RH); g.restore();
+      if (bIsTransparent && u > 0) {                            // transparent B: A is swept away by the rush
+        g.save(); g.globalCompositeOperation = 'destination-out'; g.globalAlpha = smooth(u);
+        g.fillStyle = '#000'; g.fillRect(0, 0, RW, RH); g.restore();
+      }
+
+      // gather cubes, depth-sort (far first), draw with short motion trails while in flight
+      const list = [];
+      tiles.forEach(t => {
+        const raw = clamp((el - t.delay) / t.dur, 0, 1);
+        if (el < t.delay) return;
+        const st = cubeState(t, raw, slab);
+        list.push({ t, raw, st, z: st.Z });
+      });
+      list.sort((a, b) => b.z - a.z);
+      list.forEach(({ t, raw, st }) => {
+        const s = (tileW / 2) * slab.sf;
+        if (raw < 0.9) {                                        // woosh trail
+          for (let k = 2; k >= 1; k--) {
+            const gr = Math.max(0, raw - 0.035 * k);
+            if (gr <= 0) continue;
+            drawCube(t, cubeState(t, gr, slab), s, slab.D, 0.2 / k);
+          }
+        }
+        drawCube(t, st, s, slab.D, 1);
+      });
+
+      if (u > 0 && u < 1) {                                     // speed streaks during the rush
+        g.save(); g.globalCompositeOperation = 'lighter';
+        const a = Math.sin(Math.PI * u) * 0.5;
+        streaks.forEach(sk => {
+          const r1 = diag * (sk.r0 + u * sk.len), r0 = diag * sk.r0 * (0.4 + u * 0.6);
+          g.strokeStyle = `rgba(190,215,255,${a})`; g.lineWidth = sk.w;
+          g.beginPath(); g.moveTo(ccx + Math.cos(sk.a) * r0, ccy + Math.sin(sk.a) * r0);
+          g.lineTo(ccx + Math.cos(sk.a) * r1, ccy + Math.sin(sk.a) * r1); g.stroke();
+        });
+        g.restore();
+      }
+      if (since > 0 && since < 0.25) {                          // arrival flash
+        g.save(); g.globalCompositeOperation = 'source-atop';
+        g.fillStyle = `rgba(255,255,255,${0.32 * Math.exp(-since * 20)})`; g.fillRect(0, 0, RW, RH); g.restore();
+      }
+      g.restore();
+      return el > WEND + TAIL;
+    };
+
+  } else {
+    // ── Swarm (original) ───────────────────────────────────────────────
+    tiles.forEach(tile => {
+      const angle  = Math.random() * Math.PI * 2;
+      const radius = Math.max(RW, RH) * (0.85 + Math.random() * 0.55);
+      const diag   = (tile.col + tile.row) / (COLS + ROWS - 2);
+      tile.sx = tile.cx + Math.cos(angle) * radius;
+      tile.sy = tile.cy + Math.sin(angle) * radius;
+      tile.rot0  = (Math.random() * 2 - 1) * Math.PI * 0.85;
+      tile.delay = diag * 1.3 + Math.random() * 0.3;
+      tile.dur   = 0.5 + Math.random() * 0.3;
+    });
+    render = el => {
+      g.drawImage(cube_srcC, 0, 0);
+      if (bIsTransparent) tiles.forEach(t => eraseSlot(t.col, t.row, clamp(((el - t.delay) / t.dur - 0.6) / 0.4, 0, 1)));
+      let doneCount = 0;
+      tiles.forEach(tile => {
+        const raw = clamp((el - tile.delay) / tile.dur, 0, 1);
+        if (raw <= 0) return;
+        if (raw >= 1) doneCount++;
+        const cv = snapCurves(raw);
+        const px = tile.sx + (tile.cx - tile.sx) * cv.t;
+        const py = tile.sy + (tile.cy - tile.sy) * cv.t;
+        const sq = squash(raw);
+        drawBlock(tile, px, py, tile.rot0 * (1 - cv.e), sq.sx, sq.sy, MAXZ * (1 - cv.e));
+      });
+      return doneCount === tiles.length;
+    };
+  }
+
+  // ═════════════════════════ shared frame loop ═══════════════════════════
+  let el = 0, lastT = null;
   function frm(ts) {
     if (!lastT) lastT = ts;
     const dt = Math.min((ts - lastT) / 1000, 0.05);
     lastT = ts; el += dt;
 
-    recCtx9.clearRect(0, 0, RW, RH);
-    recCtx9.drawImage(cube_srcC, 0, 0);
-
-    // Holdout for a transparent B: a cube carries no pixels to cover A with,
-    // so as each block arrives its slot of A is erased (fading out over the
-    // last 40% of the block's flight, fully gone the moment it seats).
-    if (bIsTransparent) {
-      recCtx9.save();
-      recCtx9.globalCompositeOperation = 'destination-out';
-      tiles.forEach(tile => {
-        const raw = clamp((el - tile.delay) / tile.dur, 0, 1);
-        const a = clamp((raw - 0.6) / 0.4, 0, 1);
-        if (a <= 0) return;
-        const x0 = Math.floor(tile.col * tileW) - 1, y0 = Math.floor(tile.row * tileH) - 1;
-        const x1 = Math.ceil((tile.col + 1) * tileW) + 1, y1 = Math.ceil((tile.row + 1) * tileH) + 1;
-        recCtx9.globalAlpha = a; recCtx9.fillStyle = '#000';
-        recCtx9.fillRect(x0, y0, x1 - x0, y1 - y0);
-      });
-      recCtx9.restore();
-    }
-
-    let doneCount = 0;
-    tiles.forEach(tile => {
-      const raw = clamp((el - tile.delay) / tile.dur, 0, 1);
-      if (raw <= 0) return;
-      if (raw >= 1) doneCount++;
-
-      // t drives position (can exceed 1 briefly on the bounce side — that's
-      // the overshoot). e drives height/rotation, kept 0..1 either way so
-      // the block never "un-flattens" after it's already settled down.
-      let t, e;
-      if (S <= 0) {
-        const mix = -S; // 0 (linear) .. 1 (full bounce)
-        t = raw + (easeOutBack(raw) - raw) * mix;
-        e = raw + (easeOutCubic(raw) - raw) * mix;
-      } else {
-        const POWER = 1 + S * 4; // 1 (linear) .. 5 (strongly exponential)
-        t = Math.pow(raw, POWER);
-        e = t;
-      }
-
-      const px = tile.sx + (tile.cx - tile.sx) * t;
-      const py = tile.sy + (tile.cy - tile.sy) * t;
-      const z   = MAXZ * (1 - e);
-      const rot = tile.rot0 * (1 - e);
-      const sq  = squash(raw);
-
-      recCtx9.save();
-      recCtx9.translate(px, py);
-      recCtx9.rotate(rot);
-      recCtx9.scale(sq.sx, sq.sy);
-      const w = tileW, h = tileH;
-
-      if (z > 0.5) {
-        recCtx9.fillStyle = 'rgba(30,28,25,0.4)';
-        recCtx9.beginPath();
-        recCtx9.moveTo(w/2, -h/2);
-        recCtx9.lineTo(w/2 + z*0.7, -h/2 - z*0.5);
-        recCtx9.lineTo(w/2 + z*0.7, h/2 - z*0.5);
-        recCtx9.lineTo(w/2, h/2);
-        recCtx9.closePath(); recCtx9.fill();
-
-        recCtx9.fillStyle = 'rgba(255,255,255,0.38)';
-        recCtx9.beginPath();
-        recCtx9.moveTo(-w/2, -h/2);
-        recCtx9.lineTo(w/2, -h/2);
-        recCtx9.lineTo(w/2 + z*0.7, -h/2 - z*0.5);
-        recCtx9.lineTo(-w/2 + z*0.7, -h/2 - z*0.5);
-        recCtx9.closePath(); recCtx9.fill();
-      }
-
-      recCtx9.drawImage(
-        cube_dstC,
-        tile.col * tileW, tile.row * tileH, tileW, tileH,
-        -w/2, -h/2, w, h
-      );
-      recCtx9.restore();
-    });
-
+    g.clearRect(0, 0, RW, RH);
+    const finished = render(el, dt);
     ctx9.clearRect(0, 0, W, H);
     ctx9.drawImage(recC9, 0, 0, W, H);
 
-    if (doneCount === tiles.length) {
+    if (finished) {
       // Every block is exactly seated — redraw dst directly to erase any
       // sub-pixel seams at tile edges, then finish.
       recCtx9.clearRect(0, 0, RW, RH); recCtx9.drawImage(cube_dstC, 0, 0);
@@ -3725,6 +4074,23 @@ function registerTransition(key) {
   document.head.appendChild(styleEl);
 })();
 
+// Wire cube assembly mode picker — defaults to Swarm
+(function() {
+  const btns = document.querySelectorAll('.cubemode');
+  const defaultBtn = Array.from(btns).find(b => b.dataset.mode === 'swarm') || btns[0];
+  if (defaultBtn) defaultBtn.classList.add('cubemode-active');
+  btns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (TRANSITIONS.cubeAssembly.running) return;
+      btns.forEach(b => { b.classList.remove('cubemode-active'); b.style.borderColor = ''; b.style.color = ''; });
+      btn.classList.add('cubemode-active');
+    });
+  });
+  const styleEl = document.createElement('style');
+  styleEl.textContent = '.cubemode.cubemode-active { border-color: var(--color-text-primary) !important; color: var(--color-text-primary) !important; }';
+  document.head.appendChild(styleEl);
+})();
+
 // Wire ripple refraction "Shows" picker — defaults to B (Destination)
 (function() {
   const btns = document.querySelectorAll('.ripgb');
@@ -3875,6 +4241,7 @@ function registerTransition(key) {
   }
   watchGroup('.tgb', (b, i, arr) => b === arr[0]);          // default: 16×9
   watchGroup('.cgb', b => b.dataset.mode === 'ABV');         // default: AB — Bands
+  watchGroup('.cubemode', b => b.dataset.mode === 'swarm');   // default: Swarm
   watchGroup('.ripgb', b => b.dataset.mode === 'A');         // default: A — Source
 })();
 
