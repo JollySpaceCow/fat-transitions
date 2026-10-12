@@ -329,12 +329,12 @@
   </div>
   <!-- Cube Assembly settings — read live from this slider by runCubeAssembly at play-time (Swarm + Skyline) -->
   <div style="display:flex;flex-direction:column;gap:8px;align-items:center;margin-top:10px;">
-    <div style="display:flex;align-items:center;gap:10px;" title="Warp Assemble only. 0 = off. More samples = smoother blur but slower preview (recording is frame-accurate, so it just takes longer).">
+    <div data-cube-modes="warp" style="display:flex;align-items:center;gap:10px;transition:opacity .15s;" title="Warp Assemble only. 0 = off. More samples = smoother blur but slower preview (recording is frame-accurate, so it just takes longer).">
       <span style="font-size:10px;color:var(--color-text-tertiary);width:78px;text-align:right;">Motion blur</span>
       <input type="range" id="cubeBlur" min="0" max="160" step="1" value="64" style="width:180px;">
       <span id="cubeBlurVal" style="font-size:11px;color:var(--color-text-secondary);min-width:44px;">64</span>
     </div>
-    <div style="display:flex;align-items:center;gap:10px;">
+    <div data-cube-modes="swarm,skyline" style="display:flex;align-items:center;gap:10px;transition:opacity .15s;" title="Used by Swarm and Skyline only.">
       <span style="font-size:10px;color:var(--color-text-tertiary);width:78px;text-align:right;">Snap curve</span>
       <input type="range" id="cubeSnapCurve" min="0" max="100" step="1" value="0" style="width:180px;">
       <span id="cubeSnapCurveVal" style="font-size:11px;color:var(--color-text-secondary);min-width:44px;">0%</span>
@@ -4141,11 +4141,23 @@ function registerTransition(key) {
   const btns = document.querySelectorAll('.cubemode');
   const defaultBtn = Array.from(btns).find(b => b.dataset.mode === 'swarm') || btns[0];
   if (defaultBtn) defaultBtn.classList.add('cubemode-active');
+  // Grey out (and disable) the settings the selected mode doesn't use.
+  function syncCubeSettings() {
+    const act = document.querySelector('.cubemode.cubemode-active');
+    const mode = act ? act.dataset.mode : 'swarm';
+    document.querySelectorAll('[data-cube-modes]').forEach(row => {
+      const used = row.dataset.cubeModes.split(',').includes(mode);
+      row.style.opacity = used ? '' : '0.32';
+      row.querySelectorAll('input').forEach(i => { i.disabled = !used; });
+    });
+  }
+  syncCubeSettings();
   btns.forEach(btn => {
     btn.addEventListener('click', () => {
       if (TRANSITIONS.cubeAssembly.running) return;
       btns.forEach(b => { b.classList.remove('cubemode-active'); b.style.borderColor = ''; b.style.color = ''; });
       btn.classList.add('cubemode-active');
+      syncCubeSettings();
     });
   });
   const styleEl = document.createElement('style');
