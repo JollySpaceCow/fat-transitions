@@ -106,6 +106,28 @@
       animation-timing-function: linear;
       animation-fill-mode: forwards;
     }
+
+    /* ── Gallery / detail navigation ──────────────────────────────────── */
+    #galHead { display:flex; justify-content:space-between; align-items:center; margin:6px 0 12px; font-size:12px; color:var(--color-text-tertiary); }
+    #galHead button, #detailBar button { font-size:12px; padding:6px 14px; border-radius:16px; cursor:pointer; }
+    #galGrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(270px,1fr)); gap:14px; margin-bottom:24px; }
+    .tcard { display:block; text-decoration:none; color:inherit; background:var(--color-bg-secondary); border:.5px solid var(--color-border-tertiary); border-radius:12px; overflow:hidden; transition:transform .12s, border-color .12s, box-shadow .12s; }
+    .tcard:hover, .tcard:focus-visible { transform:translateY(-2px); border-color:var(--color-accent-primary); box-shadow:0 6px 22px rgba(0,0,0,.45); outline:none; }
+    .tcard canvas { display:block; width:100%; height:auto; background:#000; }
+    .tmeta { display:flex; justify-content:space-between; align-items:baseline; gap:8px; padding:9px 12px 10px; }
+    .tname { font-size:13px; font-weight:600; color:var(--color-text-primary); }
+    .tnote { font-size:10.5px; color:var(--color-text-tertiary); text-align:right; }
+    #detailBar { display:flex; align-items:center; justify-content:space-between; gap:10px; margin:2px 0 12px; }
+    #dbTitle { font-size:12px; font-weight:600; letter-spacing:.1em; color:var(--color-text-secondary); }
+    #dbNav { display:flex; gap:6px; }
+    #dbNav button { padding:6px 14px; font-size:16px; line-height:1; }
+    #dbFull { font-size:14px !important; }
+    #backdrop { position:fixed; inset:0; background:rgba(0,0,0,.78); z-index:40; backdrop-filter:blur(3px); }
+    body.modal-open { overflow:hidden; }
+    .tsec.open { position:fixed; z-index:60; top:64px; bottom:16px; left:50%; transform:translateX(-50%); width:min(1100px, calc(100vw - 24px)); overflow:auto; box-sizing:border-box; padding:14px 18px 18px; background:var(--color-bg-primary, #141414); border:.5px solid var(--color-border-secondary, #333); border-radius:14px; box-shadow:0 20px 70px rgba(0,0,0,.7); margin:0; }
+    #detailBar.modal { position:fixed; z-index:61; top:14px; left:50%; transform:translateX(-50%); width:min(1100px, calc(100vw - 24px)); box-sizing:border-box; margin:0; padding:0 4px; }
+    .tsec:fullscreen { width:100vw !important; height:100vh !important; top:0 !important; left:0 !important; transform:none !important; border-radius:0 !important; border:0 !important; }
+    #detailBar.modal button { background:rgba(30,30,30,.95); }
   </style>
 </head>
 <body>
@@ -4475,6 +4497,180 @@ document.getElementById('alphaWarnClose').addEventListener('click', () => {
   document.getElementById('alphaWarnBanner').style.display = 'none';
   clearTimeout(_alphaWarnHideTimer);
 });
+
+// ══════════════════════════════════════════════════════════════════════════
+// GALLERY — the page opens on a grid of every transition (hover a card to
+// watch a little A→B wipe), click one to open just that transition, and use
+// ‹ › / ← → / Esc to move around. "Show all" restores the old long page.
+// The address bar follows along (#cube-assembly etc.), so Back returns to
+// the grid and a reload lands on the same transition. Purely a view layer:
+// every transition's own markup, canvas and buttons are untouched.
+// ══════════════════════════════════════════════════════════════════════════
+(function initGallery() {
+  const KEYS  = ['splash','solidify','bubbles','particles','tileDrop','coneRefraction','pagePeel','crumble','cubeAssembly','rippleRefraction'];
+  const SLUGS = ['milk-butter','trimmings-tallow','bubbles','particles','tile-drop','cone-refraction','page-peel','crumble','cube-assembly','ripple-refraction'];
+  const PAIRS = [[milkC, butC], [trimC, talC], [bub_srcC, bub_dstC], [par_srcC, par_dstC], [td_srcC, td_dstC],
+                 [cone_srcC, cone_dstC], [peel_srcC, peel_dstC], [crumble_srcC, crumble_dstC], [cube_srcC, cube_dstC], [rip_srcC, rip_dstC]];
+  const NOTES = ['', '', '', '', 'Gentle / Cranked', 'Four glass modes', 'Adjustable angle', '', 'Five modes', 'Pond view'];
+
+  const anyRunning = () => KEYS.some(k => TRANSITIONS[k].running);
+  let view = 'grid';
+  const secs = KEYS.map((k, i) => {
+    const sec = document.getElementById('c' + (i + 1)).parentElement;
+    sec.classList.add('tsec');
+    return { k, i, slug: SLUGS[i], sec, title: sec.querySelector('p').textContent.trim() };
+  });
+  const first = secs[0].sec;
+
+  const gal = document.createElement('div');
+  gal.id = 'gallery';
+  gal.innerHTML = '<div id="galHead"><span>' + secs.length + ' transitions</span><button type="button" id="galAll">Show all on one page</button></div><div id="galGrid"></div>';
+  const bar = document.createElement('div');
+  bar.id = 'detailBar';
+  bar.innerHTML = '<button type="button" id="dbBack">← All transitions</button><span id="dbTitle"></span><span id="dbNav"><button type="button" id="dbFull" title="Full screen (F)">⛶</button><button type="button" id="dbPrev" title="Previous (←)">‹</button><button type="button" id="dbNext" title="Next (→)">›</button></span>';
+  first.parentElement.insertBefore(gal, first);
+  first.parentElement.insertBefore(bar, first);
+  const grid = gal.querySelector('#galGrid');
+
+  // Checkerboard under the thumbnails so a transparent A or B reads as transparent.
+  const chk = document.createElement('canvas'); chk.width = chk.height = 24;
+  { const x = chk.getContext('2d'); x.fillStyle = '#2b2b2b'; x.fillRect(0, 0, 24, 24); x.fillStyle = '#383838'; x.fillRect(0, 0, 12, 12); x.fillRect(12, 12, 12, 12); }
+
+  // ── Thumbnails: instant, cheap drawings of each effect using the current A and B ──
+  function rng(seed) { let t = seed >>> 0; return () => { t += 0x6D2B79F5; let r = Math.imul(t ^ t >>> 15, 1 | t); r ^= r + Math.imul(r ^ r >>> 7, 61 | r); return ((r ^ r >>> 14) >>> 0) / 4294967296; }; }
+  const SHAPES = {
+    2(x, w, h, R) {                                              // bubbles rising from the bottom
+      for (let n = 0; n < 34; n++) { const r = (8 + R() * 30) * (w / 480), cx = R() * w, cy = h * (0.45 + R() * 0.7); x.moveTo(cx + r, cy); x.arc(cx, cy, r, 0, 7); }
+    },
+    3(x, w, h, R) {                                              // particles, denser towards the right
+      const g = 12 * (w / 480);
+      for (let gx = 0; gx < w; gx += g) for (let gy = 0; gy < h; gy += g) if (R() < 0.12 + 0.88 * Math.pow(gx / w, 1.5)) x.rect(gx + 1, gy + 1, g - 2, g - 2);
+    },
+    4(x, w, h, R) {                                              // tiles dropping in
+      const cols = 12, rows = 7, tw = w / cols, th = h / rows;
+      for (let c = 0; c < cols; c++) for (let r = 0; r < rows; r++) if (R() < 0.15 + 0.85 * (c / cols)) x.rect(c * tw + 1, r * th + 1, tw - 2, th - 2);
+    },
+    5(x, w, h) { x.moveTo(w * 0.5, 0); x.lineTo(w * 0.95, h); x.lineTo(w * 0.05, h); x.closePath(); },   // cone
+    7(x, w, h, R) {                                              // crumble: ragged holes
+      for (let n = 0; n < 55; n++) {
+        const cx = R() * w, cy = R() * h, r = (10 + R() * 26) * (w / 480), k = 5 + Math.floor(R() * 4), o = R() * 6;
+        for (let j = 0; j < k; j++) { const ang = o + j / k * 6.283, rr = r * (0.6 + R() * 0.6); j ? x.lineTo(cx + Math.cos(ang) * rr, cy + Math.sin(ang) * rr) : x.moveTo(cx + Math.cos(ang) * rr, cy + Math.sin(ang) * rr); }
+        x.closePath();
+      }
+    },
+    8(x, w, h, R) {                                              // cubes tumbling into place
+      for (let n = 0; n < 70; n++) {
+        const cx = R() * w, cy = R() * h, s = (12 + R() * 22) * (w / 480), a = R() * 3.14, c = Math.cos(a) * s, d = Math.sin(a) * s;
+        if (R() > 0.25 + 0.75 * (cx / w)) continue;
+        x.moveTo(cx - c + d, cy - d - c); x.lineTo(cx + c + d, cy + d - c); x.lineTo(cx + c - d, cy + d + c); x.lineTo(cx - c - d, cy - d + c); x.closePath();
+      }
+    },
+  };
+  function paintThumb(cv, i) {
+    const x = cv.getContext('2d'), w = cv.width, h = cv.height, A = PAIRS[i][0], B = PAIRS[i][1];
+    const back = () => { x.fillStyle = x.createPattern(chk, 'repeat'); x.fillRect(0, 0, w, h); };
+    back(); x.drawImage(A, 0, 0, w, h);
+    const R = rng(1000 + i * 77);
+    const reveal = (pathFn) => { x.save(); x.beginPath(); pathFn(); x.clip(); back(); x.drawImage(B, 0, 0, w, h); x.restore(); };
+    if (i < 2 || i === 6 || i === 9) {
+      if (i === 6) {                                              // page peel: B left behind, paper curling off along a diagonal
+        reveal(() => { x.moveTo(w * 0.42, 0); x.lineTo(w, 0); x.lineTo(w, h); x.lineTo(w * 0.05, h); x.closePath(); });
+        const gr = x.createLinearGradient(w * 0.2, 0, w * 0.5, 0); gr.addColorStop(0, '#9a9a94'); gr.addColorStop(.35, '#f1efe6'); gr.addColorStop(1, '#bdbab0');
+        x.fillStyle = gr; x.beginPath(); x.moveTo(w * 0.42, 0); x.lineTo(w * 0.05, h); x.lineTo(w * 0.2, h); x.lineTo(w * 0.52, 0); x.closePath(); x.fill();
+      } else if (i === 9) {                                       // ripple: rings of an oblique pond
+        reveal(() => { x.ellipse(w * 0.5, h * 0.72, w * 0.62, h * 0.4, 0, 0, 7); });
+        x.lineWidth = 2; for (let k = 1; k <= 5; k++) { x.strokeStyle = 'rgba(255,255,255,' + (0.5 - k * 0.07) + ')'; x.beginPath(); x.ellipse(w * 0.5, h * 0.72, w * (0.1 + k * 0.11), h * (0.04 + k * 0.07), 0, 0, 7); x.stroke(); }
+      } else { paintSplit(x, w, h, A, B, back); }
+      return;
+    }
+    reveal(() => SHAPES[i](x, w, h, R));
+    if (i === 5) { x.strokeStyle = 'rgba(255,255,255,.55)'; x.lineWidth = 2; x.beginPath(); x.moveTo(w * 0.5, 0); x.lineTo(w * 0.95, h); x.moveTo(w * 0.5, 0); x.lineTo(w * 0.05, h); x.stroke(); }
+  }
+  function paintSplit(x, w, h, A, B, back) {                      // milk / tallow: diagonal split (their own images tell the story)
+    const slant = w * 0.22, xt = w * 0.6 + slant * 0.5, xb = xt - slant;
+    x.save(); x.beginPath(); x.moveTo(xt, 0); x.lineTo(w, 0); x.lineTo(w, h); x.lineTo(xb, h); x.closePath(); x.clip(); back(); x.drawImage(B, 0, 0, w, h); x.restore();
+    x.strokeStyle = 'rgba(255,255,255,.55)'; x.lineWidth = 2; x.beginPath(); x.moveTo(xt, 0); x.lineTo(xb, h); x.stroke();
+  }
+  const sigC = document.createElement('canvas'); sigC.width = sigC.height = 6;
+  function sig(i) {
+    const x = sigC.getContext('2d', { willReadFrequently: true }); let out = '';
+    [PAIRS[i][0], PAIRS[i][1]].forEach(c => { x.clearRect(0, 0, 6, 6); x.drawImage(c, 0, 0, 6, 6); out += x.getImageData(0, 0, 6, 6).data.join(',') + '|'; });
+    return out;
+  }
+  const rest = s => { paintThumb(s.cv, s.i); s.sig = sig(s.i); };
+
+  const cards = secs.map(s => {
+    const card = document.createElement('a');
+    card.className = 'tcard'; card.href = '#' + s.slug;
+    const cv = document.createElement('canvas'); cv.width = 480; cv.height = 270;
+    card.appendChild(cv);
+    const meta = document.createElement('div'); meta.className = 'tmeta';
+    meta.innerHTML = '<span class="tname"></span><span class="tnote"></span>';
+    meta.firstChild.textContent = s.title.charAt(0) + s.title.slice(1).toLowerCase();
+    meta.lastChild.textContent = NOTES[s.i];
+    card.appendChild(meta);
+    grid.appendChild(card);
+    s.cv = cv;
+    return card;
+  });
+  secs.forEach(s => rest(s));
+
+  const backdrop = document.createElement('div'); backdrop.id = 'backdrop'; backdrop.style.display = 'none'; document.body.appendChild(backdrop);
+  backdrop.addEventListener('click', () => go('grid'));
+  function show(v) {
+    view = v;
+    const grid_ = v === 'grid';
+    const single = !grid_ && v !== 'all';
+    gal.style.display = (grid_ || single) ? '' : 'none';              // grid stays behind the pop-up
+    bar.style.display = grid_ ? 'none' : '';
+    bar.classList.toggle('modal', single); backdrop.style.display = single ? 'block' : 'none';
+    document.body.classList.toggle('modal-open', single);
+    secs.forEach(s => { const on = (v === 'all' || v === s.slug); s.sec.style.display = on ? '' : 'none'; s.sec.classList.toggle('open', single && on); s.sec.querySelector('p').style.display = (single && on) ? 'none' : ''; if (single && on) s.sec.scrollTop = 0; });
+    const cur = secs.find(s => s.slug === v);
+    bar.querySelector('#dbTitle').textContent = cur ? cur.title : 'All transitions';
+    bar.querySelector('#dbNav').style.visibility = cur ? 'visible' : 'hidden';
+    if (!single) window.scrollTo(0, 0);
+  }
+  
+  function go(v, fromPop) {                                      // v: 'grid' | 'all' | slug
+    if (anyRunning()) { setStatus('Wait for the current Play / Record to finish before switching transitions.'); return false; }
+    show(v);                                                     // never depends on the address bar
+    if (!fromPop) { try { history.pushState(null, '', v === 'grid' ? location.pathname + location.search : '#' + v); } catch (e) {} }
+    return true;
+  }
+  const fromHash = () => {
+    const h = location.hash.replace(/^#\/?/, '');
+    return h === 'all' ? 'all' : (secs.some(s => s.slug === h) ? h : 'grid');
+  };
+  const sync = () => { const v = fromHash(); if (v !== view) { if (anyRunning()) return; show(v); } };
+  window.addEventListener('hashchange', sync);
+  window.addEventListener('popstate', sync);
+  grid.addEventListener('click', e => {
+    const card = e.target.closest('.tcard'); if (!card) return;
+    e.preventDefault();
+    const t = secs[cards.indexOf(card)]; if (t) go(t.slug);
+  });
+  gal.querySelector('#galAll').addEventListener('click', () => go('all'));
+  bar.querySelector('#dbBack').addEventListener('click', () => go('grid'));
+  const step = d => { const i = secs.findIndex(s => s.slug === view); if (i >= 0) go(secs[(i + d + secs.length) % secs.length].slug); };
+  bar.querySelector('#dbFull').addEventListener('click', () => {
+    const cur = secs.find(q => q.slug === view); if (!cur) return;
+    if (document.fullscreenElement) document.exitFullscreen(); else if (cur.sec.requestFullscreen) cur.sec.requestFullscreen().catch(() => {});
+  });
+  bar.querySelector('#dbPrev').addEventListener('click', () => step(-1));
+  bar.querySelector('#dbNext').addEventListener('click', () => step(1));
+  document.addEventListener('keydown', e => {
+    if (/^(INPUT|TEXTAREA|SELECT)$/.test((e.target.tagName || ''))) return;
+    if (e.key === 'Escape' && view !== 'grid') go('grid');
+    else if ((e.key === 'f' || e.key === 'F') && view !== 'grid' && view !== 'all') bar.querySelector('#dbFull').click();
+    else if (e.key === 'ArrowLeft') step(-1);
+    else if (e.key === 'ArrowRight') step(1);
+  });
+  // Redraw a thumbnail only when its A or B actually changed.
+  setInterval(() => { if (!document.hidden) secs.forEach(q => { if (q.sig !== sig(q.i)) rest(q); }); }, 1500);
+
+  show(fromHash());
+})();
 </script>
 </div><!-- /page-wrap -->
 </body>
