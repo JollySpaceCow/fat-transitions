@@ -409,6 +409,113 @@
     <button class="ripgb" data-mode="B" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">B — Destination</button>
   </div>
 </div>
+<div style="margin-bottom:14px;">
+  <p style="font-size:11px;font-weight:500;letter-spacing:.1em;color:var(--color-text-secondary);text-align:center;margin:0 0 6px;">CAUSTICS</p>
+  <canvas id="c11" width="3840" height="2160" style="display:block;width:100%;height:auto;border-radius:8px;border:.5px solid var(--color-border-tertiary);"></canvas>
+  <div style="display:flex;gap:8px;justify-content:center;margin-top:8px;">
+    <button id="btn11p" style="font-size:12px;padding:7px 20px;">▶ Play</button>
+    <button id="btn11r" style="font-size:12px;padding:7px 20px;border-color:#e05555;color:#e05555;">⏺ Record 1080p</button>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:6px;align-items:center;margin-top:10px;">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span style="font-size:10px;color:var(--color-text-tertiary);width:78px;text-align:right;">Speed</span>
+      <input type="range" id="cauSpeed" min="40" max="200" step="1" value="100" style="width:180px;">
+      <span id="cauSpeedVal" style="font-size:11px;color:var(--color-text-secondary);min-width:44px;">100%</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span style="font-size:10px;color:var(--color-text-tertiary);width:78px;text-align:right;">Refraction</span>
+      <input type="range" id="cauRefr" min="0" max="150" step="1" value="80" style="width:180px;">
+      <span id="cauRefrVal" style="font-size:11px;color:var(--color-text-secondary);min-width:44px;">80%</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span style="font-size:10px;color:var(--color-text-tertiary);width:78px;text-align:right;">Caustic light</span>
+      <input type="range" id="cauCaus" min="0" max="150" step="1" value="85" style="width:180px;">
+      <span id="cauCausVal" style="font-size:11px;color:var(--color-text-secondary);min-width:44px;">85%</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span style="font-size:10px;color:var(--color-text-tertiary);width:78px;text-align:right;">Pattern size</span>
+      <input type="range" id="cauSize" min="40" max="160" step="1" value="100" style="width:180px;">
+      <span id="cauSizeVal" style="font-size:11px;color:var(--color-text-secondary);min-width:44px;">100%</span>
+    </div>
+  </div>
+  <div style="display:flex;gap:6px;justify-content:center;align-items:center;flex-wrap:wrap;margin-top:10px;">
+    <span style="font-size:10px;color:var(--color-text-tertiary);">Front:</span>
+    <button class="caudir" data-mode="centre" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">From centre</button>
+    <button class="caudir" data-mode="down" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">Top → bottom</button>
+    <button class="caudir" data-mode="right" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">Left → right</button>
+  </div>
+  <div style="display:flex;gap:6px;justify-content:center;align-items:center;flex-wrap:wrap;margin-top:8px;">
+    <span style="font-size:10px;color:var(--color-text-tertiary);">Light:</span>
+    <button class="cautint" data-mode="day" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">Daylight</button>
+    <button class="cautint" data-mode="teal" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">Teal</button>
+    <button class="cautint" data-mode="gold" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">Gold</button>
+  </div>
+</div>
+<div style="margin-bottom:14px;">
+  <p style="font-size:11px;font-weight:500;letter-spacing:.1em;color:var(--color-text-secondary);text-align:center;margin:0 0 6px;">GLASS ORB</p>
+  <canvas id="c12" width="3840" height="2160" style="display:block;width:100%;height:auto;border-radius:8px;border:.5px solid var(--color-border-tertiary);"></canvas>
+  <div style="display:flex;gap:8px;justify-content:center;margin-top:8px;">
+    <button id="btn12p" style="font-size:12px;padding:7px 20px;">▶ Play</button>
+    <button id="btn12r" style="font-size:12px;padding:7px 20px;border-color:#e05555;color:#e05555;">⏺ Record 1080p</button>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:6px;align-items:center;margin-top:10px;">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span style="font-size:10px;color:var(--color-text-tertiary);width:78px;text-align:right;">Speed</span>
+      <input type="range" id="orbSpeed" min="40" max="200" step="1" value="100" style="width:180px;">
+      <span id="orbSpeedVal" style="font-size:11px;color:var(--color-text-secondary);min-width:44px;">100%</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span style="font-size:10px;color:var(--color-text-tertiary);width:78px;text-align:right;">Glass index</span>
+      <input type="range" id="orbIor" min="110" max="200" step="1" value="150" style="width:180px;">
+      <span id="orbIorVal" style="font-size:11px;color:var(--color-text-secondary);min-width:44px;">1.50</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span style="font-size:10px;color:var(--color-text-tertiary);width:78px;text-align:right;">Dispersion</span>
+      <input type="range" id="orbDisp" min="0" max="200" step="1" value="100" style="width:180px;">
+      <span id="orbDispVal" style="font-size:11px;color:var(--color-text-secondary);min-width:44px;">100%</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span style="font-size:10px;color:var(--color-text-tertiary);width:78px;text-align:right;">Reflections</span>
+      <input type="range" id="orbLight" min="0" max="200" step="1" value="100" style="width:180px;">
+      <span id="orbLightVal" style="font-size:11px;color:var(--color-text-secondary);min-width:44px;">100%</span>
+    </div>
+  </div>
+  <div style="display:flex;gap:6px;justify-content:center;align-items:center;flex-wrap:wrap;margin-top:10px;">
+    <span style="font-size:10px;color:var(--color-text-tertiary);">Path:</span>
+    <button class="orbpath" data-mode="0" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">Roll in</button>
+    <button class="orbpath" data-mode="1" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">Rise from centre</button>
+  </div>
+</div>
+<div style="margin-bottom:14px;">
+  <p style="font-size:11px;font-weight:500;letter-spacing:.1em;color:var(--color-text-secondary);text-align:center;margin:0 0 6px;">CRYSTAL CLEAR WATER</p>
+  <canvas id="c13" width="3840" height="2160" style="display:block;width:100%;height:auto;border-radius:8px;border:.5px solid var(--color-border-tertiary);"></canvas>
+  <div style="display:flex;gap:8px;justify-content:center;margin-top:8px;">
+    <button id="btn13p" style="font-size:12px;padding:7px 20px;">▶ Play</button>
+    <button id="btn13r" style="font-size:12px;padding:7px 20px;border-color:#e05555;color:#e05555;">⏺ Record 1080p</button>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:6px;align-items:center;margin-top:10px;">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span style="font-size:10px;color:var(--color-text-tertiary);width:78px;text-align:right;">Speed</span>
+      <input type="range" id="chrSpeed" min="40" max="200" step="1" value="100" style="width:180px;">
+      <span id="chrSpeedVal" style="font-size:11px;color:var(--color-text-secondary);min-width:44px;">100%</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span style="font-size:10px;color:var(--color-text-tertiary);width:78px;text-align:right;">Surface</span>
+      <input type="range" id="chrStr" min="20" max="200" step="1" value="100" style="width:180px;">
+      <span id="chrStrVal" style="font-size:11px;color:var(--color-text-secondary);min-width:44px;">100%</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span style="font-size:10px;color:var(--color-text-tertiary);width:78px;text-align:right;">Reflections</span>
+      <input type="range" id="chrLight" min="0" max="200" step="1" value="100" style="width:180px;">
+      <span id="chrLightVal" style="font-size:11px;color:var(--color-text-secondary);min-width:44px;">100%</span>
+    </div>
+  </div>
+  <div style="display:flex;gap:6px;justify-content:center;align-items:center;flex-wrap:wrap;margin-top:10px;">
+    <span style="font-size:10px;color:var(--color-text-tertiary);">Flow:</span>
+    <button class="chrpath" data-mode="0" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">Pours in</button>
+    <button class="chrpath" data-mode="1" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">Flipped</button>
+  </div>
+</div>
 <p id="status" style="text-align:center;font-size:11px;color:var(--color-text-tertiary);margin:.4rem 0 .5rem;min-height:1.4em;">Display 4K · Shimmer 1280×720 · Records 1080p · frame-accurate WebCodecs export (real-time fallback)</p>
 </div>
 
@@ -522,6 +629,19 @@ const cube_dstC = mkc(RW, RH);   // cube assembly "B" scene — what the blocks 
 const recC10 = mkc(RW, RH), recCtx10 = recC10.getContext('2d');
 const rip_srcC = mkc(RW, RH);   // ripple "A" scene
 const rip_dstC = mkc(RW, RH);   // ripple "B" scene
+const recC11 = mkc(RW, RH), recCtx11 = recC11.getContext('2d');
+const cau_srcC = mkc(RW, RH);   // caustics "A" scene
+const cau_dstC = mkc(RW, RH);   // caustics "B" scene
+const recC12 = mkc(RW, RH), recCtx12 = recC12.getContext('2d');
+const orb_srcC = mkc(RW, RH), orb_dstC = mkc(RW, RH);   // glass orb A / B
+const recC13 = mkc(RW, RH), recCtx13 = recC13.getContext('2d');
+const chr_srcC = mkc(RW, RH), chr_dstC = mkc(RW, RH);   // liquid chrome A / B
+const CAU_RSCALE = 4;
+const CAU_RW2 = Math.round(RW / CAU_RSCALE), CAU_RH2 = Math.round(RH / CAU_RSCALE);
+const cau_smallC = mkc(CAU_RW2, CAU_RH2), cau_smallCx = cau_smallC.getContext('2d');   // refracted + lit overlay (alpha = how much it replaces the base)
+const cau_maskC  = mkc(CAU_RW2, CAU_RH2), cau_maskCx  = cau_maskC.getContext('2d');    // B-ness mask
+const cau_tmpC   = mkc(RW, RH), cau_tmpCx = cau_tmpC.getContext('2d');
+const cau_outBuf = new Uint8ClampedArray(CAU_RW2 * CAU_RH2 * 4), cau_mBuf = new Uint8ClampedArray(CAU_RW2 * CAU_RH2 * 4);
 
 // Reduced-res render buffer for ripple refraction — same reasoning as Cone
 // Refraction above: per-pixel trig is too costly at full 1080p/frame, so it
@@ -542,6 +662,9 @@ const c7 = document.getElementById('c7'), ctx7 = c7.getContext('2d');
 const c8 = document.getElementById('c8'), ctx8 = c8.getContext('2d');
 const c9 = document.getElementById('c9'), ctx9 = c9.getContext('2d');
 const c10 = document.getElementById('c10'), ctx10 = c10.getContext('2d');
+const c11 = document.getElementById('c11'), ctx11 = c11.getContext('2d');
+const c12 = document.getElementById('c12'), ctx12 = c12.getContext('2d');
+const c13 = document.getElementById('c13'), ctx13 = c13.getContext('2d');
 
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -3545,6 +3668,382 @@ function runRippleRefraction(onDone) {
   requestAnimationFrame(frm);
 }
 
+
+// ══════════════════════════════════════════════════════════════════════════
+// CAUSTICS — a rippling water front sweeps across. Both A and B are seen
+// through the moving surface: bent (with a little colour fringing) and lit by
+// drifting caustic light. The water calms behind the front, leaving a clean B.
+// The per-pixel field runs at CAU_RW2×CAU_RH2 and only where the water is active;
+// everything else is the full-resolution A and B composited normally, so the
+// image stays sharp and a transparent A or B holds out correctly.
+// ══════════════════════════════════════════════════════════════════════════
+function runCaustics(onDone) {
+  const sl$ = (id, d) => { const e = document.getElementById(id); return e ? parseFloat(e.value) : d; };
+  const fSpeed = sl$('cauSpeed', 100) / 100, REFR = sl$('cauRefr', 80) / 100, CAUS = sl$('cauCaus', 85) / 100, SIZE = sl$('cauSize', 100) / 100;
+  const dBtn = document.querySelector('.caudir.caudir-active'), tBtn = document.querySelector('.cautint.cautint-active');
+  const dirMode = dBtn ? dBtn.dataset.mode : 'centre', tintKey = tBtn ? tBtn.dataset.mode : 'day';
+  const TINT = { day: [235, 248, 255], teal: [120, 225, 235], gold: [255, 224, 150] }[tintKey];
+  const DURATION = 4.2 / fSpeed, BAND = 0.13, WAKE = 2.4, INT = 0.005;
+  const NW = CAU_RW2, NH = CAU_RH2, aspect = NW / NH, S = 7.2 / SIZE;
+  const ss = (a, b, v) => { v = v < a ? a : v > b ? b : v; v = (v - a) / (b - a); return v * v * (3 - 2 * v); };
+
+  const grab = c => { cau_tmpCx.clearRect(0, 0, RW, RH); const t = mkc(NW, NH), x = t.getContext('2d'); x.drawImage(c, 0, 0, NW, NH); return x.getImageData(0, 0, NW, NH).data; };
+  const IA = grab(cau_srcC), IB = grab(cau_dstC);
+  const tap = (img, fx, fy, ch) => {
+    fx = fx < 0 ? 0 : fx > NW - 1.001 ? NW - 1.001 : fx; fy = fy < 0 ? 0 : fy > NH - 1.001 ? NH - 1.001 : fy;
+    const x0 = fx | 0, y0 = fy | 0, tx = fx - x0, ty = fy - y0, i = (y0 * NW + x0) * 4 + ch;
+    const a = img[i], b = img[i + 4], c = img[i + NW * 4], d = img[i + NW * 4 + 4];
+    return (a + (b - a) * tx) * (1 - ty) + (c + (d - c) * tx) * ty;
+  };
+  const reach = dirMode === 'centre' ? 1.82 : 1.22;
+
+  function drawFrame(el) {
+    const p = Math.min(1, Math.max(0, el / DURATION));
+    const t = el * fSpeed * 0.9 + 21;
+    const pos = p * (reach + BAND * 1.2 + .04) - BAND * 1.2;
+    const gate = ss(0, .05, p) * (1 - ss(.9, 1, p));
+    const O = cau_outBuf, M = cau_mBuf;
+    for (let y = 0; y < NH; y++) {
+      const v = y / NH;
+      for (let x = 0; x < NW; x++) {
+        const u = x / NW, o = (y * NW + x) * 4;
+        // distance along the front (ragged, never a clean line or circle)
+        let q;
+        if (dirMode === 'down') q = v + .05 * Math.sin(u * 6.1 + 1.2) + .035 * Math.sin(u * 13 + v * 3) + .02 * Math.sin(u * 27 + v * 9 + 2);
+        else if (dirMode === 'right') q = u + .05 * Math.sin(v * 7.3 + .4) + .035 * Math.sin(v * 15 + u * 3) + .02 * Math.sin(v * 31 + u * 8 + 1);
+        else {
+          const ex = (u - .5) * aspect, ey = v - .5, ang = Math.atan2(ey, ex);
+          q = Math.hypot(ex, ey) / .78 * (1 + .13 * Math.sin(3 * ang + 1.3) + .09 * Math.sin(5 * ang + 4.1) + .05 * Math.sin(8 * ang + .7) + .025 * Math.sin(13 * ang + 2.2));
+        }
+        q += .02 * Math.sin(u * 19 + v * 11 + 0.6) + .012 * Math.sin(u * 43 - v * 37);
+        const d = pos - q;
+        const m = ss(-BAND * .55, BAND * .55, d);
+        const near = Math.exp(-(d * d) / (BAND * BAND * 1.1));
+        const behind = d > 0 ? Math.exp(-d * WAKE) : 0;
+        const ahead = d < 0 ? Math.exp(-d * d / (BAND * BAND * 5)) * .35 : 0;
+        const patch = .78 + .22 * Math.sin(u * 5.3 + v * 3.1 + t * .25) * Math.cos(v * 4.7 - u * 2.2 + t * .18);
+        const E = Math.max(near, behind * .8, ahead) * gate * patch;
+        const mv = m * 255;
+        M[o] = M[o + 1] = M[o + 2] = 0; M[o + 3] = mv;
+        if (E < .002) { O[o + 3] = 0; continue; }
+
+        // caustic + refraction field
+        const px = u * aspect * S + 250, py = v * S - 250;
+        let ix = px, iy = py, c = 1;
+        for (let n = 0; n < 5; n++) {
+          const tt = t * (1 - 3.5 / (n + 1)), nx = px + Math.cos(tt - ix) + Math.sin(tt + iy), ny = py + Math.sin(tt - iy) + Math.cos(tt + ix);
+          ix = nx; iy = ny;
+          c += 1 / (INT * Math.hypot(px / Math.sin(ix + tt), py / Math.cos(iy + tt)));
+        }
+        c /= 5; c = 1.17 - Math.pow(c, 1.4);
+        const val = Math.pow(Math.abs(c), 8), dx = ix - px, dy = iy - py;
+
+        const k = E * REFR * 22 * (NW / 448);               // pixels of bend (scaled to the working size)
+        const k1 = k, k2 = k * 1.08, k3 = k * 1.16;          // dispersion
+        const r = tap(IA, x + dx * k1, y + dy * k1, 0) * (1 - m) + tap(IB, x + dx * k1, y + dy * k1, 0) * m;
+        const g = tap(IA, x + dx * k2, y + dy * k2, 1) * (1 - m) + tap(IB, x + dx * k2, y + dy * k2, 1) * m;
+        const b = tap(IA, x + dx * k3, y + dy * k3, 2) * (1 - m) + tap(IB, x + dx * k3, y + dy * k3, 2) * m;
+        const a = tap(IA, x + dx * k2, y + dy * k2, 3) * (1 - m) + tap(IB, x + dx * k2, y + dy * k2, 3) * m;
+        const L = Math.min(1.4, val * 1.9) * E * CAUS * (.55 + .45 * m);
+        const sh = 1 - E * CAUS * .28 * (1 - Math.min(1, val * 2.5));
+        O[o]     = Math.min(255, (r * sh + TINT[0] * L * .55));
+        O[o + 1] = Math.min(255, (g * sh + TINT[1] * L * .55));
+        O[o + 2] = Math.min(255, (b * sh + TINT[2] * L * .55));
+        O[o + 3] = Math.min(1, E * 5) * a;                   // overlay fades out as the water calms, handing back to the sharp base
+      }
+    }
+    cau_smallCx.putImageData(new ImageData(O, NW, NH), 0, 0);
+    cau_maskCx.putImageData(new ImageData(M, NW, NH), 0, 0);
+
+    // base: full-res A, then full-res B through the (soft) mask, then the refracted overlay on top
+    recCtx11.clearRect(0, 0, RW, RH);
+    recCtx11.drawImage(cau_srcC, 0, 0);
+    cau_tmpCx.globalCompositeOperation = 'source-over';
+    cau_tmpCx.clearRect(0, 0, RW, RH); cau_tmpCx.drawImage(cau_dstC, 0, 0);
+    cau_tmpCx.globalCompositeOperation = 'destination-in';
+    cau_tmpCx.drawImage(cau_maskC, 0, 0, NW, NH, 0, 0, RW, RH);
+    cau_tmpCx.globalCompositeOperation = 'source-over';
+    // an opaque A under a transparent-B hole would show through; for an opaque A the mask blend is correct
+    recCtx11.drawImage(cau_tmpC, 0, 0);
+    recCtx11.drawImage(cau_smallC, 0, 0, NW, NH, 0, 0, RW, RH);
+    ctx11.clearRect(0, 0, W, H); ctx11.drawImage(recC11, 0, 0, W, H);
+  }
+
+  let el = 0, lastT = null;
+  function frm(ts) {
+    if (!lastT) lastT = ts;
+    const dt = Math.min((ts - lastT) / 1000, 0.05);
+    lastT = ts; el += dt;
+    if (el >= DURATION) {
+      recCtx11.clearRect(0, 0, RW, RH); recCtx11.drawImage(cau_dstC, 0, 0);
+      ctx11.clearRect(0, 0, W, H); ctx11.drawImage(recC11, 0, 0, W, H);
+      const reset = () => {
+        recCtx11.clearRect(0, 0, RW, RH); recCtx11.drawImage(cau_srcC, 0, 0);
+        ctx11.clearRect(0, 0, W, H); ctx11.drawImage(recC11, 0, 0, W, H);
+      };
+      onDone ? onDone(reset) : setTimeout(reset, 1600);
+      return;
+    }
+    drawFrame(el);
+    requestAnimationFrame(frm);
+  }
+  requestAnimationFrame(frm);
+}
+
+
+// ══════════════════════════════════════════════════════════════════════════
+// GLASS ORB and LIQUID CHROME — ray-traced / lit shader transitions.
+// One shared offscreen WebGL canvas renders each frame; the result is copied
+// into the same 2D canvases every other transition uses, so Record, the
+// frame-accurate export and transparent A / B behave identically.
+// Textures are uploaded straight (un-premultiplied) and the shaders output
+// premultiplied alpha, so a transparent A holds out and a transparent B
+// shows through the glass and chrome.
+// ══════════════════════════════════════════════════════════════════════════
+const GL_PRELUDE = `
+precision highp float;
+uniform sampler2D uA, uB; uniform vec2 uRes;
+uniform float uP, uStr, uLight, uMode, uDisp;
+const float TF = 0.3057, ZP = 3.4, CZ = 2.3;
+float ss(float a, float b, float x){ x = clamp((x-a)/(b-a), 0., 1.); return x*x*(3.-2.*x); }
+vec2 toTex(vec3 h){ return vec2(h.x/(ZP*TF*uRes.x/uRes.y)*.5+.5, h.y/(ZP*TF)*.5+.5); }
+float rect(vec2 q, vec2 w, float soft){ vec2 d = abs(q) - w; return 1. - smoothstep(0., soft, max(d.x, d.y)); }
+vec3 env(vec3 d, float rot){
+  float cr = cos(rot), sr = sin(rot); d = vec3(cr*d.x + sr*d.z, d.y, -sr*d.x + cr*d.z);
+  vec3 c = mix(vec3(.03,.04,.06), vec3(.30,.38,.50), d.y*.5+.5);
+  float f = max(-d.z, .12);
+  c += vec3(1.9,1.85,1.75) * rect(d.xy/f - vec2(-.55,.62), vec2(.24,.12), .12) * step(d.z, 0.);
+  c += vec3(1.1,1.5,2.0) * rect(d.xy/f - vec2(.85,-.05), vec2(.07,.55), .10) * step(d.z, 0.);
+  c += vec3(2.0,1.6,1.2) * rect(d.xy/f - vec2(.1,-.85), vec2(.40,.05), .08) * step(d.z, 0.);
+  return c;
+}
+vec2 h22(vec2 p){ p = vec2(dot(p,vec2(127.1,311.7)), dot(p,vec2(269.5,183.3))); return fract(sin(p)*43758.5453); }
+float h21(vec2 p){ return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453); }
+`;
+const GL_FS = {
+  orb: GL_PRELUDE + `float uIor_(){ return 1. + .5 * uStr; }
+// refract through the sphere for one index; returns (tex uv, path length, tir)
+vec3 envG(vec3 d, float rot){
+  float cr = cos(rot), sr = sin(rot); d = vec3(cr*d.x + sr*d.z, d.y, -sr*d.x + cr*d.z);
+  vec3 c = mix(vec3(.04,.06,.09), vec3(.34,.44,.58), d.y*.5+.5);
+  float f = max(-d.z, .12); vec2 q = d.xy / f; float fr = step(d.z, 0.);
+  vec2 w0 = q - vec2(-.55,.62);
+  float win = rect(w0, vec2(.32,.20), .10);
+  float bars = 1. - .9 * clamp(rect(w0, vec2(.012,.22), .012) + rect(w0, vec2(.34,.012), .012), 0., 1.);
+  c += vec3(2.7,2.6,2.45) * win * bars * fr;                                   // big window with a cross frame
+  c += vec3(1.2,1.6,2.1) * rect(q - vec2(.85,-.05), vec2(.07,.55), .10) * fr;  // cool strip light
+  c += vec3(2.0,1.6,1.2) * rect(q - vec2(.1,-.85), vec2(.40,.05), .08) * fr;   // warm floor bounce
+  c += vec3(1.4,1.5,1.7) * rect(q - vec2(.7,.55), vec2(.10,.07), .08) * fr;     // small fill panel
+  return c;
+}
+vec4 through(vec3 rd, vec3 C, float r, float ior){
+  vec3 oc = -C; float b = dot(oc, rd), c = dot(oc, oc) - r*r, h = max(b*b - c, 0.);
+  vec3 p = rd * (-b - sqrt(h)); vec3 n = normalize(p - C);
+  vec3 r1 = refract(rd, n, 1./ior);
+  float s = -2. * dot(p - C, r1); vec3 p2 = p + r1 * s, no = normalize(p2 - C);
+  vec3 r2 = refract(r1, -no, ior); float tir = 0.;
+  if (dot(r2, r2) < 1e-4) { r2 = reflect(r1, -no); tir = 1.; }
+  float z = max(r2.z, .06); vec3 hit = p2 + r2 * ((ZP - p2.z) / z);
+  return vec4(toTex(hit), s, tir);
+}
+void main(){
+  vec2 uv = gl_FragCoord.xy / uRes; float asp = uRes.x / uRes.y;
+  vec3 rd = normalize(vec3((uv*2.-1.) * vec2(asp, 1.) * TF, 1.));
+  vec3 bg = rd / rd.z * ZP;
+  vec2 tA = toTex(bg);
+  vec4 tA4 = texture2D(uA, tA); vec3 colA = tA4.rgb; float aA = tA4.a;
+
+  float p = uP;
+  float gate = 1. - ss(.80, 1., p);                      // glass clears at the end
+  float grow = pow(ss(.04, .88, p), 1.7);
+  float r = .16 + (1.95 - .16) * grow;
+  vec2 pos;
+  if (uMode < .5) {                                      // roll in from the lower left
+    float e = ss(0., .62, p);
+    pos = vec2(mix(-1.75, 0., e), mix(-.62, 0., e) + .16 * abs(sin(p * 9.4)) * (1. - ss(.25, .62, p)));
+  } else { pos = vec2(0.); r = max(1.95 * grow, .001); }          // rise from the centre
+  vec3 C = vec3(pos, CZ);
+
+  // light on the surface behind: shadow + caustic
+  vec3 L = normalize(vec3(-.30, .50, -.80));
+  vec3 sc = C + (-L) * ((ZP - CZ) / -L.z);
+  float dd = length(bg.xy - sc.xy);
+  float shadow = (1. - ss(r * .78, r * 1.18, dd)) * .55 * gate * smoothstep(0., .03, r);
+  float caust  = exp(-pow(dd / (r * .38), 2.)) * 1.5 * gate * smoothstep(.05, .35, r);
+  colA = colA * (1. - shadow) + vec3(1., .96, .88) * caust * .9 * uLight * colA * 1.8;
+
+  // orb silhouette coverage
+  float dperp = length(C - rd * dot(C, rd));
+  float aaw = 2.5 / uRes.y * 2.3 * TF * 2.;
+  float cover = clamp((r - dperp) / aaw + .5, 0., 1.) * smoothstep(0., .03, r);
+  vec3 col = colA; float aOut = aA;
+  if (cover > 0.) {
+    float k = 1. + (uIor_() - 1.) * gate;
+    float dv = uDisp * .035 * gate;
+    vec4 tr = through(rd, C, r, k - dv), tg = through(rd, C, r, k), tb = through(rd, C, r, k + dv);
+    vec3 refr = vec3(texture2D(uB, tr.xy).r, texture2D(uB, tg.xy).g, texture2D(uB, tb.xy).b);
+    // thickness tint: faint cyan-green body colour
+    refr *= exp(-tg.z * vec3(.10, .035, .05) * gate);
+    // entry shading
+    vec3 oc = -C; float b = dot(oc, rd), c = dot(oc, oc) - r*r, h = max(b*b - c, 0.);
+    vec3 pe = rd * (-b - sqrt(h)); vec3 n = normalize(pe - C);
+    float cost = clamp(dot(-rd, n), 0., 1.);
+    float F0 = pow((k - 1.) / (k + 1.), 2.);
+    float F = F0 + (1. - F0) * pow(1. - cost, 3.2) + .05 * gate;
+    vec3 R = reflect(rd, n);
+    vec3 e = envG(R, p * 1.6) * uLight;
+    refr = refr * (1. + .10 * gate) + vec3(.02, .035, .045) * gate;
+    refr *= 1. - .42 * pow(1. - cost, 3.) * gate;           // darker thick edge
+    vec3 lit = mix(refr, e, clamp(F * 1.1 + .05 * gate, 0., .92));
+    vec2 sp = (pe - C).xy / r;
+    vec2 fo = sp - vec2(.34, -.42);
+    vec3 inner = vec3(1., .93, .8) * exp(-dot(fo, fo) / .09) * .55 * gate * uLight;
+    inner += vec3(.55, .8, 1.) * pow(1. - cost, 2.) * .12 * gate;
+    vec3 rb = .5 + .5 * cos(6.2832 * (pow(1. - cost, 1.5) * .9 + vec3(0., .33, .67)));
+    lit += inner + rb * pow(1. - cost, 4.) * .55 * uDisp * gate * uLight;
+    lit += vec3(.8, .9, 1.) * pow(max(dot(R, normalize(vec3(.5, -.5, -.7))), 0.), 140.) * .7 * uLight * gate;
+    float aB = texture2D(uB, tg.xy).a;
+    float specA = pow(max(dot(R, normalize(vec3(-.45,.62,-.64))), 0.), 260.) * 2.2 * uLight * gate;
+    float aLit = clamp(aB + (1. - aB) * clamp(max(clamp(F * 1.1 + .05 * gate, 0., .92), specA), 0., 1.), 0., 1.);
+    lit += vec3(1., .98, .94) * pow(max(dot(R, normalize(vec3(-.45,.62,-.64))), 0.), 260.) * 2.2 * uLight * gate;   // key glint
+    lit += tg.w * .0;
+    col = mix(colA, lit, cover); aOut = mix(aA, aLit, cover);
+  }
+  gl_FragColor = vec4(col * aOut, aOut);
+}`,
+  chrome: GL_PRELUDE + `
+float field(vec2 x){
+  x += .14 * vec2(sin(x.y * 3.1 + uP * 2.2), sin(x.x * 2.7 - uP * 1.7));
+  vec2 i0 = floor(x); float F = 0.;
+  for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
+    vec2 id = i0 + vec2(float(i), float(j));
+    vec2 c = id + .2 + .6 * h22(id);
+    float st = h21(id) * .40, g = ss(st, st + .5, uP);
+    float r = 1.4 * g * (.85 + .3 * h21(id + 3.));
+    vec2 dv = x - c; float k = max(1. - dot(dv, dv) / (r * r + 1e-4), 0.);
+    F += k * k * k;
+  }
+  return F;
+}
+void main(){
+  vec2 uv = gl_FragCoord.xy / uRes; float asp = uRes.x / uRes.y, p = uP;
+  vec2 x = (uv - .5) * vec2(asp, 1.) * 1.55;
+  if (uMode > .5) x = vec2(x.x, -x.y);
+  float gate = 1. - ss(.78, 1., p);
+  float F = field(x), e = .02;
+  float gx = field(x + vec2(e, 0.)) - field(x - vec2(e, 0.)), gy = field(x + vec2(0., e)) - field(x - vec2(0., e));
+  vec2 g = vec2(gx, gy) / (2. * e);
+  float inside = max(smoothstep(.27, .33, F), ss(.84, .92, p));
+  vec4 tA4 = texture2D(uA, uv); vec3 colA = tA4.rgb; float aA = tA4.a;
+  float sh = ss(.0, .27, F) * (1. - inside) * .55;                       // contact shadow just outside the blob
+  colA *= 1. - sh;
+  float str = uStr * gate;
+  vec2 wob = .035 * vec2(sin(x.x * 9. + p * 7.), cos(x.y * 8. - p * 6.));
+  vec3 n = normalize(vec3(-g * .22 * str - wob * str, 1.));
+  float thick = clamp(F, 0., 1.4);
+  vec2 uvB = uv + n.xy * (.09 * thick) * str;
+  vec4 tB4 = texture2D(uB, uvB); vec3 colB = tB4.rgb; float aB = tB4.a;
+  vec3 R = reflect(vec3(0., 0., 1.), n);
+  vec3 chrome = (env(R, p * 1.2 + x.x * .3) * 1.15 + vec3(.06, .08, .1)) * vec3(.93, .97, 1.) * uLight;
+  chrome += pow(max(dot(R, normalize(vec3(-.45,.62,-.64))), 0.), 90.) * 1.8 * uLight;
+  float Fres = .1 + .9 * pow(1. - n.z, 2.5);
+  float chromeAmt = clamp(.95 * ss(.22, .6, F) * gate, 0., 1.) * clamp(.72 + Fres, 0., 1.);
+  vec3 lit = mix(colB, chrome, chromeAmt);
+  float rim = exp(-pow((F - .32) / .10, 2.)) * gate;
+  lit += vec3(.9, .97, 1.) * rim * .75 * uLight;
+  float aLit = clamp(mix(aB, 1., chromeAmt) + rim * .75, 0., 1.);
+  float aOut = mix(aA, aLit, inside);
+  gl_FragColor = vec4(mix(colA, lit, inside) * aOut, aOut);
+}`,
+};
+const GLB = { gl: null, cv: null, ok: null, progs: {} };
+function glBridge() {
+  if (GLB.ok === true) return GLB;
+  if (GLB.ok === false) return null;
+  try {
+    const cv = document.createElement('canvas'); cv.width = RW; cv.height = RH;
+    const gl = cv.getContext('webgl', { alpha: true, premultipliedAlpha: true, antialias: false, preserveDrawingBuffer: true });
+    if (!gl) throw new Error('no webgl');
+    const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+    cv.addEventListener('webglcontextlost', e => { e.preventDefault(); GLB.ok = null; GLB.progs = {}; });
+    GLB.gl = gl; GLB.cv = cv; GLB.ok = true; GLB.progs = {};
+    return GLB;
+  } catch (e) { GLB.ok = false; return null; }
+}
+function glProgram(key) {
+  if (GLB.progs[key]) return GLB.progs[key];
+  const gl = GLB.gl;
+  const sh = (t, src) => { const o = gl.createShader(t); gl.shaderSource(o, src); gl.compileShader(o); return gl.getShaderParameter(o, gl.COMPILE_STATUS) ? o : (setStatus('Shader error (' + key + '): ' + (gl.getShaderInfoLog(o) || '').slice(0, 140)), null); };
+  const vs = sh(gl.VERTEX_SHADER, 'attribute vec2 a; void main(){ gl_Position = vec4(a, 0., 1.); }');
+  const fs = sh(gl.FRAGMENT_SHADER, GL_FS[key]);
+  if (!vs || !fs) return null;
+  const pr = gl.createProgram(); gl.attachShader(pr, vs); gl.attachShader(pr, fs); gl.bindAttribLocation(pr, 0, 'a'); gl.linkProgram(pr);
+  if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) { setStatus('Shader link error (' + key + ')'); return null; }
+  return (GLB.progs[key] = pr);
+}
+function glTex(gl, unit, canvas) {
+  const t = gl.createTexture(); gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  return t;
+}
+function runGLTransition(cfg, onDone) {
+  const g = glBridge(), prog = g && glProgram(cfg.key);
+  if (!prog) {
+    if (!g) setStatus('This transition needs WebGL, which is not available in this browser.');
+    if (onDone) onDone(() => {});
+    return;
+  }
+  const gl = g.gl;
+  gl.useProgram(prog);
+  const texA = glTex(gl, 0, cfg.src), texB = glTex(gl, 1, cfg.dst);
+  const U = n => gl.getUniformLocation(prog, n);
+  const P = cfg.params(), DURATION = cfg.base / P.speed;
+  gl.uniform1i(U('uA'), 0); gl.uniform1i(U('uB'), 1); gl.uniform2f(U('uRes'), RW, RH);
+  gl.uniform1f(U('uStr'), P.str); gl.uniform1f(U('uDisp'), P.disp); gl.uniform1f(U('uLight'), P.light); gl.uniform1f(U('uMode'), P.mode);
+  function drawFrame(el) {
+    gl.useProgram(prog);
+    gl.uniform1f(U('uP'), Math.min(1, Math.max(0, el / DURATION)));
+    gl.viewport(0, 0, RW, RH); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT); gl.drawArrays(gl.TRIANGLES, 0, 3);
+    cfg.rec.clearRect(0, 0, RW, RH); cfg.rec.drawImage(g.cv, 0, 0);
+    cfg.disp.clearRect(0, 0, W, H); cfg.disp.drawImage(cfg.recCanvas, 0, 0, W, H);
+  }
+  let el = 0, lastT = null;
+  function frm(ts) {
+    if (!lastT) lastT = ts;
+    const dt = Math.min((ts - lastT) / 1000, 0.05);
+    lastT = ts; el += dt;
+    if (el >= DURATION) {
+      cfg.rec.clearRect(0, 0, RW, RH); cfg.rec.drawImage(cfg.dst, 0, 0);
+      cfg.disp.clearRect(0, 0, W, H); cfg.disp.drawImage(cfg.recCanvas, 0, 0, W, H);
+      try { gl.deleteTexture(texA); gl.deleteTexture(texB); } catch (e) {}
+      const reset = () => {
+        cfg.rec.clearRect(0, 0, RW, RH); cfg.rec.drawImage(cfg.src, 0, 0);
+        cfg.disp.clearRect(0, 0, W, H); cfg.disp.drawImage(cfg.recCanvas, 0, 0, W, H);
+      };
+      onDone ? onDone(reset) : setTimeout(reset, 1600);
+      return;
+    }
+    drawFrame(el);
+    requestAnimationFrame(frm);
+  }
+  requestAnimationFrame(frm);
+}
+const glSl = (id, d) => { const e = document.getElementById(id); return e ? parseFloat(e.value) : d; };
+const glMode = cls => { const b = document.querySelector('.' + cls + '.' + cls + '-active'); return b ? parseFloat(b.dataset.mode) : 0; };
+function runGlassOrb(onDone) {
+  runGLTransition({ key: 'orb', src: orb_srcC, dst: orb_dstC, rec: recCtx12, recCanvas: recC12, disp: ctx12, base: 4.4,
+    params: () => ({ speed: glSl('orbSpeed', 100) / 100, str: (glSl('orbIor', 150) / 100 - 1) / 0.5, disp: glSl('orbDisp', 100) / 100, light: glSl('orbLight', 100) / 100, mode: glMode('orbpath') }) }, onDone);
+}
+function runLiquidChrome(onDone) {
+  runGLTransition({ key: 'chrome', src: chr_srcC, dst: chr_dstC, rec: recCtx13, recCanvas: recC13, disp: ctx13, base: 4.4,
+    params: () => ({ speed: glSl('chrSpeed', 100) / 100, str: glSl('chrStr', 100) / 100, disp: 1, light: glSl('chrLight', 100) / 100, mode: glMode('chrpath') }) }, onDone);
+}
+
 // ══════════════════════════════════════════════════════════════════════════
 // SECTION 6 · TRANSITIONS REGISTRY
 // ─────────────────────────────────────────────────────────────────────────
@@ -3648,6 +4147,33 @@ const TRANSITIONS = {
     recordFilename: 'ripple-refraction',
     playBtnId:      'btn10p',
     recBtnId:       'btn10r',
+    padSecs:        0,
+    running:        false,
+  },
+  caustics: {
+    runFn:          runCaustics,
+    recCanvas:      recC11,
+    recordFilename: 'caustics',
+    playBtnId:      'btn11p',
+    recBtnId:       'btn11r',
+    padSecs:        0,
+    running:        false,
+  },
+  glassOrb: {
+    runFn:          runGlassOrb,
+    recCanvas:      recC12,
+    recordFilename: 'glass-orb',
+    playBtnId:      'btn12p',
+    recBtnId:       'btn12r',
+    padSecs:        0,
+    running:        false,
+  },
+  liquidChrome: {
+    runFn:          runLiquidChrome,
+    recCanvas:      recC13,
+    recordFilename: 'crystal-clear-water',
+    playBtnId:      'btn13p',
+    recBtnId:       'btn13r',
     padSecs:        0,
     running:        false,
   },
@@ -4204,6 +4730,32 @@ function registerTransition(key) {
   document.head.appendChild(styleEl);
 })();
 
+// Wire the Caustics pickers — front direction (default From centre) and light colour (default Daylight).
+(function() {
+  const style = document.createElement('style');
+  style.textContent = '.caudir.caudir-active, .cautint.cautint-active { border-color: var(--color-text-primary) !important; color: var(--color-text-primary) !important; }';
+  document.head.appendChild(style);
+  [['caudir', 'centre'], ['cautint', 'day']].forEach(([cls, def]) => {
+    const btns = Array.from(document.querySelectorAll('.' + cls));
+    const on = b => { btns.forEach(x => { x.classList.remove(cls + '-active'); x.style.borderColor = ''; x.style.color = ''; }); b.classList.add(cls + '-active'); };
+    on(btns.find(b => b.dataset.mode === def) || btns[0]);
+    btns.forEach(btn => btn.addEventListener('click', () => { if (TRANSITIONS.caustics.running) return; on(btn); }));
+  });
+})();
+
+// Wire the Glass Orb / Liquid Chrome pickers (default: first option).
+(function() {
+  const style = document.createElement('style');
+  style.textContent = '.orbpath.orbpath-active, .chrpath.chrpath-active { border-color: var(--color-text-primary) !important; color: var(--color-text-primary) !important; }';
+  document.head.appendChild(style);
+  [['orbpath', 'glassOrb'], ['chrpath', 'liquidChrome']].forEach(([cls, key]) => {
+    const btns = Array.from(document.querySelectorAll('.' + cls));
+    const on = b => { btns.forEach(x => { x.classList.remove(cls + '-active'); x.style.borderColor = ''; x.style.color = ''; }); b.classList.add(cls + '-active'); };
+    on(btns[0]);
+    btns.forEach(btn => btn.addEventListener('click', () => { if (TRANSITIONS[key].running) return; on(btn); }));
+  });
+})();
+
 // Wire page peel angle slider — runPagePeel reads its value directly at
 // play-time. This also drives the little compass arrow next to it, and
 // replaces the native drag behaviour with a wrap-around one: a stock
@@ -4280,6 +4832,10 @@ function registerTransition(key) {
   wire('ripLinger',   'ripLingerVal',   '%');
   wire('ripAngle',    'ripAngleVal',    '°');
   wire('ripDrop',     'ripDropVal',     '%');
+  wire('orbSpeed', 'orbSpeedVal', '%'); wire('orbDisp', 'orbDispVal', '%'); wire('orbLight', 'orbLightVal', '%');
+  wire('chrSpeed', 'chrSpeedVal', '%'); wire('chrStr', 'chrStrVal', '%'); wire('chrLight', 'chrLightVal', '%');
+  { const sl = document.getElementById('orbIor'), lb = document.getElementById('orbIorVal'); const paint = () => { lb.textContent = (sl.value / 100).toFixed(2); }; sl.addEventListener('input', paint); paint(); }
+  wire('cauSpeed', 'cauSpeedVal', '%'); wire('cauRefr', 'cauRefrVal', '%'); wire('cauCaus', 'cauCausVal', '%'); wire('cauSize', 'cauSizeVal', '%');
   wire('crumbleChunkSize', 'crumbleChunkSizeVal', 'px');
   wire('crumbleChaos',     'crumbleChaosVal',     '%');
   wire('crumbleGravity',   'crumbleGravityVal',   '%');
@@ -4340,6 +4896,10 @@ function registerTransition(key) {
   watchGroup('.cgb', b => b.dataset.mode === 'ABV');         // default: AB — Bands
   watchGroup('.cubemode', b => b.dataset.mode === 'swarm');   // default: Swarm
   watchGroup('.ripgb', b => b.dataset.mode === 'A');         // default: A — Source
+  watchGroup('.caudir', b => b.dataset.mode === 'centre');   // default: From centre
+  watchGroup('.cautint', b => b.dataset.mode === 'day');     // default: Daylight
+  watchGroup('.orbpath', b => b.dataset.mode === '0');       // default: Roll in
+  watchGroup('.chrpath', b => b.dataset.mode === '0');       // default: Pours in
 })();
 
 Object.keys(TRANSITIONS).forEach(registerTransition);
@@ -4373,6 +4933,12 @@ drawDefaultA (cube_srcC.getContext('2d'), RW, RH);
 drawDefaultB (cube_dstC.getContext('2d'), RW, RH);
 drawDefaultA (rip_srcC.getContext('2d'), RW, RH);
 drawDefaultB (rip_dstC.getContext('2d'), RW, RH);
+drawDefaultA (cau_srcC.getContext('2d'), RW, RH);
+drawDefaultB (cau_dstC.getContext('2d'), RW, RH);
+drawDefaultA (orb_srcC.getContext('2d'), RW, RH);
+drawDefaultB (orb_dstC.getContext('2d'), RW, RH);
+drawDefaultA (chr_srcC.getContext('2d'), RW, RH);
+drawDefaultB (chr_dstC.getContext('2d'), RW, RH);
 
 // Page peel's fixed "back of paper" texture — plain and unrelated to A/B,
 // same reasoning as real paper: the back looks the same regardless of
@@ -4397,6 +4963,9 @@ recCtx7.drawImage(peel_srcC, 0, 0); ctx7.drawImage(recC7, 0, 0, W, H);
 recCtx8.drawImage(crumble_srcC, 0, 0); ctx8.drawImage(recC8, 0, 0, W, H);
 recCtx9.drawImage(cube_srcC, 0, 0); ctx9.drawImage(recC9, 0, 0, W, H);
 recCtx10.drawImage(rip_srcC, 0, 0); ctx10.drawImage(recC10, 0, 0, W, H);
+recCtx11.drawImage(cau_srcC, 0, 0); ctx11.drawImage(recC11, 0, 0, W, H);
+recCtx12.drawImage(orb_srcC, 0, 0); ctx12.drawImage(recC12, 0, 0, W, H);
+recCtx13.drawImage(chr_srcC, 0, 0); ctx13.drawImage(recC13, 0, 0, W, H);
 
 // ── File inputs — A = source (all transitions), B = destination (all transitions) ──
 //
@@ -4417,6 +4986,9 @@ function refreshAllIdle() {
   if (!TRANSITIONS.crumble.running)  { recCtx8.clearRect(0,0,RW,RH); recCtx8.drawImage(crumble_srcC, 0,0); ctx8.clearRect(0,0,W,H); ctx8.drawImage(recC8,0,0,W,H); }
   if (!TRANSITIONS.cubeAssembly.running) { recCtx9.clearRect(0,0,RW,RH); recCtx9.drawImage(cube_srcC, 0,0); ctx9.clearRect(0,0,W,H); ctx9.drawImage(recC9,0,0,W,H); }
   if (!TRANSITIONS.rippleRefraction.running) { recCtx10.clearRect(0,0,RW,RH); recCtx10.drawImage(rip_srcC, 0,0); ctx10.clearRect(0,0,W,H); ctx10.drawImage(recC10,0,0,W,H); }
+  if (!TRANSITIONS.caustics.running) { recCtx11.clearRect(0,0,RW,RH); recCtx11.drawImage(cau_srcC, 0,0); ctx11.clearRect(0,0,W,H); ctx11.drawImage(recC11,0,0,W,H); }
+  if (!TRANSITIONS.glassOrb.running) { recCtx12.clearRect(0,0,RW,RH); recCtx12.drawImage(orb_srcC, 0,0); ctx12.clearRect(0,0,W,H); ctx12.drawImage(recC12,0,0,W,H); }
+  if (!TRANSITIONS.liquidChrome.running) { recCtx13.clearRect(0,0,RW,RH); recCtx13.drawImage(chr_srcC, 0,0); ctx13.clearRect(0,0,W,H); ctx13.drawImage(recC13,0,0,W,H); }
 }
 
 document.getElementById('fA').addEventListener('change', function() {
@@ -4424,7 +4996,7 @@ document.getElementById('fA').addEventListener('change', function() {
   loadFromFile(this.files[0], img => {
     // Paint into all source canvases at their respective resolutions
     [milkC, trimC].forEach(c => drawCover(c.getContext('2d'), img, W,  H));
-    [bub_srcC, par_srcC, td_srcC, cone_srcC, peel_srcC, crumble_srcC, cube_srcC, rip_srcC].forEach(c => drawCover(c.getContext('2d'), img, RW, RH));
+    [bub_srcC, par_srcC, td_srcC, cone_srcC, peel_srcC, crumble_srcC, cube_srcC, rip_srcC, cau_srcC, orb_srcC, chr_srcC].forEach(c => drawCover(c.getContext('2d'), img, RW, RH));
     refreshAllIdle();
     setLbl('lblA', this.files[0].name);
     aIsTransparent = false;
@@ -4436,7 +5008,7 @@ document.getElementById('fB').addEventListener('change', function() {
   loadFromFile(this.files[0], img => {
     // Paint into all destination canvases at their respective resolutions
     [butC, talC].forEach(c => drawCover(c.getContext('2d'), img, W,  H));
-    [bub_dstC, par_dstC, td_dstC, cone_dstC, peel_dstC, crumble_dstC, cube_dstC, rip_dstC].forEach(c => drawCover(c.getContext('2d'), img, RW, RH));
+    [bub_dstC, par_dstC, td_dstC, cone_dstC, peel_dstC, crumble_dstC, cube_dstC, rip_dstC, cau_dstC, orb_dstC, chr_dstC].forEach(c => drawCover(c.getContext('2d'), img, RW, RH));
     setLbl('lblB', this.files[0].name);
     bIsTransparent = false;
   });
@@ -4476,7 +5048,7 @@ let aIsTransparent = false, bIsTransparent = false;
 function setSlotTransparent(which) {
   if (which === 'A') {
     [milkC, trimC].forEach(c => c.getContext('2d').clearRect(0, 0, c.width, c.height));
-    [bub_srcC, par_srcC, td_srcC, cone_srcC, peel_srcC, crumble_srcC, cube_srcC, rip_srcC].forEach(c => c.getContext('2d').clearRect(0, 0, RW, RH));
+    [bub_srcC, par_srcC, td_srcC, cone_srcC, peel_srcC, crumble_srcC, cube_srcC, rip_srcC, cau_srcC, orb_srcC, chr_srcC].forEach(c => c.getContext('2d').clearRect(0, 0, RW, RH));
     refreshAllIdle();
     document.getElementById('fA').value = '';
     const el = document.getElementById('lblA');
@@ -4484,7 +5056,7 @@ function setSlotTransparent(which) {
     aIsTransparent = true;
   } else {
     [butC, talC].forEach(c => c.getContext('2d').clearRect(0, 0, c.width, c.height));
-    [bub_dstC, par_dstC, td_dstC, cone_dstC, peel_dstC, crumble_dstC, cube_dstC, rip_dstC].forEach(c => c.getContext('2d').clearRect(0, 0, RW, RH));
+    [bub_dstC, par_dstC, td_dstC, cone_dstC, peel_dstC, crumble_dstC, cube_dstC, rip_dstC, cau_dstC, orb_dstC, chr_dstC].forEach(c => c.getContext('2d').clearRect(0, 0, RW, RH));
     document.getElementById('fB').value = '';
     const el = document.getElementById('lblB');
     el.textContent = '◱ Transparent'; el.style.color = '#4a9e5c';
@@ -4507,11 +5079,11 @@ document.getElementById('alphaWarnClose').addEventListener('click', () => {
 // every transition's own markup, canvas and buttons are untouched.
 // ══════════════════════════════════════════════════════════════════════════
 (function initGallery() {
-  const KEYS  = ['splash','solidify','bubbles','particles','tileDrop','coneRefraction','pagePeel','crumble','cubeAssembly','rippleRefraction'];
-  const SLUGS = ['milk-butter','trimmings-tallow','bubbles','particles','tile-drop','cone-refraction','page-peel','crumble','cube-assembly','ripple-refraction'];
+  const KEYS  = ['splash','solidify','bubbles','particles','tileDrop','coneRefraction','pagePeel','crumble','cubeAssembly','rippleRefraction','caustics','glassOrb','liquidChrome'];
+  const SLUGS = ['milk-butter','trimmings-tallow','bubbles','particles','tile-drop','cone-refraction','page-peel','crumble','cube-assembly','ripple-refraction','caustics','glass-orb','crystal-clear-water'];
   const PAIRS = [[milkC, butC], [trimC, talC], [bub_srcC, bub_dstC], [par_srcC, par_dstC], [td_srcC, td_dstC],
-                 [cone_srcC, cone_dstC], [peel_srcC, peel_dstC], [crumble_srcC, crumble_dstC], [cube_srcC, cube_dstC], [rip_srcC, rip_dstC]];
-  const NOTES = ['', '', '', '', 'Gentle / Cranked', 'Four glass modes', 'Adjustable angle', '', 'Five modes', 'Pond view'];
+                 [cone_srcC, cone_dstC], [peel_srcC, peel_dstC], [crumble_srcC, crumble_dstC], [cube_srcC, cube_dstC], [rip_srcC, rip_dstC], [cau_srcC, cau_dstC], [orb_srcC, orb_dstC], [chr_srcC, chr_dstC]];
+  const NOTES = ['', '', '', '', 'Gentle / Cranked', 'Four glass modes', 'Adjustable angle', '', 'Five modes', 'Pond view', 'Refracting water', 'Ray-traced glass', 'Clear water'];
 
   const anyRunning = () => KEYS.some(k => TRANSITIONS[k].running);
   let view = 'grid';
@@ -4572,11 +5144,36 @@ document.getElementById('alphaWarnClose').addEventListener('click', () => {
     back(); x.drawImage(A, 0, 0, w, h);
     const R = rng(1000 + i * 77);
     const reveal = (pathFn) => { x.save(); x.beginPath(); pathFn(); x.clip(); back(); x.drawImage(B, 0, 0, w, h); x.restore(); };
-    if (i < 2 || i === 6 || i === 9) {
+    if (i < 2 || i === 6 || i === 9 || i === 10 || i === 11 || i === 12) {
       if (i === 6) {                                              // page peel: B left behind, paper curling off along a diagonal
         reveal(() => { x.moveTo(w * 0.42, 0); x.lineTo(w, 0); x.lineTo(w, h); x.lineTo(w * 0.05, h); x.closePath(); });
         const gr = x.createLinearGradient(w * 0.2, 0, w * 0.5, 0); gr.addColorStop(0, '#9a9a94'); gr.addColorStop(.35, '#f1efe6'); gr.addColorStop(1, '#bdbab0');
         x.fillStyle = gr; x.beginPath(); x.moveTo(w * 0.42, 0); x.lineTo(w * 0.05, h); x.lineTo(w * 0.2, h); x.lineTo(w * 0.52, 0); x.closePath(); x.fill();
+      } else if (i === 10) {                                      // caustics: ragged water front with light webs along its edge
+        const rr = (a, k) => k * (1 + .13 * Math.sin(3 * a + 1.3) + .09 * Math.sin(5 * a + 4.1) + .05 * Math.sin(8 * a + .7));
+        const blob = k => { for (let n = 0; n <= 90; n++) { const a = n / 90 * 6.2832, r = rr(a, k); const X = w * .5 + Math.cos(a) * r * w * .56, Y = h * .5 + Math.sin(a) * r * h * .56; n ? x.lineTo(X, Y) : x.moveTo(X, Y); } x.closePath(); };
+        reveal(() => blob(.78));
+        x.lineWidth = 1.5; for (let j = 0; j < 22; j++) {
+          const k = .66 + R() * .26, o = R() * 6.28, sp = .5 + R() * .7; x.strokeStyle = 'rgba(210,245,255,' + (.25 + R() * .4) + ')'; x.beginPath();
+          for (let n = 0; n <= 24; n++) { const a = o + n / 24 * sp, r = rr(a, k + .012 * Math.sin(n * .35 + j)); const X = w * .5 + Math.cos(a) * r * w * .56, Y = h * .5 + Math.sin(a) * r * h * .56; n ? x.lineTo(X, Y) : x.moveTo(X, Y); } x.stroke();
+        }
+      } else if (i === 11) {                                      // glass orb: a lit sphere on A showing B through it
+        x.fillStyle = 'rgba(0,0,0,.35)'; x.beginPath(); x.ellipse(w * .53, h * .87, w * .22, h * .05, 0, 0, 7); x.fill();
+        reveal(() => { x.arc(w * .5, h * .5, h * .36, 0, 7); });
+        const gr = x.createRadialGradient(w * .42, h * .38, 0, w * .5, h * .5, h * .38);
+        gr.addColorStop(0, 'rgba(255,255,255,.5)'); gr.addColorStop(.25, 'rgba(255,255,255,0)'); gr.addColorStop(.8, 'rgba(0,0,0,0)'); gr.addColorStop(1, 'rgba(0,0,0,.45)');
+        x.fillStyle = gr; x.beginPath(); x.arc(w * .5, h * .5, h * .36, 0, 7); x.fill();
+        x.strokeStyle = 'rgba(220,245,255,.7)'; x.lineWidth = 2; x.stroke();
+        x.fillStyle = 'rgba(255,255,255,.92)'; x.beginPath(); x.ellipse(w * .4, h * .33, w * .035, h * .055, -.6, 0, 7); x.fill();
+      } else if (i === 12) {                                      // liquid chrome: merged mirror blobs
+        const blob = () => { x.moveTo(w * .38 + h * .3, h * .45); x.arc(w * .38, h * .45, h * .3, 0, 7); x.moveTo(w * .62 + h * .27, h * .55); x.arc(w * .62, h * .55, h * .27, 0, 7); x.moveTo(w * .5 + h * .22, h * .5); x.arc(w * .5, h * .5, h * .22, 0, 7); };
+        x.strokeStyle = 'rgba(230,245,255,.8)'; x.lineWidth = 7; x.beginPath(); blob(); x.stroke();   // outer rim only: the fill below covers the inner overlaps
+        reveal(blob);
+        x.save(); x.beginPath(); blob(); x.clip();
+        const lg = x.createLinearGradient(0, 0, w, h); lg.addColorStop(0, 'rgba(10,18,30,.75)'); lg.addColorStop(.35, 'rgba(150,175,200,.65)'); lg.addColorStop(.5, 'rgba(255,255,255,.8)'); lg.addColorStop(.7, 'rgba(40,60,85,.7)'); lg.addColorStop(1, 'rgba(15,25,40,.75)');
+        x.fillStyle = lg; x.fillRect(0, 0, w, h);
+        x.strokeStyle = 'rgba(255,255,255,.85)'; x.lineWidth = 3; x.beginPath(); x.moveTo(w * .22, h * .3); x.quadraticCurveTo(w * .4, h * .2, w * .55, h * .32); x.stroke();
+        x.restore();
       } else if (i === 9) {                                       // ripple: rings of an oblique pond
         reveal(() => { x.ellipse(w * 0.5, h * 0.72, w * 0.62, h * 0.4, 0, 0, 7); });
         x.lineWidth = 2; for (let k = 1; k <= 5; k++) { x.strokeStyle = 'rgba(255,255,255,' + (0.5 - k * 0.07) + ')'; x.beginPath(); x.ellipse(w * 0.5, h * 0.72, w * (0.1 + k * 0.11), h * (0.04 + k * 0.07), 0, 0, 7); x.stroke(); }
