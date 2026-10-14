@@ -516,6 +516,31 @@
     <button class="chrpath" data-mode="1" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">Flipped</button>
   </div>
 </div>
+<div style="margin-bottom:14px;">
+  <p style="font-size:11px;font-weight:500;letter-spacing:.1em;color:var(--color-text-secondary);text-align:center;margin:0 0 6px;">PAPER SWIRL</p>
+  <canvas id="c14" width="3840" height="2160" style="display:block;width:100%;height:auto;border-radius:8px;border:.5px solid var(--color-border-tertiary);"></canvas>
+  <div style="display:flex;gap:8px;justify-content:center;margin-top:8px;">
+    <button id="btn14p" style="font-size:12px;padding:7px 20px;">▶ Play</button>
+    <button id="btn14r" style="font-size:12px;padding:7px 20px;border-color:#e05555;color:#e05555;">⏺ Record 1080p</button>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:6px;align-items:center;margin-top:10px;">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span style="font-size:10px;color:var(--color-text-tertiary);width:78px;text-align:right;">Speed</span>
+      <input type="range" id="pswSpeed" min="40" max="200" step="1" value="100" style="width:180px;">
+      <span id="pswSpeedVal" style="font-size:11px;color:var(--color-text-secondary);min-width:44px;">100%</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span style="font-size:10px;color:var(--color-text-tertiary);width:78px;text-align:right;">Swirl</span>
+      <input type="range" id="pswTwist" min="0" max="200" step="1" value="100" style="width:180px;">
+      <span id="pswTwistVal" style="font-size:11px;color:var(--color-text-secondary);min-width:44px;">100%</span>
+    </div>
+  </div>
+  <div style="display:flex;gap:6px;justify-content:center;align-items:center;flex-wrap:wrap;margin-top:10px;">
+    <span style="font-size:10px;color:var(--color-text-tertiary);">Flow:</span>
+    <button class="pswflow" data-mode="0" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">Down the drain</button>
+    <button class="pswflow" data-mode="1" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">Flipped</button>
+  </div>
+</div>
 <p id="status" style="text-align:center;font-size:11px;color:var(--color-text-tertiary);margin:.4rem 0 .5rem;min-height:1.4em;">Display 4K · Shimmer 1280×720 · Records 1080p · frame-accurate WebCodecs export (real-time fallback)</p>
 </div>
 
@@ -636,6 +661,8 @@ const recC12 = mkc(RW, RH), recCtx12 = recC12.getContext('2d');
 const orb_srcC = mkc(RW, RH), orb_dstC = mkc(RW, RH);   // glass orb A / B
 const recC13 = mkc(RW, RH), recCtx13 = recC13.getContext('2d');
 const chr_srcC = mkc(RW, RH), chr_dstC = mkc(RW, RH);   // liquid chrome A / B
+const recC14 = mkc(RW, RH), recCtx14 = recC14.getContext('2d');
+const psw_srcC = mkc(RW, RH), psw_dstC = mkc(RW, RH);   // paper swirl A / B
 const CAU_RSCALE = 4;
 const CAU_RW2 = Math.round(RW / CAU_RSCALE), CAU_RH2 = Math.round(RH / CAU_RSCALE);
 const cau_smallC = mkc(CAU_RW2, CAU_RH2), cau_smallCx = cau_smallC.getContext('2d');   // refracted + lit overlay (alpha = how much it replaces the base)
@@ -665,6 +692,7 @@ const c10 = document.getElementById('c10'), ctx10 = c10.getContext('2d');
 const c11 = document.getElementById('c11'), ctx11 = c11.getContext('2d');
 const c12 = document.getElementById('c12'), ctx12 = c12.getContext('2d');
 const c13 = document.getElementById('c13'), ctx13 = c13.getContext('2d');
+const c14 = document.getElementById('c14'), ctx14 = c14.getContext('2d');
 
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -4044,6 +4072,171 @@ function runLiquidChrome(onDone) {
     params: () => ({ speed: glSl('chrSpeed', 100) / 100, str: glSl('chrStr', 100) / 100, disp: 1, light: glSl('chrLight', 100) / 100, mode: glMode('chrpath') }) }, onDone);
 }
 
+// ── PAPER SWIRL ─ a sheet of paper is creased, tilted and sucked down a funnel (Super Paper Mario style) ──
+const PS_VS = `
+attribute vec2 aXY;
+uniform float uS;      // 0..1  progress of the sheet leaving (A) or arriving (B)
+uniform float uAsp;
+uniform mediump float uFlip;   // 1 = mirrored top-to-bottom (B arrives from the top)
+uniform float uTw;     // swirl twist amount
+uniform float uT, uDm, uRl, uCr, uPt, uYw, uRo, uSc, uCy;   // per-frame channels from a smooth spline
+varying vec2 vUV; varying vec3 vN; varying float vBack;
+float ss(float a, float b, float x){ float t = clamp((x - a) / (b - a), 0., 1.); return t * t * (3. - 2. * t); }
+float K(float s, float a, float b, float c, float d, float e, float f, float g, float h, float i){
+  float x = clamp(s * 8., 0., 8.), k = floor(min(x, 7.)), t = x - k; t = t * t * (3. - 2. * t);
+  float v0 = k < .5 ? a : k < 1.5 ? b : k < 2.5 ? c : k < 3.5 ? d : k < 4.5 ? e : k < 5.5 ? f : k < 6.5 ? g : h;
+  float v1 = k < .5 ? b : k < 1.5 ? c : k < 2.5 ? d : k < 3.5 ? e : k < 4.5 ? f : k < 5.5 ? g : k < 6.5 ? h : i;
+  return mix(v0, v1, t);
+}
+vec3 deform(vec2 q){
+  float s = uS;
+  //            s: 0    .125  .25   .375  .5    .625  .75   .875  1
+  float T = uT;   // funnel / collapse
+  float Dm = uDm; // centre dimple depth
+  float Rl = uRl;  // rim lift (tulip)
+  float Cr = uCr;   // crease angle
+  float Pt = uPt;  // tip towards horizontal
+  float Yw = uYw;   // yaw
+  float Ro = uRo; // roll of the sheet
+  float Sc = uSc;   // overall size
+  float Cy = uCy;  // drift to the bottom
+  float rm = sqrt(uAsp * uAsp + 1.);
+  float rho = length(q), phi = atan(q.y, q.x);
+  float rn = clamp(rho / rm, 0., 1.);
+  float f = 1. - rn;
+  phi += Ro - uTw * T * T * (.25 + 1.6 * f * f);                 // swirl, strongest near the middle
+  float Tk = clamp(T * (.35 + .9 * f), 0., 1.);
+  float rp = rho * (1. - .90 * pow(Tk, 1.15));
+  float pl = sin(4. * phi + 1.3) * Tk * (1. - Tk * .6);           // four soft pleats as the paper bunches
+  rp *= 1. + .20 * pl;
+  float z = -1.5 * f * f * f * Dm + 1.55 * rn * Rl * T + .22 * pl * rho * Tk;
+  vec3 P = vec3(rp * cos(phi), rp * sin(phi), z);
+  float b = Cr * (1. - .5 * Tk);                                  // vertical crease down the middle
+  P.z -= (uAsp - abs(P.x)) * sin(b) * .75; P.x *= cos(b);
+  float ct = cos(Pt), st = sin(Pt);
+  P = vec3(P.x, P.y * ct + P.z * st, -P.y * st + P.z * ct);
+  float cp = cos(Yw), sp = sin(Yw);
+  P = vec3(P.x * cp + P.z * sp, P.y, -P.x * sp + P.z * cp);
+  return vec3(P.x * Sc, P.y * Sc + Cy, P.z * Sc);
+}
+void main(){
+  float e = .012;
+  vec3 P  = deform(aXY);
+  vec3 dx = deform(aXY + vec2(e, 0.)) - P, dy = deform(aXY + vec2(0., e)) - P;
+  vec3 n = cross(dx, dy); n = length(n) > 1e-9 ? normalize(n) : vec3(0., 0., 1.);
+  if (uFlip > .5) { P.y = -P.y; n.y = -n.y; n = -n; }
+  vN = n; vUV = vec2(aXY.x / uAsp * .5 + .5, aXY.y * .5 + .5);
+  float D = 5., d = D - P.z;
+  float zn = d * .12 - 1.;
+  gl_Position = vec4(P.x / uAsp * D, P.y * D, zn * d, d);
+}`;
+const PS_FS = `
+precision mediump float;
+uniform sampler2D uTex; uniform float uFlip;
+varying vec2 vUV; varying vec3 vN;
+void main(){
+  vec3 n = normalize(vN);
+  bool back = (gl_FrontFacing == (uFlip > .5));   // mirroring flips the winding
+  if (back) n = -n;
+  float shade = .80 + .20 * clamp(dot(n, normalize(vec3(-.35, .55, .75))) * .5 + .5, 0., 1.);
+  vec3 col; float al = 1.;
+  if (back) col = vec3(.975, .97, .945) * (.70 + .30 * clamp(dot(n, normalize(vec3(-.35, .55, .75))) * .5 + .5, 0., 1.));
+  else { vec4 t = texture2D(uTex, vUV); col = t.rgb * shade; al = t.a; }
+  gl_FragColor = vec4(col * al, al);
+}`;
+const PS_KEYS = {
+  T: [0., .01, .05, .12, .30, .60, .90, 1., 1.],
+  Dm: [0., 0., .35, .80, 1.05, 1.20, 1.25, 1.25, 1.25],
+  Rl: [0., 0., 0., .05, .35, .90, 1.50, 1.7, 1.7],
+  Cr: [0., .30, .55, .62, .70, .55, .25, .05, 0.],
+  Pt: [0., .06, .24, .45, .66, .82, .90, .90, .90],
+  Yw: [0., .22, .30, .28, .22, .12, 0., 0., 0.],
+  Ro: [0., -.03, -.06, -.12, -.40, -1.20, -2.40, -3.60, -4.70],
+  Sc: [1., .90, .82, .72, .60, .50, .42, .32, 0.],
+  Cy: [0, 0, -0.03, -0.08, -0.161, -0.441, -0.909, -1.154, -1.2]
+};
+// Monotone cubic (PCHIP) through the keyframes: continuous velocity, no overshoot, no stop at each key.
+function psSpline(y, s) {
+  const n = y.length - 1, x = Math.min(Math.max(s, 0), 1) * n, k = Math.min(Math.floor(x), n - 1), t = x - k;
+  const d = []; for (let i = 0; i < n; i++) d.push(y[i + 1] - y[i]);
+  const m = i => { if (i === 0) return d[0]; if (i === n) return d[n - 1]; const a = d[i - 1], b = d[i]; return a * b <= 0 ? 0 : 2 * a * b / (a + b); };
+  const t2 = t * t, t3 = t2 * t;
+  return (2 * t3 - 3 * t2 + 1) * y[k] + (t3 - 2 * t2 + t) * m(k) + (-2 * t3 + 3 * t2) * y[k + 1] + (t3 - t2) * m(k + 1);
+}
+function psCreate(gl, asp) {
+  const sh = (t, src) => { const o = gl.createShader(t); gl.shaderSource(o, src); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw new Error('paper swirl shader: ' + gl.getShaderInfoLog(o)); return o; };
+  const pr = gl.createProgram(); gl.attachShader(pr, sh(gl.VERTEX_SHADER, PS_VS)); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, PS_FS));
+  gl.bindAttribLocation(pr, 0, 'aXY'); gl.linkProgram(pr);
+  if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error('paper swirl link error');
+  const NX = 129, NY = 73, v = new Float32Array(NX * NY * 2);       // odd counts: a vertex sits exactly on the centre
+  for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) { v[(j * NX + i) * 2] = (i / (NX - 1) * 2 - 1) * asp; v[(j * NX + i) * 2 + 1] = j / (NY - 1) * 2 - 1; }
+  const idx = new Uint16Array((NX - 1) * (NY - 1) * 6); let k = 0;
+  for (let j = 0; j < NY - 1; j++) for (let i = 0; i < NX - 1; i++) { const a = j * NX + i, b = a + 1, c = a + NX, d = c + 1; idx.set([a, b, c, b, d, c], k); k += 6; }
+  const vb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, vb); gl.bufferData(gl.ARRAY_BUFFER, v, gl.STATIC_DRAW);
+  const ib = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.STATIC_DRAW);
+  return { gl, pr, vb, ib, n: idx.length, asp, U: n => gl.getUniformLocation(pr, n) };
+}
+// draw one frame. p = 0..1 over the whole transition. texA / texB are WebGL textures.
+function psDraw(R, p, texA, texB, tw, inv) {
+  const gl = R.gl, GAP = .04, HALF = .5 - GAP;
+  let s, flip, tex;
+  if (p < HALF)            { s = p / HALF;           flip = 0; tex = texA; }
+  else if (p > 1 - HALF)   { s = (1 - p) / HALF;     flip = 1; tex = texB; }
+  else                     { s = 1; flip = 0; tex = texA; }
+  gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
+  gl.clearColor(0, 0, 0, 0); gl.clearDepth(1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  if (s >= .999) return;
+  gl.useProgram(R.pr); gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL); gl.disable(gl.CULL_FACE); gl.disable(gl.BLEND);
+  gl.bindBuffer(gl.ARRAY_BUFFER, R.vb); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, R.ib);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.uniform1i(R.U('uTex'), 0); gl.uniform1f(R.U('uS'), s); gl.uniform1f(R.U('uAsp'), R.asp); gl.uniform1f(R.U('uFlip'), inv ? 1 - flip : flip); for (const k in PS_KEYS) gl.uniform1f(R.U('u' + k), psSpline(PS_KEYS[k], s));
+  gl.uniform1f(R.U('uTw'), tw == null ? 2.2 : tw);
+  gl.drawElements(gl.TRIANGLES, R.n, gl.UNSIGNED_SHORT, 0);
+  gl.disable(gl.DEPTH_TEST);
+}
+
+const PSG = { gl: null, cv: null, R: null, ok: null };
+function psContext() {
+  if (PSG.ok === true) return PSG;
+  if (PSG.ok === false) return null;
+  try {
+    const cv = document.createElement('canvas'); cv.width = RW; cv.height = RH;
+    const gl = cv.getContext('webgl', { alpha: true, premultipliedAlpha: true, antialias: true, depth: true, preserveDrawingBuffer: true });
+    if (!gl) throw new Error('no webgl');
+    cv.addEventListener('webglcontextlost', e => { e.preventDefault(); PSG.ok = null; PSG.R = null; });
+    PSG.gl = gl; PSG.cv = cv; PSG.R = psCreate(gl, RW / RH); PSG.ok = true;
+    return PSG;
+  } catch (e) { PSG.ok = false; setStatus('Paper Swirl needs WebGL: ' + (e.message || e).slice(0, 120)); return null; }
+}
+function runPaperSwirl(onDone) {
+  const g = psContext();
+  if (!g) { if (onDone) onDone(() => {}); return; }
+  const gl = g.gl, src = psw_srcC, dst = psw_dstC, rec = recCtx14, recCanvas = recC14, disp = ctx14;
+  const texA = glTex(gl, 0, src), texB = glTex(gl, 1, dst);
+  const DURATION = 2.3 / (glSl('pswSpeed', 100) / 100), tw = 2.2 * glSl('pswTwist', 100) / 100, inv = glMode('pswflow') > .5;
+  function drawFrame(el) {
+    psDraw(g.R, Math.min(1, Math.max(0, el / DURATION)), texA, texB, tw, inv);
+    rec.clearRect(0, 0, RW, RH); rec.drawImage(g.cv, 0, 0);
+    disp.clearRect(0, 0, W, H); disp.drawImage(recCanvas, 0, 0, W, H);
+  }
+  let el = 0, lastT = null;
+  function frm(ts) {
+    if (!lastT) lastT = ts;
+    el += Math.min((ts - lastT) / 1000, 0.05); lastT = ts;
+    if (el >= DURATION) {
+      rec.clearRect(0, 0, RW, RH); rec.drawImage(dst, 0, 0);
+      disp.clearRect(0, 0, W, H); disp.drawImage(recCanvas, 0, 0, W, H);
+      try { gl.deleteTexture(texA); gl.deleteTexture(texB); } catch (e) {}
+      const reset = () => { rec.clearRect(0, 0, RW, RH); rec.drawImage(src, 0, 0); disp.clearRect(0, 0, W, H); disp.drawImage(recCanvas, 0, 0, W, H); };
+      onDone ? onDone(reset) : setTimeout(reset, 1600);
+      return;
+    }
+    drawFrame(el); requestAnimationFrame(frm);
+  }
+  requestAnimationFrame(frm);
+}
+
 // ══════════════════════════════════════════════════════════════════════════
 // SECTION 6 · TRANSITIONS REGISTRY
 // ─────────────────────────────────────────────────────────────────────────
@@ -4174,6 +4367,15 @@ const TRANSITIONS = {
     recordFilename: 'crystal-clear-water',
     playBtnId:      'btn13p',
     recBtnId:       'btn13r',
+    padSecs:        0,
+    running:        false,
+  },
+  paperSwirl: {
+    runFn:          runPaperSwirl,
+    recCanvas:      recC14,
+    recordFilename: 'paper-swirl',
+    playBtnId:      'btn14p',
+    recBtnId:       'btn14r',
     padSecs:        0,
     running:        false,
   },
@@ -4746,9 +4948,9 @@ function registerTransition(key) {
 // Wire the Glass Orb / Liquid Chrome pickers (default: first option).
 (function() {
   const style = document.createElement('style');
-  style.textContent = '.orbpath.orbpath-active, .chrpath.chrpath-active { border-color: var(--color-text-primary) !important; color: var(--color-text-primary) !important; }';
+  style.textContent = '.orbpath.orbpath-active, .chrpath.chrpath-active, .pswflow.pswflow-active { border-color: var(--color-text-primary) !important; color: var(--color-text-primary) !important; }';
   document.head.appendChild(style);
-  [['orbpath', 'glassOrb'], ['chrpath', 'liquidChrome']].forEach(([cls, key]) => {
+  [['orbpath', 'glassOrb'], ['chrpath', 'liquidChrome'], ['pswflow', 'paperSwirl']].forEach(([cls, key]) => {
     const btns = Array.from(document.querySelectorAll('.' + cls));
     const on = b => { btns.forEach(x => { x.classList.remove(cls + '-active'); x.style.borderColor = ''; x.style.color = ''; }); b.classList.add(cls + '-active'); };
     on(btns[0]);
@@ -4834,6 +5036,7 @@ function registerTransition(key) {
   wire('ripDrop',     'ripDropVal',     '%');
   wire('orbSpeed', 'orbSpeedVal', '%'); wire('orbDisp', 'orbDispVal', '%'); wire('orbLight', 'orbLightVal', '%');
   wire('chrSpeed', 'chrSpeedVal', '%'); wire('chrStr', 'chrStrVal', '%'); wire('chrLight', 'chrLightVal', '%');
+  wire('pswSpeed', 'pswSpeedVal', '%'); wire('pswTwist', 'pswTwistVal', '%');
   { const sl = document.getElementById('orbIor'), lb = document.getElementById('orbIorVal'); const paint = () => { lb.textContent = (sl.value / 100).toFixed(2); }; sl.addEventListener('input', paint); paint(); }
   wire('cauSpeed', 'cauSpeedVal', '%'); wire('cauRefr', 'cauRefrVal', '%'); wire('cauCaus', 'cauCausVal', '%'); wire('cauSize', 'cauSizeVal', '%');
   wire('crumbleChunkSize', 'crumbleChunkSizeVal', 'px');
@@ -4900,6 +5103,7 @@ function registerTransition(key) {
   watchGroup('.cautint', b => b.dataset.mode === 'day');     // default: Daylight
   watchGroup('.orbpath', b => b.dataset.mode === '0');       // default: Roll in
   watchGroup('.chrpath', b => b.dataset.mode === '0');       // default: Pours in
+  watchGroup('.pswflow', b => b.dataset.mode === '0');       // default: Down the drain
 })();
 
 Object.keys(TRANSITIONS).forEach(registerTransition);
@@ -4939,6 +5143,8 @@ drawDefaultA (orb_srcC.getContext('2d'), RW, RH);
 drawDefaultB (orb_dstC.getContext('2d'), RW, RH);
 drawDefaultA (chr_srcC.getContext('2d'), RW, RH);
 drawDefaultB (chr_dstC.getContext('2d'), RW, RH);
+drawDefaultA (psw_srcC.getContext('2d'), RW, RH);
+drawDefaultB (psw_dstC.getContext('2d'), RW, RH);
 
 // Page peel's fixed "back of paper" texture — plain and unrelated to A/B,
 // same reasoning as real paper: the back looks the same regardless of
@@ -4966,6 +5172,7 @@ recCtx10.drawImage(rip_srcC, 0, 0); ctx10.drawImage(recC10, 0, 0, W, H);
 recCtx11.drawImage(cau_srcC, 0, 0); ctx11.drawImage(recC11, 0, 0, W, H);
 recCtx12.drawImage(orb_srcC, 0, 0); ctx12.drawImage(recC12, 0, 0, W, H);
 recCtx13.drawImage(chr_srcC, 0, 0); ctx13.drawImage(recC13, 0, 0, W, H);
+recCtx14.drawImage(psw_srcC, 0, 0); ctx14.drawImage(recC14, 0, 0, W, H);
 
 // ── File inputs — A = source (all transitions), B = destination (all transitions) ──
 //
@@ -4989,6 +5196,7 @@ function refreshAllIdle() {
   if (!TRANSITIONS.caustics.running) { recCtx11.clearRect(0,0,RW,RH); recCtx11.drawImage(cau_srcC, 0,0); ctx11.clearRect(0,0,W,H); ctx11.drawImage(recC11,0,0,W,H); }
   if (!TRANSITIONS.glassOrb.running) { recCtx12.clearRect(0,0,RW,RH); recCtx12.drawImage(orb_srcC, 0,0); ctx12.clearRect(0,0,W,H); ctx12.drawImage(recC12,0,0,W,H); }
   if (!TRANSITIONS.liquidChrome.running) { recCtx13.clearRect(0,0,RW,RH); recCtx13.drawImage(chr_srcC, 0,0); ctx13.clearRect(0,0,W,H); ctx13.drawImage(recC13,0,0,W,H); }
+  if (!TRANSITIONS.paperSwirl.running) { recCtx14.clearRect(0,0,RW,RH); recCtx14.drawImage(psw_srcC, 0,0); ctx14.clearRect(0,0,W,H); ctx14.drawImage(recC14,0,0,W,H); }
 }
 
 document.getElementById('fA').addEventListener('change', function() {
@@ -4996,7 +5204,7 @@ document.getElementById('fA').addEventListener('change', function() {
   loadFromFile(this.files[0], img => {
     // Paint into all source canvases at their respective resolutions
     [milkC, trimC].forEach(c => drawCover(c.getContext('2d'), img, W,  H));
-    [bub_srcC, par_srcC, td_srcC, cone_srcC, peel_srcC, crumble_srcC, cube_srcC, rip_srcC, cau_srcC, orb_srcC, chr_srcC].forEach(c => drawCover(c.getContext('2d'), img, RW, RH));
+    [bub_srcC, par_srcC, td_srcC, cone_srcC, peel_srcC, crumble_srcC, cube_srcC, rip_srcC, cau_srcC, orb_srcC, chr_srcC, psw_srcC].forEach(c => drawCover(c.getContext('2d'), img, RW, RH));
     refreshAllIdle();
     setLbl('lblA', this.files[0].name);
     aIsTransparent = false;
@@ -5008,7 +5216,7 @@ document.getElementById('fB').addEventListener('change', function() {
   loadFromFile(this.files[0], img => {
     // Paint into all destination canvases at their respective resolutions
     [butC, talC].forEach(c => drawCover(c.getContext('2d'), img, W,  H));
-    [bub_dstC, par_dstC, td_dstC, cone_dstC, peel_dstC, crumble_dstC, cube_dstC, rip_dstC, cau_dstC, orb_dstC, chr_dstC].forEach(c => drawCover(c.getContext('2d'), img, RW, RH));
+    [bub_dstC, par_dstC, td_dstC, cone_dstC, peel_dstC, crumble_dstC, cube_dstC, rip_dstC, cau_dstC, orb_dstC, chr_dstC, psw_dstC].forEach(c => drawCover(c.getContext('2d'), img, RW, RH));
     setLbl('lblB', this.files[0].name);
     bIsTransparent = false;
   });
@@ -5048,7 +5256,7 @@ let aIsTransparent = false, bIsTransparent = false;
 function setSlotTransparent(which) {
   if (which === 'A') {
     [milkC, trimC].forEach(c => c.getContext('2d').clearRect(0, 0, c.width, c.height));
-    [bub_srcC, par_srcC, td_srcC, cone_srcC, peel_srcC, crumble_srcC, cube_srcC, rip_srcC, cau_srcC, orb_srcC, chr_srcC].forEach(c => c.getContext('2d').clearRect(0, 0, RW, RH));
+    [bub_srcC, par_srcC, td_srcC, cone_srcC, peel_srcC, crumble_srcC, cube_srcC, rip_srcC, cau_srcC, orb_srcC, chr_srcC, psw_srcC].forEach(c => c.getContext('2d').clearRect(0, 0, RW, RH));
     refreshAllIdle();
     document.getElementById('fA').value = '';
     const el = document.getElementById('lblA');
@@ -5056,7 +5264,7 @@ function setSlotTransparent(which) {
     aIsTransparent = true;
   } else {
     [butC, talC].forEach(c => c.getContext('2d').clearRect(0, 0, c.width, c.height));
-    [bub_dstC, par_dstC, td_dstC, cone_dstC, peel_dstC, crumble_dstC, cube_dstC, rip_dstC, cau_dstC, orb_dstC, chr_dstC].forEach(c => c.getContext('2d').clearRect(0, 0, RW, RH));
+    [bub_dstC, par_dstC, td_dstC, cone_dstC, peel_dstC, crumble_dstC, cube_dstC, rip_dstC, cau_dstC, orb_dstC, chr_dstC, psw_dstC].forEach(c => c.getContext('2d').clearRect(0, 0, RW, RH));
     document.getElementById('fB').value = '';
     const el = document.getElementById('lblB');
     el.textContent = '◱ Transparent'; el.style.color = '#4a9e5c';
@@ -5079,11 +5287,11 @@ document.getElementById('alphaWarnClose').addEventListener('click', () => {
 // every transition's own markup, canvas and buttons are untouched.
 // ══════════════════════════════════════════════════════════════════════════
 (function initGallery() {
-  const KEYS  = ['splash','solidify','bubbles','particles','tileDrop','coneRefraction','pagePeel','crumble','cubeAssembly','rippleRefraction','caustics','glassOrb','liquidChrome'];
-  const SLUGS = ['milk-butter','trimmings-tallow','bubbles','particles','tile-drop','cone-refraction','page-peel','crumble','cube-assembly','ripple-refraction','caustics','glass-orb','crystal-clear-water'];
+  const KEYS  = ['splash','solidify','bubbles','particles','tileDrop','coneRefraction','pagePeel','crumble','cubeAssembly','rippleRefraction','caustics','glassOrb','liquidChrome','paperSwirl'];
+  const SLUGS = ['milk-butter','trimmings-tallow','bubbles','particles','tile-drop','cone-refraction','page-peel','crumble','cube-assembly','ripple-refraction','caustics','glass-orb','crystal-clear-water','paper-swirl'];
   const PAIRS = [[milkC, butC], [trimC, talC], [bub_srcC, bub_dstC], [par_srcC, par_dstC], [td_srcC, td_dstC],
-                 [cone_srcC, cone_dstC], [peel_srcC, peel_dstC], [crumble_srcC, crumble_dstC], [cube_srcC, cube_dstC], [rip_srcC, rip_dstC], [cau_srcC, cau_dstC], [orb_srcC, orb_dstC], [chr_srcC, chr_dstC]];
-  const NOTES = ['', '', '', '', 'Gentle / Cranked', 'Four glass modes', 'Adjustable angle', '', 'Five modes', 'Pond view', 'Refracting water', 'Ray-traced glass', 'Clear water'];
+                 [cone_srcC, cone_dstC], [peel_srcC, peel_dstC], [crumble_srcC, crumble_dstC], [cube_srcC, cube_dstC], [rip_srcC, rip_dstC], [cau_srcC, cau_dstC], [orb_srcC, orb_dstC], [chr_srcC, chr_dstC], [psw_srcC, psw_dstC]];
+  const NOTES = ['', '', '', '', 'Gentle / Cranked', 'Four glass modes', 'Adjustable angle', '', 'Five modes', 'Pond view', 'Refracting water', 'Ray-traced glass', 'Clear water', '3D paper, down the drain'];
 
   const anyRunning = () => KEYS.some(k => TRANSITIONS[k].running);
   let view = 'grid';
@@ -5144,7 +5352,7 @@ document.getElementById('alphaWarnClose').addEventListener('click', () => {
     back(); x.drawImage(A, 0, 0, w, h);
     const R = rng(1000 + i * 77);
     const reveal = (pathFn) => { x.save(); x.beginPath(); pathFn(); x.clip(); back(); x.drawImage(B, 0, 0, w, h); x.restore(); };
-    if (i < 2 || i === 6 || i === 9 || i === 10 || i === 11 || i === 12) {
+    if (i < 2 || i === 6 || i === 9 || i === 10 || i === 11 || i === 12 || i === 13) {
       if (i === 6) {                                              // page peel: B left behind, paper curling off along a diagonal
         reveal(() => { x.moveTo(w * 0.42, 0); x.lineTo(w, 0); x.lineTo(w, h); x.lineTo(w * 0.05, h); x.closePath(); });
         const gr = x.createLinearGradient(w * 0.2, 0, w * 0.5, 0); gr.addColorStop(0, '#9a9a94'); gr.addColorStop(.35, '#f1efe6'); gr.addColorStop(1, '#bdbab0');
@@ -5165,6 +5373,13 @@ document.getElementById('alphaWarnClose').addEventListener('click', () => {
         x.fillStyle = gr; x.beginPath(); x.arc(w * .5, h * .5, h * .36, 0, 7); x.fill();
         x.strokeStyle = 'rgba(220,245,255,.7)'; x.lineWidth = 2; x.stroke();
         x.fillStyle = 'rgba(255,255,255,.92)'; x.beginPath(); x.ellipse(w * .4, h * .33, w * .035, h * .055, -.6, 0, 7); x.fill();
+      } else if (i === 13) {                                      // paper swirl: a creased sheet tipping over a white funnel
+        back();
+        const half = (pts, shade) => { x.save(); x.beginPath(); pts.forEach((p, k) => k ? x.lineTo(w * p[0], h * p[1]) : x.moveTo(w * p[0], h * p[1])); x.closePath(); x.clip(); x.drawImage(A, 0, 0, w, h); x.fillStyle = 'rgba(0,0,0,' + shade + ')'; x.fillRect(0, 0, w, h); x.restore(); x.strokeStyle = 'rgba(0,0,0,.55)'; x.lineWidth = 1.5; x.beginPath(); pts.forEach((p, k) => k ? x.lineTo(w * p[0], h * p[1]) : x.moveTo(w * p[0], h * p[1])); x.closePath(); x.stroke(); };
+        const gr = x.createLinearGradient(w * .42, 0, w * .58, 0); gr.addColorStop(0, '#bdbab0'); gr.addColorStop(.5, '#f6f4ec'); gr.addColorStop(1, '#a9a69c');
+        x.fillStyle = gr; x.beginPath(); x.moveTo(w * .4, h * .62); x.lineTo(w * .6, h * .62); x.lineTo(w * .5, h * .97); x.closePath(); x.fill();
+        half([[.12, .2], [.5, .3], [.5, .72], [.1, .84]], .18);
+        half([[.5, .3], [.9, .12], [.88, .66], [.5, .72]], 0);
       } else if (i === 12) {                                      // liquid chrome: merged mirror blobs
         const blob = () => { x.moveTo(w * .38 + h * .3, h * .45); x.arc(w * .38, h * .45, h * .3, 0, 7); x.moveTo(w * .62 + h * .27, h * .55); x.arc(w * .62, h * .55, h * .27, 0, 7); x.moveTo(w * .5 + h * .22, h * .5); x.arc(w * .5, h * .5, h * .22, 0, 7); };
         x.strokeStyle = 'rgba(230,245,255,.8)'; x.lineWidth = 7; x.beginPath(); blob(); x.stroke();   // outer rim only: the fill below covers the inner overlaps
