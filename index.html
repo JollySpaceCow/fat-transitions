@@ -515,6 +515,11 @@
     <button class="chrpath" data-mode="0" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">Pours in</button>
     <button class="chrpath" data-mode="1" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">Flipped</button>
   </div>
+  <div style="display:flex;gap:6px;justify-content:center;align-items:center;flex-wrap:wrap;margin-top:6px;">
+    <span style="font-size:10px;color:var(--color-text-tertiary);">Material:</span>
+    <button class="chrmat" data-mode="0" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">Water</button>
+    <button class="chrmat" data-mode="1" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">Tallow</button>
+  </div>
 </div>
 <div style="margin-bottom:14px;">
   <p style="font-size:11px;font-weight:500;letter-spacing:.1em;color:var(--color-text-secondary);text-align:center;margin:0 0 6px;">PAPER SWIRL</p>
@@ -538,13 +543,173 @@
   <div style="display:flex;gap:6px;justify-content:center;align-items:center;flex-wrap:wrap;margin-top:10px;">
     <span style="font-size:10px;color:var(--color-text-tertiary);">Flow:</span>
     <button class="pswflow" data-mode="0" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">Down the drain</button>
-    <button class="pswflow" data-mode="1" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">Flipped</button>
+    <button class="pswflow" data-mode="1" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">Up</button>
+    <button class="pswflow" data-mode="2" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">Left</button>
+    <button class="pswflow" data-mode="3" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">Right</button>
   </div>
+  <span id="pswInfo" hidden></span>
 </div>
 <p id="status" style="text-align:center;font-size:11px;color:var(--color-text-tertiary);margin:.4rem 0 .5rem;min-height:1.4em;">Display 4K · Shimmer 1280×720 · Records 1080p · frame-accurate WebCodecs export (real-time fallback)</p>
 </div>
 
 <script>
+// ══════════════════════════════════════════════════════════════════════════
+// PLAYER CONTROLS · pause / resume and frame-step ANY running transition
+// ─────────────────────────────────────────────────────────────────────────
+// Every transition drives itself from requestAnimationFrame and turns the
+// timestamp into progress (el += dt). This puts one virtual clock in front of
+// requestAnimationFrame: pausing simply stops that clock, and stepping moves it
+// by exactly one frame (1/60 s, the same cadence the exporter renders at),
+// forwards or backwards. No transition needs to know about any of this.
+//   P / Space  pause or resume      .  one frame forward      ,  one frame back      S  stop (cancel)
+// Leaving a running transition (back to the grid, or on to another one) cancels it automatically.
+// The recorder swaps in its own deterministic clock, so these switch themselves
+// off while a recording is rendering.
+// ══════════════════════════════════════════════════════════════════════════
+(function playerControls() {
+  const realRAF = window.requestAnimationFrame.bind(window);
+  const STEP = 1000 / 60;
+  let pending = [], pumping = false, paused = false, recMode = false, vt = 1e6, ev = 0, lastReal = null, stepReq = 0, wasRun = false, curKey = null, curSig = null;   // ev = how far the running transition has actually advanced (its own per-frame cap applied)
+  const running = () => typeof TRANSITIONS !== 'undefined' && Object.keys(TRANSITIONS).some(k => TRANSITIONS[k].running);
+  const schedule = () => { if (!pumping) { pumping = true; realRAF(pump); } };
+  function pump(ts) {
+    pumping = false;
+    const dtReal = lastReal === null ? 0 : ts - lastReal; lastReal = ts;
+    let adv;
+    if (!paused) adv = dtReal;
+    else if (stepReq) { adv = stepReq * STEP; stepReq = 0; if (ev + adv < 0) adv = -ev; }   // never before frame 0
+    else { lastReal = null; return; }                       // paused: hold every callback until resume / step
+    const nowRun = running(); if (nowRun && !wasRun) { ev = 0; curKey = Object.keys(TRANSITIONS).find(k => TRANSITIONS[k].running) || null; curSig = curKey ? sigOf(curKey) : null; } wasRun = nowRun;
+    vt += adv; ev = Math.max(0, ev + Math.min(adv, 50));   // transitions cap each step at 50 ms; mirror that so frame 0 and the readout stay exact
+    const cbs = pending; pending = [];
+    for (const cb of cbs) { try { cb(vt); } catch (e) { console.error(e); } }
+    if (pending.length) schedule();
+    else { learn(); curKey = null; wasRun = false; if (paused) { paused = false; stepReq = 0; } }       // finished on its own (possibly while paused): remember its length
+  }
+  // ── Total length in frames ───────────────────────────────────────────────
+  // Fixed-length (shader) transitions are computed exactly from their duration formula. Everything else
+  // learns its length from the last run that finished on its own, remembered per slider / picker setting
+  // (and kept between visits), so the total is known even while stopped.
+  const LS_KEY = 'transitionTotals.v1', learned = {};
+  try { Object.assign(learned, JSON.parse(localStorage.getItem(LS_KEY) || '{}')); } catch (e) {}
+  const sv = (id, d) => { const e = document.getElementById(id); return e ? parseFloat(e.value) : d; };
+  const FIXED = {
+    glassOrb:     () => 4.4 / (sv('orbSpeed', 100) / 100),
+    liquidChrome: () => 4.4 / (sv('chrSpeed', 100) / 100),
+    paperSwirl:   () => 2.3 / (sv('pswSpeed', 100) / 100),
+    caustics:     () => 4.2 / (sv('cauSpeed', 100) / 100),
+  };
+  const cardOf = k => { const b = document.getElementById(TRANSITIONS[k].playBtnId); return b && (b.closest('.tsec') || b.parentElement.parentElement); };
+  function sigOf(k) {
+    const sec = cardOf(k); if (!sec) return k;
+    return k + '|' + Array.from(sec.querySelectorAll('input[type=range]')).map(i => i.value).join(',') + '|' +
+      Array.from(sec.querySelectorAll('button')).filter(b => /-active\b/.test(b.className)).map(b => b.dataset.mode || b.textContent.trim()).join(',');
+  }
+  function totalFrames(k, sig) {
+    if (FIXED[k]) return Math.round(FIXED[k]() * 60);
+    const n = learned[sig || sigOf(k)];
+    return n > 0 ? n : null;
+  }
+  function learn() {
+    if (!curKey || FIXED[curKey]) return;
+    const n = Math.round(ev / STEP);
+    if (n > 5) { learned[curSig] = n; try { localStorage.setItem(LS_KEY, JSON.stringify(learned)); } catch (e) {} }
+  }
+  const openCardKey = () => {
+    if (typeof TRANSITIONS === 'undefined') return null;
+    const open = document.querySelector('.tsec.open'); if (!open) return null;
+    return Object.keys(TRANSITIONS).find(k => { const b = document.getElementById(TRANSITIONS[k].playBtnId); return b && open.contains(b); }) || null;
+  };
+  const wrapper = cb => { pending.push(cb); if (!paused) schedule(); return pending.length; };
+  window.requestAnimationFrame = wrapper;
+  const active = () => !recMode && window.requestAnimationFrame === wrapper && running();
+  // Stop: drop every queued frame (so no loop can continue), free GPU textures, unlock the buttons and put every card back to its idle picture.
+  function cancel() {
+    if (recMode || !running()) return false;
+    pending = []; paused = false; stepReq = 0; curKey = null; wasRun = false; ev = 0;
+    PLAYER.hooks.splice(0).forEach(f => { try { f(); } catch (e) {} });
+    Object.keys(TRANSITIONS).forEach(k => { const c = TRANSITIONS[k]; if (c.running) { c.running = false; setBtns([c.playBtnId, c.recBtnId], false); } });
+    try { refreshAllIdle(); } catch (e) {}
+    setStatus('⏹ Stopped');
+    refresh();
+    return true;
+  }
+  window.PLAYER = { hooks: [], cancel, recording: () => recMode && running() };
+  function setPaused(p) { if (!active() || p === paused) return; paused = p; if (!p) { lastReal = null; schedule(); } refresh(); }
+  function stepBy(n) { if (!active()) return; paused = true; stepReq += n; schedule(); refresh(); }
+
+  const bar = document.createElement('div');
+  bar.id = 'playerBar';
+  bar.style.cssText = 'position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:99999;display:none;align-items:center;gap:6px;padding:6px 8px;border-radius:999px;background:rgba(18,18,18,.92);border:1px solid rgba(255,255,255,.16);box-shadow:0 4px 18px rgba(0,0,0,.45);font:12px/1 system-ui,sans-serif;color:#eee;user-select:none;';
+  const mk = (id, label, title) => `<button type="button" id="${id}" title="${title}" style="font:inherit;color:inherit;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);border-radius:999px;padding:6px 12px;cursor:pointer;">${label}</button>`;
+  bar.innerHTML = mk('pbBack', '◀ ,', 'One frame back ( , )') + mk('pbPlay', '⏸ Pause', 'Pause / resume ( P or Space )') + mk('pbFwd', '. ▶', 'One frame forward ( . )') + mk('pbStop', '⏹ Stop', 'Stop and reset ( S )') + '<span id="pbRead" style="min-width:196px;text-align:center;opacity:.8;font-variant-numeric:tabular-nums;white-space:nowrap;"></span>';
+  document.body.appendChild(bar);
+  const q = id => bar.querySelector('#' + id);
+  bar.addEventListener('mousedown', e => e.preventDefault());          // keep keyboard focus where it was
+  q('pbBack').addEventListener('click', () => stepBy(-1));
+  q('pbFwd').addEventListener('click', () => stepBy(1));
+  q('pbPlay').addEventListener('click', () => { if (active()) setPaused(!paused); else { const k = openCardKey(); if (k) document.getElementById(TRANSITIONS[k].playBtnId).click(); } });
+  q('pbStop').addEventListener('click', () => cancel());
+  // The card's own Play button doubles as Pause / Resume while its transition runs, so the
+  // pointer never has to leave it. It is attached lazily because the registry is built later.
+  function cardButtons() {
+    if (typeof TRANSITIONS === 'undefined') return;
+    Object.keys(TRANSITIONS).forEach(k => {
+      const cfg = TRANSITIONS[k], b = document.getElementById(cfg.playBtnId), r = document.getElementById(cfg.recBtnId);
+      if (!b || b.__pb) return;
+      b.__pb = true; b.__pbLabel = b.textContent;
+      const sb = document.createElement('button'); sb.type = 'button'; sb.textContent = '⏹ Stop'; sb.title = 'Stop and reset ( S )';
+      sb.style.cssText = b.style.cssText; sb.style.display = 'none';
+      (r || b).insertAdjacentElement('afterend', sb); b.__pbStop = sb;
+      sb.addEventListener('click', () => cancel());
+      // capture phase: runs before the engine's own handler, so it sees the state BEFORE this click
+      b.addEventListener('click', () => { if (cfg.running && active()) setPaused(!paused); }, true);
+      if (r) r.addEventListener('click', () => { if (!cfg.running) recMode = true; }, true);
+      new MutationObserver(() => { if (b.disabled && cfg.running && active()) b.disabled = false; }).observe(b, { attributes: true, attributeFilter: ['disabled'] });
+    });
+  }
+  function paintCardButtons() {
+    if (typeof TRANSITIONS === 'undefined') return;
+    const on = active();
+    Object.keys(TRANSITIONS).forEach(k => {
+      const cfg = TRANSITIONS[k], b = document.getElementById(cfg.playBtnId);
+      if (!b || !b.__pb) return;
+      b.__pbStop.style.display = (on && cfg.running) ? '' : 'none';
+      if (on && cfg.running) { b.disabled = false; const t = paused ? '▶ Resume' : '⏸ Pause'; if (b.textContent !== t) b.textContent = t; }
+      else if (b.textContent !== b.__pbLabel) b.textContent = b.__pbLabel;
+    });
+  }
+  function refresh() {
+    cardButtons();
+    if (!running()) recMode = false;
+    paintCardButtons();
+    const on = active(), idleKey = (!running() && !recMode) ? openCardKey() : null;
+    bar.style.display = (on || idleKey) ? 'flex' : 'none';
+    ['pbBack', 'pbFwd', 'pbStop'].forEach(id => { const b = q(id); b.disabled = !on; b.style.opacity = on ? '' : '.35'; b.style.cursor = on ? 'pointer' : 'default'; });
+    if (!on && !idleKey) return;
+    q('pbPlay').textContent = on ? (paused ? '▶ Resume' : '⏸ Pause') : '▶ Play';
+    const key = on ? curKey : idleKey;
+    const T = key ? totalFrames(key, on ? curSig : null) : null, el = on ? Math.max(0, ev) : 0;
+    const f = Math.round(el / STEP), fs = T ? Math.min(f, T) : f;
+    q('pbRead').textContent = T
+      ? 'frame ' + fs + ' / ' + T + ' · ' + (on ? (el / 1000).toFixed(2) + ' / ' : '') + (T / 60).toFixed(2) + ' s'
+      : 'frame ' + fs + ' / ? · play once to measure';
+  }
+  setInterval(refresh, 40);
+
+  document.addEventListener('keydown', e => {
+    if (e.ctrlKey || e.metaKey || e.altKey || !active()) return;
+    const t = e.target, tag = t && t.tagName;
+    if (tag === 'TEXTAREA' || tag === 'SELECT' || (t && t.isContentEditable) || (tag === 'INPUT' && t.type !== 'range' && t.type !== 'checkbox')) return;
+    if (e.key === ',' || e.key === '<') { e.preventDefault(); stepBy(-1); }
+    else if (e.key === '.' || e.key === '>') { e.preventDefault(); stepBy(1); }
+    else if (e.key === ' ' || e.key === 'p' || e.key === 'P') { e.preventDefault(); setPaused(!paused); }
+    else if (e.key === 's' || e.key === 'S') { e.preventDefault(); cancel(); }
+    else if (e.key === 'm' || e.key === 'M') { e.preventDefault(); window.PS_WIRE = !window.PS_WIRE; if (paused) { stepReq += 1e-3; schedule(); } refresh(); }   // mesh view for the paper swirl (redraws at once when paused)
+  });
+  document.addEventListener('keyup', e => { if (e.key === ' ' && active()) e.preventDefault(); });   // stop Space re-clicking a focused Play button
+})();
+
 // ══════════════════════════════════════════════════════════════════════════
 // SECTION 1 · CONSTANTS & CANVAS SETUP
 // ══════════════════════════════════════════════════════════════════════════
@@ -3939,6 +4104,78 @@ void main(){
   }
   gl_FragColor = vec4(col * aOut, aOut);
 }`,
+  tallow: GL_PRELUDE + `
+float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.-2.*f);
+  return mix(mix(h21(i), h21(i+vec2(1.,0.)), f.x), mix(h21(i+vec2(0.,1.)), h21(i+vec2(1.,1.)), f.x), f.y); }
+float fbm3(vec2 p){ return vn(p)*.55 + vn(p*2.03+7.1)*.3 + vn(p*4.1+3.7)*.15; }
+float fieldT(vec2 x){
+  x += .30 * (vec2(fbm3(x*1.15+2.), fbm3(x*1.15+11.)) - .5);          // irregular, lopsided lumps
+  x += .10 * vec2(sin(x.y * 2.1 + uP * 1.1), sin(x.x * 1.9 - uP * .9));
+  vec2 i0 = floor(x); float F = 0.;
+  for (int j = -2; j <= 2; j++) for (int i = -2; i <= 2; i++) {
+    vec2 id = i0 + vec2(float(i), float(j));
+    vec2 c = id + .2 + .6 * h22(id);
+    float st = h21(id) * .16, g = ss(st, st + .34, uP);
+    float r = 1.6 * g * (.9 + .25 * h21(id + 3.));
+    vec2 dv = x - c; dv.y *= .78;                                    // slightly taller than wide: heavy, sagging beads
+    float k = max(1. - dot(dv, dv) / (r * r + 1e-4), 0.);
+    F += k * k * k;
+  }
+  return F;
+}
+float wnoise(vec2 q){ return h21(floor(q)) * .5 + h21(floor(q * 2.1 + 7.)) * .3 + h21(floor(q * 4.3 + 3.)) * .2; }
+void main(){
+  vec2 uv = gl_FragCoord.xy / uRes; float asp = uRes.x / uRes.y, p = uP;
+  vec2 x = (uv - .5) * vec2(asp, 1.) * 1.45;
+  if (uMode > .5) x = vec2(x.x, -x.y);
+  float cloud = ss(.36, .54, p) * (1. - ss(.68, .90, p));               // 0 clear amber .. 1 opaque cooled wax
+  float gate  = 1. - ss(.80, 1., p);
+  float swapB = ss(.57, .63, p);
+  float F = fieldT(x), e = .025;
+  vec2 g = vec2(fieldT(x + vec2(e, 0.)) - fieldT(x - vec2(e, 0.)), fieldT(x + vec2(0., e)) - fieldT(x - vec2(0., e))) / (2. * e);
+    vec2 q = x * 2.6 + vec2(3., 1.);
+  float L = fbm3(q);
+  float inside = max(smoothstep(.27, .34, F + (L - .5) * .22), ss(.46, .54, p));
+  float str = uStr * gate;
+  float cover = max(ss(.0, .5, F), ss(.46, .54, p));
+  float thick = clamp(F, 0., 1.6) * (1. - ss(.62, .9, p) * .6) + .9 * ss(.46, .56, p) * (1. - ss(.62, .9, p));
+  // lazy, slow surface relief; a little waxy bumpiness once it has cooled
+  vec2 bump = vec2(fbm3(q+vec2(.03,0.))-fbm3(q-vec2(.03,0.)), fbm3(q+vec2(0.,.03))-fbm3(q-vec2(0.,.03))) / .06 * (.07 + .04 * cloud);
+  vec3 n = normalize(vec3(-g * .15 * str * (1. - .9 * cloud) - bump * str, 1.));
+  // what is under the fat (A before the cloud peak, B after), seen through a hazy, bending lens
+  vec2 off = n.xy * (.075 * thick) * str;
+  float rb = (.008 + .024 * thick) * uStr * gate;
+  vec3 base = vec3(0.);
+  vec2 tap0 = uv + off;
+  base += mix(texture2D(uA, tap0).rgb, texture2D(uB, tap0).rgb, swapB) * .36;
+  vec2 d4[4]; d4[0] = vec2(1., 0.); d4[1] = vec2(-1., 0.); d4[2] = vec2(0., 1.); d4[3] = vec2(0., -1.);
+  for (int k = 0; k < 4; k++) { vec2 tt = tap0 + d4[k] * rb * vec2(1., asp); base += mix(texture2D(uA, tt).rgb, texture2D(uB, tt).rgb, swapB) * .16; }
+  // amber: blue is absorbed far more than red, more so where it is thick
+  vec3 trans = exp(-thick * vec3(.08, .20, .55) * gate);
+  vec3 clearCol = base * trans;
+  float milk = clamp(thick * .62, 0., .88) * gate;                       // fat scatters: creamy and cloudy, not glassy
+  vec3 cream = vec3(.93, .88, .74) * (.62 + .38 * dot(n, normalize(vec3(-.40, .60, .70))));
+  clearCol = mix(clearCol, cream, milk);
+  clearCol *= .86 + .28 * L;                                              // soft shadowing in the dips of the lumps
+  clearCol += vec3(1., .72, .35) * exp(-pow((F - .31) / .20, 2.)) * .10 * gate * uLight;        // warm glow of light passing through thin fat
+  vec3 R = reflect(vec3(0., 0., 1.), n);
+  float Fr = .02 + .22 * pow(1. - n.z, 3.);
+  vec3 refl = mix(env(R, p * .8), vec3(.30, .32, .36), .55) * uLight;                          // soft, low-contrast: fat is not a mirror
+  clearCol += refl * Fr * gate;
+  clearCol += vec3(1., .96, .88) * pow(max(dot(R, normalize(vec3(-.45, .62, -.64))), 0.), 9.) * .13 * uLight * gate;   // broad oily highlight
+  float thin = exp(-pow((F - .31) / .13, 2.)) * gate;
+  clearCol += (.5 + .5 * cos(6.2832 * (thick * 1.4 + vec3(0., .33, .67)))) * thin * .07 * uLight;                       // thin-film rainbow at the edge
+  // opaque cooled tallow: ivory, waxy, satin
+  vec3 Lw = normalize(vec3(-.40, .60, .70));
+  float diff = .55 + .45 * dot(n, Lw);
+  vec3 wax = vec3(.94, .90, .79) * diff;
+  wax += vec3(1., .78, .50) * exp(-pow((F - .31) / .22, 2.)) * .25;                            // subsurface warmth at thin spots
+  wax += vec3(1., .97, .90) * pow(max(dot(R, normalize(vec3(-.45, .62, -.64))), 0.), 14.) * .30 * uLight;
+  vec3 lit = mix(clearCol, wax, cloud);
+  vec3 colA = texture2D(uA, uv).rgb * (1. - .35 * ss(.0, .27, F) * (1. - inside));
+  colA += vec3(1., .75, .4) * ss(.0, .27, F) * (1. - inside) * .06;
+  gl_FragColor = vec4(mix(colA, lit, inside), 1.);
+}`,
   chrome: GL_PRELUDE + `
 float field(vec2 x){
   x += .14 * vec2(sin(x.y * 3.1 + uP * 2.2), sin(x.x * 2.7 - uP * 1.7));
@@ -4029,6 +4266,7 @@ function runGLTransition(cfg, onDone) {
   const gl = g.gl;
   gl.useProgram(prog);
   const texA = glTex(gl, 0, cfg.src), texB = glTex(gl, 1, cfg.dst);
+  PLAYER.hooks.length = 0; PLAYER.hooks.push(() => { try { gl.deleteTexture(texA); gl.deleteTexture(texB); } catch (e) {} });
   const U = n => gl.getUniformLocation(prog, n);
   const P = cfg.params(), DURATION = cfg.base / P.speed;
   gl.uniform1i(U('uA'), 0); gl.uniform1i(U('uB'), 1); gl.uniform2f(U('uRes'), RW, RH);
@@ -4068,7 +4306,7 @@ function runGlassOrb(onDone) {
     params: () => ({ speed: glSl('orbSpeed', 100) / 100, str: (glSl('orbIor', 150) / 100 - 1) / 0.5, disp: glSl('orbDisp', 100) / 100, light: glSl('orbLight', 100) / 100, mode: glMode('orbpath') }) }, onDone);
 }
 function runLiquidChrome(onDone) {
-  runGLTransition({ key: 'chrome', src: chr_srcC, dst: chr_dstC, rec: recCtx13, recCanvas: recC13, disp: ctx13, base: 4.4,
+  runGLTransition({ key: glMode('chrmat') === 1 ? 'tallow' : 'chrome', src: chr_srcC, dst: chr_dstC, rec: recCtx13, recCanvas: recC13, disp: ctx13, base: 4.4,
     params: () => ({ speed: glSl('chrSpeed', 100) / 100, str: glSl('chrStr', 100) / 100, disp: 1, light: glSl('chrLight', 100) / 100, mode: glMode('chrpath') }) }, onDone);
 }
 
@@ -4079,6 +4317,7 @@ uniform float uS;      // 0..1  progress of the sheet leaving (A) or arriving (B
 uniform float uAsp;
 uniform mediump float uFlip;   // 1 = mirrored top-to-bottom (B arrives from the top)
 uniform float uTw;     // swirl twist amount
+uniform float uRot;    // direction the sheet drains: 0 = down, +90deg = right, -90deg = left
 uniform float uT, uDm, uRl, uCr, uPt, uYw, uRo, uSc, uCy;   // per-frame channels from a smooth spline
 varying vec2 vUV; varying vec3 vN; varying float vBack;
 float ss(float a, float b, float x){ float t = clamp((x - a) / (b - a), 0., 1.); return t * t * (3. - 2. * t); }
@@ -4099,7 +4338,7 @@ vec3 deform(vec2 q){
   float Yw = uYw;   // yaw
   float Ro = uRo; // roll of the sheet
   float Sc = uSc;   // overall size
-  float Cy = uCy;  // drift to the bottom
+  float Cy = uCy * mix(1., uAsp, abs(sin(uRot)));   // sideways exits have a wider screen to cross  // drift to the bottom
   float rm = sqrt(uAsp * uAsp + 1.);
   float rho = length(q), phi = atan(q.y, q.x);
   float rn = clamp(rho / rm, 0., 1.);
@@ -4113,30 +4352,50 @@ vec3 deform(vec2 q){
   vec3 P = vec3(rp * cos(phi), rp * sin(phi), z);
   float b = Cr * (1. - .5 * Tk);                                  // vertical crease down the middle
   P.z -= (uAsp - abs(P.x)) * sin(b) * .75; P.x *= cos(b);
+  // The sheet is always the same landscape sheet, swirled and folded exactly as for "down the drain".
+  // Only the tilt and the fall are turned toward the chosen exit (tilt axes rotated by uRot, drift along the exit).
+  float rc = cos(uRot), rs = sin(uRot);
+  P.xy = vec2(rc * P.x + rs * P.y, -rs * P.x + rc * P.y);
   float ct = cos(Pt), st = sin(Pt);
   P = vec3(P.x, P.y * ct + P.z * st, -P.y * st + P.z * ct);
   float cp = cos(Yw), sp = sin(Yw);
   P = vec3(P.x * cp + P.z * sp, P.y, -P.x * sp + P.z * cp);
-  return vec3(P.x * Sc, P.y * Sc + Cy, P.z * Sc);
+  P.xy = vec2(rc * P.x - rs * P.y, rs * P.x + rc * P.y);
+  return vec3(P.x * Sc - rs * Cy, P.y * Sc + rc * Cy, P.z * Sc);
+}
+vec3 deformR(vec2 q){ return deform(q); }
+vec3 deformM(vec2 q){            // B: the same motion mirrored across the drain axis (reflect in, move, reflect out) so the picture itself is never mirrored
+  if (uFlip > .5) {
+    vec2 dd = vec2(sin(uRot), -cos(uRot));
+    vec3 P = deformR(q - 2. * dot(q, dd) * dd);
+    P.xy -= 2. * dot(P.xy, dd) * dd;
+    return P;
+  }
+  return deformR(q);
 }
 void main(){
   float e = .012;
-  vec3 P  = deform(aXY);
-  vec3 dx = deform(aXY + vec2(e, 0.)) - P, dy = deform(aXY + vec2(0., e)) - P;
+  vec3 P  = deformM(aXY);
+  vec3 dx = deformM(aXY + vec2(e, 0.)) - P, dy = deformM(aXY + vec2(0., e)) - P;
   vec3 n = cross(dx, dy); n = length(n) > 1e-9 ? normalize(n) : vec3(0., 0., 1.);
-  if (uFlip > .5) { P.y = -P.y; n.y = -n.y; n = -n; }
   vN = n; vUV = vec2(aXY.x / uAsp * .5 + .5, aXY.y * .5 + .5);
   float D = 5., d = D - P.z;
-  float zn = d * .12 - 1.;
+  float zn = d * .4 - 2.2;               // spread depth over most of the buffer: layered paper z-fights less, even on a 16-bit depth buffer
   gl_Position = vec4(P.x / uAsp * D, P.y * D, zn * d, d);
 }`;
 const PS_FS = `
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
 precision mediump float;
-uniform sampler2D uTex; uniform float uFlip;
+#endif
+uniform sampler2D uTex;
 varying vec2 vUV; varying vec3 vN;
+uniform float uWire;   // 0 = normal, 1 = mesh lines, 2 = flat dark fill under the lines
 void main(){
   vec3 n = normalize(vN);
-  bool back = (gl_FrontFacing == (uFlip > .5));   // mirroring flips the winding
+  bool back = !gl_FrontFacing;
+  if (uWire > .5) { vec3 c = uWire > 1.5 ? (back ? vec3(.20, .06, .16) : vec3(.05, .10, .12)) : (back ? vec3(1., .25, .8) : vec3(.25, 1., .9)); gl_FragColor = vec4(c, 1.); return; }
   if (back) n = -n;
   float shade = .80 + .20 * clamp(dot(n, normalize(vec3(-.35, .55, .75))) * .5 + .5, 0., 1.);
   vec3 col; float al = 1.;
@@ -4172,12 +4431,14 @@ function psCreate(gl, asp) {
   for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) { v[(j * NX + i) * 2] = (i / (NX - 1) * 2 - 1) * asp; v[(j * NX + i) * 2 + 1] = j / (NY - 1) * 2 - 1; }
   const idx = new Uint16Array((NX - 1) * (NY - 1) * 6); let k = 0;
   for (let j = 0; j < NY - 1; j++) for (let i = 0; i < NX - 1; i++) { const a = j * NX + i, b = a + 1, c = a + NX, d = c + 1; idx.set([a, b, c, b, d, c], k); k += 6; }
+  const li = []; for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) { const a = j * NX + i; if (i < NX - 1) li.push(a, a + 1); if (j < NY - 1) li.push(a, a + NX); }
+  const lb = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, lb); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(li), gl.STATIC_DRAW);
   const vb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, vb); gl.bufferData(gl.ARRAY_BUFFER, v, gl.STATIC_DRAW);
   const ib = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.STATIC_DRAW);
-  return { gl, pr, vb, ib, n: idx.length, asp, U: n => gl.getUniformLocation(pr, n) };
+  return { gl, pr, vb, ib, lb, ln: li.length, n: idx.length, asp, U: n => gl.getUniformLocation(pr, n) };
 }
 // draw one frame. p = 0..1 over the whole transition. texA / texB are WebGL textures.
-function psDraw(R, p, texA, texB, tw, inv) {
+function psDraw(R, p, texA, texB, tw, inv, rot) {
   const gl = R.gl, GAP = .04, HALF = .5 - GAP;
   let s, flip, tex;
   if (p < HALF)            { s = p / HALF;           flip = 0; tex = texA; }
@@ -4191,8 +4452,12 @@ function psDraw(R, p, texA, texB, tw, inv) {
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, R.ib);
   gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, tex);
   gl.uniform1i(R.U('uTex'), 0); gl.uniform1f(R.U('uS'), s); gl.uniform1f(R.U('uAsp'), R.asp); gl.uniform1f(R.U('uFlip'), inv ? 1 - flip : flip); for (const k in PS_KEYS) gl.uniform1f(R.U('u' + k), psSpline(PS_KEYS[k], s));
-  gl.uniform1f(R.U('uTw'), tw == null ? 2.2 : tw);
+  gl.uniform1f(R.U('uRot'), rot || 0); gl.uniform1f(R.U('uTw'), tw == null ? 2.2 : tw);
+  const wire = !!window.PS_WIRE;
+  if (wire) { gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(1, 1); gl.uniform1f(R.U('uWire'), 2); }
+  else gl.uniform1f(R.U('uWire'), 0);
   gl.drawElements(gl.TRIANGLES, R.n, gl.UNSIGNED_SHORT, 0);
+  if (wire) { gl.disable(gl.POLYGON_OFFSET_FILL); gl.uniform1f(R.U('uWire'), 1); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, R.lb); gl.drawElements(gl.LINES, R.ln, gl.UNSIGNED_SHORT, 0); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, R.ib); }
   gl.disable(gl.DEPTH_TEST);
 }
 
@@ -4206,6 +4471,11 @@ function psContext() {
     if (!gl) throw new Error('no webgl');
     cv.addEventListener('webglcontextlost', e => { e.preventDefault(); PSG.ok = null; PSG.R = null; });
     PSG.gl = gl; PSG.cv = cv; PSG.R = psCreate(gl, RW / RH); PSG.ok = true;
+    try {
+      const x = gl.getExtension('WEBGL_debug_renderer_info'), vh = gl.getShaderPrecisionFormat(gl.VERTEX_SHADER, gl.HIGH_FLOAT), fh = gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.HIGH_FLOAT);
+      PSG.info = 'GPU: ' + (x ? gl.getParameter(x.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)) + ' · depth ' + gl.getParameter(gl.DEPTH_BITS) + '-bit · msaa ' + gl.getParameter(gl.SAMPLES) + ' · highp vs ' + (vh ? vh.precision : 0) + ' fs ' + (fh ? fh.precision : 0) + ' · canvas ' + cv.width + '×' + cv.height + ' asp ' + (RW / RH).toFixed(3);
+      const el = document.getElementById('pswInfo'); if (el) el.textContent = PSG.info;
+    } catch (e) {}
     return PSG;
   } catch (e) { PSG.ok = false; setStatus('Paper Swirl needs WebGL: ' + (e.message || e).slice(0, 120)); return null; }
 }
@@ -4214,9 +4484,10 @@ function runPaperSwirl(onDone) {
   if (!g) { if (onDone) onDone(() => {}); return; }
   const gl = g.gl, src = psw_srcC, dst = psw_dstC, rec = recCtx14, recCanvas = recC14, disp = ctx14;
   const texA = glTex(gl, 0, src), texB = glTex(gl, 1, dst);
-  const DURATION = 2.3 / (glSl('pswSpeed', 100) / 100), tw = 2.2 * glSl('pswTwist', 100) / 100, inv = glMode('pswflow') > .5;
+  PLAYER.hooks.length = 0; PLAYER.hooks.push(() => { try { gl.deleteTexture(texA); gl.deleteTexture(texB); } catch (e) {} });
+  const DURATION = 2.3 / (glSl('pswSpeed', 100) / 100), tw = 2.2 * glSl('pswTwist', 100) / 100, mode = glMode('pswflow'), inv = mode === 1, rot = mode === 2 ? -Math.PI / 2 : mode === 3 ? Math.PI / 2 : 0;
   function drawFrame(el) {
-    psDraw(g.R, Math.min(1, Math.max(0, el / DURATION)), texA, texB, tw, inv);
+    psDraw(g.R, Math.min(1, Math.max(0, el / DURATION)), texA, texB, tw, inv, rot);
     rec.clearRect(0, 0, RW, RH); rec.drawImage(g.cv, 0, 0);
     disp.clearRect(0, 0, W, H); disp.drawImage(recCanvas, 0, 0, W, H);
   }
@@ -4948,9 +5219,9 @@ function registerTransition(key) {
 // Wire the Glass Orb / Liquid Chrome pickers (default: first option).
 (function() {
   const style = document.createElement('style');
-  style.textContent = '.orbpath.orbpath-active, .chrpath.chrpath-active, .pswflow.pswflow-active { border-color: var(--color-text-primary) !important; color: var(--color-text-primary) !important; }';
+  style.textContent = '.orbpath.orbpath-active, .chrpath.chrpath-active, .chrmat.chrmat-active, .pswflow.pswflow-active { border-color: var(--color-text-primary) !important; color: var(--color-text-primary) !important; }';
   document.head.appendChild(style);
-  [['orbpath', 'glassOrb'], ['chrpath', 'liquidChrome'], ['pswflow', 'paperSwirl']].forEach(([cls, key]) => {
+  [['orbpath', 'glassOrb'], ['chrpath', 'liquidChrome'], ['chrmat', 'liquidChrome'], ['pswflow', 'paperSwirl']].forEach(([cls, key]) => {
     const btns = Array.from(document.querySelectorAll('.' + cls));
     const on = b => { btns.forEach(x => { x.classList.remove(cls + '-active'); x.style.borderColor = ''; x.style.color = ''; }); b.classList.add(cls + '-active'); };
     on(btns[0]);
@@ -5103,6 +5374,7 @@ function registerTransition(key) {
   watchGroup('.cautint', b => b.dataset.mode === 'day');     // default: Daylight
   watchGroup('.orbpath', b => b.dataset.mode === '0');       // default: Roll in
   watchGroup('.chrpath', b => b.dataset.mode === '0');       // default: Pours in
+  watchGroup('.chrmat', b => b.dataset.mode === '0');        // default: Water
   watchGroup('.pswflow', b => b.dataset.mode === '0');       // default: Down the drain
 })();
 
@@ -5445,7 +5717,10 @@ document.getElementById('alphaWarnClose').addEventListener('click', () => {
   }
   
   function go(v, fromPop) {                                      // v: 'grid' | 'all' | slug
-    if (anyRunning()) { setStatus('Wait for the current Play / Record to finish before switching transitions.'); return false; }
+    if (anyRunning()) {
+      if (PLAYER.recording()) { setStatus('Wait for the current Record to finish before switching transitions.'); return false; }
+      PLAYER.cancel();                                           // playing: just stop it and move on
+    }
     show(v);                                                     // never depends on the address bar
     if (!fromPop) { try { history.pushState(null, '', v === 'grid' ? location.pathname + location.search : '#' + v); } catch (e) {} }
     return true;
@@ -5454,7 +5729,7 @@ document.getElementById('alphaWarnClose').addEventListener('click', () => {
     const h = location.hash.replace(/^#\/?/, '');
     return h === 'all' ? 'all' : (secs.some(s => s.slug === h) ? h : 'grid');
   };
-  const sync = () => { const v = fromHash(); if (v !== view) { if (anyRunning()) return; show(v); } };
+  const sync = () => { const v = fromHash(); if (v !== view) { if (anyRunning()) { if (PLAYER.recording()) return; PLAYER.cancel(); } show(v); } };
   window.addEventListener('hashchange', sync);
   window.addEventListener('popstate', sync);
   grid.addEventListener('click', e => {
