@@ -124,9 +124,11 @@
     #dbFull { font-size:14px !important; }
     #backdrop { position:fixed; inset:0; background:rgba(0,0,0,.78); z-index:40; backdrop-filter:blur(3px); }
     body.modal-open { overflow:hidden; }
-    .tsec.open { position:fixed; z-index:60; top:64px; bottom:16px; left:50%; transform:translateX(-50%); width:min(1100px, calc(100vw - 24px)); overflow:auto; box-sizing:border-box; padding:14px 18px 18px; background:var(--color-bg-primary, #141414); border:.5px solid var(--color-border-secondary, #333); border-radius:14px; box-shadow:0 20px 70px rgba(0,0,0,.7); margin:0; }
+    .tsec.open { position:fixed; z-index:60; top:16px; bottom:16px; left:50%; transform:translateX(-50%); width:min(1100px, calc(100vw - 24px)); overflow:auto; box-sizing:border-box; padding:14px 18px 18px; background:var(--color-bg-primary, #141414); border:.5px solid var(--color-border-secondary, #333); border-radius:14px; box-shadow:0 20px 70px rgba(0,0,0,.7); margin:0; }
     #detailBar.modal { position:fixed; z-index:61; top:14px; left:50%; transform:translateX(-50%); width:min(1100px, calc(100vw - 24px)); box-sizing:border-box; margin:0; padding:0 4px; }
     .tsec:fullscreen { width:100vw !important; height:100vh !important; top:0 !important; left:0 !important; transform:none !important; border-radius:0 !important; border:0 !important; }
+    #detailBar.modal { display:none !important; }
+    #playerBar button, #playerBar #pbNav { display:none !important; }
     #detailBar.modal button { background:rgba(30,30,30,.95); }
   </style>
 </head>
@@ -547,6 +549,11 @@
     <button class="pswflow" data-mode="2" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">Left</button>
     <button class="pswflow" data-mode="3" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">Right</button>
   </div>
+  <div style="display:flex;gap:6px;justify-content:center;align-items:center;flex-wrap:wrap;margin-top:6px;">
+    <span style="font-size:10px;color:var(--color-text-tertiary);">Style:</span>
+    <button class="pswstyle" data-mode="0" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">Super Paper Mario</button>
+    <button class="pswstyle" data-mode="1" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">Thousand-Year Door</button>
+  </div>
   <span id="pswInfo" hidden></span>
 </div>
 <p id="status" style="text-align:center;font-size:11px;color:var(--color-text-tertiary);margin:.4rem 0 .5rem;min-height:1.4em;">Display 4K · Shimmer 1280×720 · Records 1080p · frame-accurate WebCodecs export (real-time fallback)</p>
@@ -640,11 +647,15 @@
 
   const bar = document.createElement('div');
   bar.id = 'playerBar';
-  bar.style.cssText = 'position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:99999;display:none;align-items:center;gap:6px;padding:6px 8px;border-radius:999px;background:rgba(18,18,18,.92);border:1px solid rgba(255,255,255,.16);box-shadow:0 4px 18px rgba(0,0,0,.45);font:12px/1 system-ui,sans-serif;color:#eee;user-select:none;';
+  bar.style.cssText = 'display:none;justify-content:center;margin:6px auto 0;font:11px/1.3 system-ui,sans-serif;color:var(--color-text-tertiary,#888);user-select:none;';
   const mk = (id, label, title) => `<button type="button" id="${id}" title="${title}" style="font:inherit;color:inherit;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);border-radius:999px;padding:6px 12px;cursor:pointer;">${label}</button>`;
-  bar.innerHTML = mk('pbBack', '◀ ,', 'One frame back ( , )') + mk('pbPlay', '⏸ Pause', 'Pause / resume ( P or Space )') + mk('pbFwd', '. ▶', 'One frame forward ( . )') + mk('pbStop', '⏹ Stop', 'Stop and reset ( S )') + '<span id="pbRead" style="min-width:196px;text-align:center;opacity:.8;font-variant-numeric:tabular-nums;white-space:nowrap;"></span>';
-  document.body.appendChild(bar);
+  bar.innerHTML = mk('pbBack', '◀ ,', 'One frame back ( , )') + mk('pbPlay', '⏸ Pause', 'Play / pause / resume ( Space )') + mk('pbFwd', '. ▶', 'One frame forward ( . )') + mk('pbStop', '⏹ Stop', 'Stop and reset ( S )') + '<span id="pbRead" style="min-width:196px;text-align:center;opacity:.8;font-variant-numeric:tabular-nums;white-space:nowrap;"></span>';
+  bar.insertAdjacentHTML('beforeend', '<span id="pbNav" style="display:none;align-items:center;gap:6px;margin-left:6px;padding-left:10px;border-left:1px solid rgba(255,255,255,.18);">' +
+    mk('pbAll', '☰ All', 'Back to all transitions ( Esc )') + mk('pbPrev', '‹', 'Previous transition ( ← or P )') + mk('pbNext', '›', 'Next transition ( → or N )') + mk('pbFull', '⛶', 'Full screen ( F )') + '</span>');
+  document.body.appendChild(bar);   // moved next to the open card's Play button as soon as there is one
   const q = id => bar.querySelector('#' + id);
+  const nav = id => () => { const b = document.getElementById(id); if (b) b.click(); };
+  q('pbAll').addEventListener('click', nav('dbBack')); q('pbPrev').addEventListener('click', nav('dbPrev')); q('pbNext').addEventListener('click', nav('dbNext')); q('pbFull').addEventListener('click', nav('dbFull'));
   bar.addEventListener('mousedown', e => e.preventDefault());          // keep keyboard focus where it was
   q('pbBack').addEventListener('click', () => stepBy(-1));
   q('pbFwd').addEventListener('click', () => stepBy(1));
@@ -658,10 +669,14 @@
       const cfg = TRANSITIONS[k], b = document.getElementById(cfg.playBtnId), r = document.getElementById(cfg.recBtnId);
       if (!b || b.__pb) return;
       b.__pb = true; b.__pbLabel = b.textContent;
-      const sb = document.createElement('button'); sb.type = 'button'; sb.textContent = '⏹ Stop'; sb.title = 'Stop and reset ( S )';
-      sb.style.cssText = b.style.cssText; sb.style.display = 'none';
+      const mkb = (label, title, pad, fn) => { const x = document.createElement('button'); x.type = 'button'; x.textContent = label; x.title = title; x.style.cssText = b.style.cssText.replace(/padding\s*:[^;]+;?/, '') + ';padding:7px ' + pad + 'px;'; x.addEventListener('click', fn); return x; };
+      b.parentElement.style.flexWrap = 'wrap';
+      const fb = mkb('◀ ,', 'One frame back ( , )', 12, () => stepBy(-1)), ff = mkb('. ▶', 'One frame forward ( . )', 12, () => stepBy(1));
+      b.insertAdjacentElement('beforebegin', fb); b.insertAdjacentElement('afterend', ff); b.__pbFb = fb; b.__pbFf = ff;
+      const sb = mkb('⏹ Stop', 'Stop and reset ( S )', 20, () => cancel());
       (r || b).insertAdjacentElement('afterend', sb); b.__pbStop = sb;
-      sb.addEventListener('click', () => cancel());
+      const navs = [['☰ All', 'Back to all transitions ( Esc )', 'dbBack'], ['‹', 'Previous transition ( ← or P )', 'dbPrev'], ['›', 'Next transition ( → or N )', 'dbNext'], ['⛶', 'Full screen ( F )', 'dbFull']].map(([l, t, id]) => mkb(l, t, 14, () => { const x = document.getElementById(id); if (x) x.click(); }));
+      let at = sb; navs.forEach((x, i) => { if (i === 0) x.style.marginLeft = '14px'; at.insertAdjacentElement('afterend', x); at = x; }); b.__pbNav = navs;
       // capture phase: runs before the engine's own handler, so it sees the state BEFORE this click
       b.addEventListener('click', () => { if (cfg.running && active()) setPaused(!paused); }, true);
       if (r) r.addEventListener('click', () => { if (!cfg.running) recMode = true; }, true);
@@ -674,7 +689,10 @@
     Object.keys(TRANSITIONS).forEach(k => {
       const cfg = TRANSITIONS[k], b = document.getElementById(cfg.playBtnId);
       if (!b || !b.__pb) return;
-      b.__pbStop.style.display = (on && cfg.running) ? '' : 'none';
+      const live = on && cfg.running;
+      [b.__pbStop, b.__pbFb, b.__pbFf].forEach(x => { x.disabled = !live; x.style.opacity = live ? '' : '.4'; x.style.cursor = live ? 'pointer' : 'default'; });
+      const single = !!b.closest('.tsec.open');
+      b.__pbNav.forEach(x => { x.style.display = single ? '' : 'none'; });
       if (on && cfg.running) { b.disabled = false; const t = paused ? '▶ Resume' : '⏸ Pause'; if (b.textContent !== t) b.textContent = t; }
       else if (b.textContent !== b.__pbLabel) b.textContent = b.__pbLabel;
     });
@@ -684,7 +702,10 @@
     if (!running()) recMode = false;
     paintCardButtons();
     const on = active(), idleKey = (!running() && !recMode) ? openCardKey() : null;
+    const showKey = on ? curKey : idleKey, row = showKey && TRANSITIONS[showKey] && document.getElementById(TRANSITIONS[showKey].playBtnId);
+    if (row && row.parentElement && bar.previousElementSibling !== row.parentElement) row.parentElement.after(bar);
     bar.style.display = (on || idleKey) ? 'flex' : 'none';
+    q('pbNav').style.display = document.querySelector('.tsec.open') ? 'flex' : 'none';
     ['pbBack', 'pbFwd', 'pbStop'].forEach(id => { const b = q(id); b.disabled = !on; b.style.opacity = on ? '' : '.35'; b.style.cursor = on ? 'pointer' : 'default'; });
     if (!on && !idleKey) return;
     q('pbPlay').textContent = on ? (paused ? '▶ Resume' : '⏸ Pause') : '▶ Play';
@@ -697,17 +718,19 @@
   }
   setInterval(refresh, 40);
 
+  const typing = e => { const t = e.target, tag = t && t.tagName; return tag === 'TEXTAREA' || tag === 'SELECT' || (t && t.isContentEditable) || (tag === 'INPUT' && t.type !== 'range' && t.type !== 'checkbox'); };
+  const idleCard = () => (!running() && !recMode) ? openCardKey() : null;
   document.addEventListener('keydown', e => {
-    if (e.ctrlKey || e.metaKey || e.altKey || !active()) return;
-    const t = e.target, tag = t && t.tagName;
-    if (tag === 'TEXTAREA' || tag === 'SELECT' || (t && t.isContentEditable) || (tag === 'INPUT' && t.type !== 'range' && t.type !== 'checkbox')) return;
+    if (e.ctrlKey || e.metaKey || e.altKey || typing(e)) return;
+    if (e.key === ' ' && !active()) { const k = idleCard(); if (k) { e.preventDefault(); const b = document.getElementById(TRANSITIONS[k].playBtnId); if (b && !b.disabled) b.click(); } return; }   // Space starts the open transition
+    if (!active()) return;
     if (e.key === ',' || e.key === '<') { e.preventDefault(); stepBy(-1); }
     else if (e.key === '.' || e.key === '>') { e.preventDefault(); stepBy(1); }
-    else if (e.key === ' ' || e.key === 'p' || e.key === 'P') { e.preventDefault(); setPaused(!paused); }
+    else if (e.key === ' ') { e.preventDefault(); setPaused(!paused); }
     else if (e.key === 's' || e.key === 'S') { e.preventDefault(); cancel(); }
     else if (e.key === 'm' || e.key === 'M') { e.preventDefault(); window.PS_WIRE = !window.PS_WIRE; if (paused) { stepReq += 1e-3; schedule(); } refresh(); }   // mesh view for the paper swirl (redraws at once when paused)
   });
-  document.addEventListener('keyup', e => { if (e.key === ' ' && active()) e.preventDefault(); });   // stop Space re-clicking a focused Play button
+  document.addEventListener('keyup', e => { if (e.key === ' ' && (active() || idleCard()) && !typing(e)) e.preventDefault(); });   // stop Space re-clicking a focused Play button
 })();
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -3870,7 +3893,7 @@ function runRippleRefraction(onDone) {
 // everything else is the full-resolution A and B composited normally, so the
 // image stays sharp and a transparent A or B holds out correctly.
 // ══════════════════════════════════════════════════════════════════════════
-function runCaustics(onDone) {
+function runCausticsCPU(onDone) {
   const sl$ = (id, d) => { const e = document.getElementById(id); return e ? parseFloat(e.value) : d; };
   const fSpeed = sl$('cauSpeed', 100) / 100, REFR = sl$('cauRefr', 80) / 100, CAUS = sl$('cauCaus', 85) / 100, SIZE = sl$('cauSize', 100) / 100;
   const dBtn = document.querySelector('.caudir.caudir-active'), tBtn = document.querySelector('.cautint.cautint-active');
@@ -4104,6 +4127,66 @@ void main(){
   }
   gl_FragColor = vec4(col * aOut, aOut);
 }`,
+  caustics: GL_PRELUDE + `
+uniform vec3 uTint;      // light colour, 0..1
+void main(){
+  vec2 g = gl_FragCoord.xy / uRes;
+  float u = g.x, v = 1. - g.y;                                           // v counts down from the top, as in the original field
+  float asp = uRes.x / uRes.y, p = uP;
+  float REFR = uStr, CAUS = uLight, S = 7.2 / uDisp;
+  const float BAND = .13, WAKE = 2.4, INT = .005;
+  float t = p * 3.78 + 21.;
+  float reach = uMode < .5 ? 1.82 : 1.22;
+  float pos = p * (reach + BAND * 1.2 + .04) - BAND * 1.2;
+  float gate = ss(0., .05, p) * (1. - ss(.9, 1., p));
+  // distance along the ragged front
+  float q;
+  if (uMode > .5 && uMode < 1.5) q = v + .05 * sin(u * 6.1 + 1.2) + .035 * sin(u * 13. + v * 3.) + .02 * sin(u * 27. + v * 9. + 2.);
+  else if (uMode > 1.5) q = u + .05 * sin(v * 7.3 + .4) + .035 * sin(v * 15. + u * 3.) + .02 * sin(v * 31. + u * 8. + 1.);
+  else {
+    float ex = (u - .5) * asp, ey = v - .5, ang = atan(ey, ex);
+    q = length(vec2(ex, ey)) / .78 * (1. + .13 * sin(3. * ang + 1.3) + .09 * sin(5. * ang + 4.1) + .05 * sin(8. * ang + .7) + .025 * sin(13. * ang + 2.2));
+  }
+  q += .02 * sin(u * 19. + v * 11. + .6) + .012 * sin(u * 43. - v * 37.);
+  float d = pos - q;
+  float m = ss(-BAND * .55, BAND * .55, d);
+  float near = exp(-(d * d) / (BAND * BAND * 1.1));
+  float behind = d > 0. ? exp(-d * WAKE) : 0.;
+  float ahead = d < 0. ? exp(-d * d / (BAND * BAND * 5.)) * .35 : 0.;
+  float patch = .78 + .22 * sin(u * 5.3 + v * 3.1 + t * .25) * cos(v * 4.7 - u * 2.2 + t * .18);
+  float E = max(max(near, behind * .8), ahead) * gate * patch;
+  vec2 uvg = vec2(u, g.y);
+  vec4 A0 = texture2D(uA, uvg), B0 = texture2D(uB, uvg);
+  // full-resolution base: B through the soft mask over A
+  float aB = B0.a * m, aBase = aB + A0.a * (1. - aB);
+  vec3 cBase = aBase > .0001 ? (B0.rgb * aB + A0.rgb * A0.a * (1. - aB)) / aBase : vec3(0.);
+  if (E < .002) { gl_FragColor = vec4(cBase * aBase, aBase); return; }
+  // caustic + refraction field (the same five-step warp, now at every pixel)
+  vec2 pq = vec2(u * asp * S + 250., v * S - 250.), iq = pq;
+  float c = 1.;
+  for (int n = 0; n < 5; n++) {
+    float tt = t * (1. - 3.5 / (float(n) + 1.));
+    iq = pq + vec2(cos(tt - iq.x) + sin(tt + iq.y), sin(tt - iq.y) + cos(tt + iq.x));
+    float sx = sin(iq.x + tt), cy = cos(iq.y + tt);
+    sx = abs(sx) < 1e-4 ? 1e-4 : sx; cy = abs(cy) < 1e-4 ? 1e-4 : cy;
+    c += 1. / (INT * length(vec2(pq.x / sx, pq.y / cy)));
+  }
+  c /= 5.; c = 1.17 - pow(c, 1.4);
+  float val = pow(abs(c), 8.);
+  vec2 dq = iq - pq;
+  float k = E * REFR * 22. / 448.;
+  vec2 o1 = vec2(dq.x * k, -dq.y * k * asp);                              // bend, in picture units (screen y points down)
+  vec2 u1 = uvg + o1, u2 = uvg + o1 * 1.08, u3 = uvg + o1 * 1.16;         // a touch of dispersion
+  vec4 a1 = texture2D(uA, u1), b1 = texture2D(uB, u1), a2 = texture2D(uA, u2), b2 = texture2D(uB, u2), a3 = texture2D(uA, u3), b3 = texture2D(uB, u3);
+  float r = mix(a1.r, b1.r, m), gg = mix(a2.g, b2.g, m), bb = mix(a3.b, b3.b, m), al = mix(a2.a, b2.a, m);
+  float L = min(1.4, val * 1.9) * E * CAUS * (.55 + .45 * m);
+  float sh = 1. - E * CAUS * .28 * (1. - min(1., val * 2.5));
+  vec3 cO = min(vec3(1.), vec3(r, gg, bb) * sh + uTint * L * .55);
+  float aO = min(1., E * 5.) * al;                                         // calms back to the sharp base as the water settles
+  float aF = aO + aBase * (1. - aO);
+  vec3 cF = aF > .0001 ? (cO * aO + cBase * aBase * (1. - aO)) / aF : vec3(0.);
+  gl_FragColor = vec4(cF * aF, aF);
+}`,
   tallow: GL_PRELUDE + `
 float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.-2.*f);
   return mix(mix(h21(i), h21(i+vec2(1.,0.)), f.x), mix(h21(i+vec2(0.,1.)), h21(i+vec2(1.,1.)), f.x), f.y); }
@@ -4271,6 +4354,7 @@ function runGLTransition(cfg, onDone) {
   const P = cfg.params(), DURATION = cfg.base / P.speed;
   gl.uniform1i(U('uA'), 0); gl.uniform1i(U('uB'), 1); gl.uniform2f(U('uRes'), RW, RH);
   gl.uniform1f(U('uStr'), P.str); gl.uniform1f(U('uDisp'), P.disp); gl.uniform1f(U('uLight'), P.light); gl.uniform1f(U('uMode'), P.mode);
+  if (cfg.extra) cfg.extra(gl, U);
   function drawFrame(el) {
     gl.useProgram(prog);
     gl.uniform1f(U('uP'), Math.min(1, Math.max(0, el / DURATION)));
@@ -4301,6 +4385,15 @@ function runGLTransition(cfg, onDone) {
 }
 const glSl = (id, d) => { const e = document.getElementById(id); return e ? parseFloat(e.value) : d; };
 const glMode = cls => { const b = document.querySelector('.' + cls + '.' + cls + '-active'); return b ? parseFloat(b.dataset.mode) : 0; };
+function runCaustics(onDone) {
+  if (!glBridge()) return runCausticsCPU(onDone);                // no WebGL: the old software path
+  const dBtn = document.querySelector('.caudir.caudir-active'), tBtn = document.querySelector('.cautint.cautint-active');
+  const dirMode = dBtn ? dBtn.dataset.mode : 'centre', tintKey = tBtn ? tBtn.dataset.mode : 'day';
+  const TINT = { day: [235, 248, 255], teal: [120, 225, 235], gold: [255, 224, 150] }[tintKey];
+  runGLTransition({ key: 'caustics', src: cau_srcC, dst: cau_dstC, rec: recCtx11, recCanvas: recC11, disp: ctx11, base: 4.2,
+    params: () => ({ speed: glSl('cauSpeed', 100) / 100, str: glSl('cauRefr', 80) / 100, disp: glSl('cauSize', 100) / 100, light: glSl('cauCaus', 85) / 100, mode: dirMode === 'down' ? 1 : dirMode === 'right' ? 2 : 0 }),
+    extra: (gl, U) => gl.uniform3f(U('uTint'), TINT[0] / 255, TINT[1] / 255, TINT[2] / 255) }, onDone);
+}
 function runGlassOrb(onDone) {
   runGLTransition({ key: 'orb', src: orb_srcC, dst: orb_dstC, rec: recCtx12, recCanvas: recC12, disp: ctx12, base: 4.4,
     params: () => ({ speed: glSl('orbSpeed', 100) / 100, str: (glSl('orbIor', 150) / 100 - 1) / 0.5, disp: glSl('orbDisp', 100) / 100, light: glSl('orbLight', 100) / 100, mode: glMode('orbpath') }) }, onDone);
@@ -4318,8 +4411,8 @@ uniform float uAsp;
 uniform mediump float uFlip;   // 1 = mirrored top-to-bottom (B arrives from the top)
 uniform float uTw;     // swirl twist amount
 uniform float uRot;    // direction the sheet drains: 0 = down, +90deg = right, -90deg = left
-uniform float uT, uDm, uRl, uCr, uPt, uYw, uRo, uSc, uCy;   // per-frame channels from a smooth spline
-varying vec2 vUV; varying vec3 vN; varying float vBack;
+uniform float uT, uDm, uRl, uCr, uPt, uYw, uRo, uSc, uCy, uCx;   // per-frame channels from a smooth spline
+varying vec2 vUV; varying vec3 vN; varying float vBack; varying float vZ;
 float ss(float a, float b, float x){ float t = clamp((x - a) / (b - a), 0., 1.); return t * t * (3. - 2. * t); }
 float K(float s, float a, float b, float c, float d, float e, float f, float g, float h, float i){
   float x = clamp(s * 8., 0., 8.), k = floor(min(x, 7.)), t = x - k; t = t * t * (3. - 2. * t);
@@ -4361,7 +4454,7 @@ vec3 deform(vec2 q){
   float cp = cos(Yw), sp = sin(Yw);
   P = vec3(P.x * cp + P.z * sp, P.y, -P.x * sp + P.z * cp);
   P.xy = vec2(rc * P.x - rs * P.y, rs * P.x + rc * P.y);
-  return vec3(P.x * Sc - rs * Cy, P.y * Sc + rc * Cy, P.z * Sc);
+  return vec3(P.x * Sc - rs * Cy + rc * uCx, P.y * Sc + rc * Cy + rs * uCx, P.z * Sc);
 }
 vec3 deformR(vec2 q){ return deform(q); }
 vec3 deformM(vec2 q){            // B: the same motion mirrored across the drain axis (reflect in, move, reflect out) so the picture itself is never mirrored
@@ -4378,7 +4471,7 @@ void main(){
   vec3 P  = deformM(aXY);
   vec3 dx = deformM(aXY + vec2(e, 0.)) - P, dy = deformM(aXY + vec2(0., e)) - P;
   vec3 n = cross(dx, dy); n = length(n) > 1e-9 ? normalize(n) : vec3(0., 0., 1.);
-  vN = n; vUV = vec2(aXY.x / uAsp * .5 + .5, aXY.y * .5 + .5);
+  vN = n; vZ = P.z; vUV = vec2(aXY.x / uAsp * .5 + .5, aXY.y * .5 + .5);
   float D = 5., d = D - P.z;
   float zn = d * .4 - 2.2;               // spread depth over most of the buffer: layered paper z-fights less, even on a 16-bit depth buffer
   gl_Position = vec4(P.x / uAsp * D, P.y * D, zn * d, d);
@@ -4390,7 +4483,7 @@ precision highp float;
 precision mediump float;
 #endif
 uniform sampler2D uTex;
-varying vec2 vUV; varying vec3 vN;
+varying vec2 vUV; varying vec3 vN; varying float vZ;
 uniform float uWire;   // 0 = normal, 1 = mesh lines, 2 = flat dark fill under the lines
 void main(){
   vec3 n = normalize(vN);
@@ -4399,7 +4492,12 @@ void main(){
   if (back) n = -n;
   float shade = .80 + .20 * clamp(dot(n, normalize(vec3(-.35, .55, .75))) * .5 + .5, 0., 1.);
   vec3 col; float al = 1.;
-  if (back) col = vec3(.975, .97, .945) * (.70 + .30 * clamp(dot(n, normalize(vec3(-.35, .55, .75))) * .5 + .5, 0., 1.));
+  if (back) {                                                       // the white side: soft cool shadows, warm lit paper, darker deep in the funnel and at grazing angles
+    float d = clamp(dot(n, normalize(vec3(-.35, .55, .75))) * .5 + .5, 0., 1.); d = d * d * (3. - 2. * d);
+    float ao = mix(.50, 1., smoothstep(-1.3, .25, vZ));
+    float gr = mix(.62, 1., smoothstep(.0, .55, abs(n.z)));
+    col = mix(vec3(.50, .53, .60), vec3(1., .985, .95), d) * ao * gr;
+  }
   else { vec4 t = texture2D(uTex, vUV); col = t.rgb * shade; al = t.a; }
   gl_FragColor = vec4(col * al, al);
 }`;
@@ -4413,6 +4511,20 @@ const PS_KEYS = {
   Ro: [0., -.03, -.06, -.12, -.40, -1.20, -2.40, -3.60, -4.70],
   Sc: [1., .90, .82, .72, .60, .50, .42, .32, 0.],
   Cy: [0, 0, -0.03, -0.08, -0.16, -0.3, -0.48, -0.68, -0.98]
+};
+// Thousand-Year Door style, read off a 16-frame capture: the sheet stays centred and rolls only a little, then collapses
+// quickly into a four-pointed star on a long white tail that drops away; the paper arrives from the upper left on a curved path.
+const PS_KEYS_TTYD = {
+  T: [0., .02, .08, .22, .45, .72, .92, 1., 1.],
+  Dm: [0., 0., .35, .80, 1.05, 1.20, 1.25, 1.25, 1.25],
+  Rl: [0., 0., 0., .05, .35, .90, 1.50, 1.7, 1.7],
+  Cr: [0., .30, .55, .62, .70, .55, .25, .05, 0.],
+  Pt: [0., .10, .32, .48, .64, .78, .88, .90, .90],
+  Yw: [0., .18, .24, .20, .14, .08, 0., 0., 0.],
+  Ro: [0., -.04, -.12, -.30, -.55, -.80, -1.0, -1.1, -1.2],
+  Sc: [1., .88, .84, .66, .44, .40, .30, .10, 0.],
+  Cy: [0, 0, -.01, -.03, -.07, -.16, -.34, -.62, -1.0],
+  Cx: [0, -.03, -.10, -.18, -.36, -.70, -.98, -1.03, -1.03]
 };
 // Monotone cubic (PCHIP) through the keyframes: continuous velocity, no overshoot, no stop at each key.
 function psSpline(y, s) {
@@ -4438,7 +4550,7 @@ function psCreate(gl, asp) {
   return { gl, pr, vb, ib, lb, ln: li.length, n: idx.length, asp, U: n => gl.getUniformLocation(pr, n) };
 }
 // draw one frame. p = 0..1 over the whole transition. texA / texB are WebGL textures.
-function psDraw(R, p, texA, texB, tw, inv, rot) {
+function psDraw(R, p, texA, texB, tw, inv, rot, style) {
   const gl = R.gl, GAP = .04, HALF = .5 - GAP;
   let s, flip, tex;
   if (p < HALF)            { s = p / HALF;           flip = 0; tex = texA; }
@@ -4451,7 +4563,8 @@ function psDraw(R, p, texA, texB, tw, inv, rot) {
   gl.bindBuffer(gl.ARRAY_BUFFER, R.vb); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, R.ib);
   gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, tex);
-  gl.uniform1i(R.U('uTex'), 0); gl.uniform1f(R.U('uS'), s); gl.uniform1f(R.U('uAsp'), R.asp); gl.uniform1f(R.U('uFlip'), inv ? 1 - flip : flip); for (const k in PS_KEYS) gl.uniform1f(R.U('u' + k), psSpline(PS_KEYS[k], s));
+  gl.uniform1i(R.U('uTex'), 0); gl.uniform1f(R.U('uS'), s); gl.uniform1f(R.U('uAsp'), R.asp); gl.uniform1f(R.U('uFlip'), inv ? 1 - flip : flip); const KS = style === 1 ? PS_KEYS_TTYD : PS_KEYS; for (const k in KS) gl.uniform1f(R.U('u' + k), psSpline(KS[k], s));
+  gl.uniform1f(R.U('uCx'), style === 1 && p > 1 - HALF ? psSpline(PS_KEYS_TTYD.Cx, s) : 0);   // only the arriving sheet slides in from the side
   gl.uniform1f(R.U('uRot'), rot || 0); gl.uniform1f(R.U('uTw'), tw == null ? 2.2 : tw);
   const wire = !!window.PS_WIRE;
   if (wire) { gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(1, 1); gl.uniform1f(R.U('uWire'), 2); }
@@ -4485,9 +4598,9 @@ function runPaperSwirl(onDone) {
   const gl = g.gl, src = psw_srcC, dst = psw_dstC, rec = recCtx14, recCanvas = recC14, disp = ctx14;
   const texA = glTex(gl, 0, src), texB = glTex(gl, 1, dst);
   PLAYER.hooks.length = 0; PLAYER.hooks.push(() => { try { gl.deleteTexture(texA); gl.deleteTexture(texB); } catch (e) {} });
-  const DURATION = 2.3 / (glSl('pswSpeed', 100) / 100), tw = 2.2 * glSl('pswTwist', 100) / 100, mode = glMode('pswflow'), inv = mode === 1, rot = mode === 2 ? -Math.PI / 2 : mode === 3 ? Math.PI / 2 : 0;
+  const DURATION = 2.3 / (glSl('pswSpeed', 100) / 100), tw = 2.2 * glSl('pswTwist', 100) / 100, mode = glMode('pswflow'), pstyle = glMode('pswstyle'), inv = mode === 1, rot = mode === 2 ? -Math.PI / 2 : mode === 3 ? Math.PI / 2 : 0;
   function drawFrame(el) {
-    psDraw(g.R, Math.min(1, Math.max(0, el / DURATION)), texA, texB, tw, inv, rot);
+    psDraw(g.R, Math.min(1, Math.max(0, el / DURATION)), texA, texB, tw, inv, rot, pstyle);
     rec.clearRect(0, 0, RW, RH); rec.drawImage(g.cv, 0, 0);
     disp.clearRect(0, 0, W, H); disp.drawImage(recCanvas, 0, 0, W, H);
   }
@@ -5219,9 +5332,9 @@ function registerTransition(key) {
 // Wire the Glass Orb / Liquid Chrome pickers (default: first option).
 (function() {
   const style = document.createElement('style');
-  style.textContent = '.orbpath.orbpath-active, .chrpath.chrpath-active, .chrmat.chrmat-active, .pswflow.pswflow-active { border-color: var(--color-text-primary) !important; color: var(--color-text-primary) !important; }';
+  style.textContent = '.orbpath.orbpath-active, .chrpath.chrpath-active, .chrmat.chrmat-active, .pswflow.pswflow-active, .pswstyle.pswstyle-active { border-color: var(--color-text-primary) !important; color: var(--color-text-primary) !important; }';
   document.head.appendChild(style);
-  [['orbpath', 'glassOrb'], ['chrpath', 'liquidChrome'], ['chrmat', 'liquidChrome'], ['pswflow', 'paperSwirl']].forEach(([cls, key]) => {
+  [['orbpath', 'glassOrb'], ['chrpath', 'liquidChrome'], ['chrmat', 'liquidChrome'], ['pswflow', 'paperSwirl'], ['pswstyle', 'paperSwirl']].forEach(([cls, key]) => {
     const btns = Array.from(document.querySelectorAll('.' + cls));
     const on = b => { btns.forEach(x => { x.classList.remove(cls + '-active'); x.style.borderColor = ''; x.style.color = ''; }); b.classList.add(cls + '-active'); };
     on(btns[0]);
@@ -5376,6 +5489,7 @@ function registerTransition(key) {
   watchGroup('.chrpath', b => b.dataset.mode === '0');       // default: Pours in
   watchGroup('.chrmat', b => b.dataset.mode === '0');        // default: Water
   watchGroup('.pswflow', b => b.dataset.mode === '0');       // default: Down the drain
+  watchGroup('.pswstyle', b => b.dataset.mode === '0');      // default: Super Paper Mario
 })();
 
 Object.keys(TRANSITIONS).forEach(registerTransition);
@@ -5579,7 +5693,7 @@ document.getElementById('alphaWarnClose').addEventListener('click', () => {
   gal.innerHTML = '<div id="galHead"><span>' + secs.length + ' transitions</span><button type="button" id="galAll">Show all on one page</button></div><div id="galGrid"></div>';
   const bar = document.createElement('div');
   bar.id = 'detailBar';
-  bar.innerHTML = '<button type="button" id="dbBack">← All transitions</button><span id="dbTitle"></span><span id="dbNav"><button type="button" id="dbFull" title="Full screen (F)">⛶</button><button type="button" id="dbPrev" title="Previous (←)">‹</button><button type="button" id="dbNext" title="Next (→)">›</button></span>';
+  bar.innerHTML = '<button type="button" id="dbBack">← All transitions</button><span id="dbTitle"></span><span id="dbNav"><button type="button" id="dbFull" title="Full screen (F)">⛶</button><button type="button" id="dbPrev" title="Previous (← or P)">‹</button><button type="button" id="dbNext" title="Next (→ or N)">›</button></span>';
   first.parentElement.insertBefore(gal, first);
   first.parentElement.insertBefore(bar, first);
   const grid = gal.querySelector('#galGrid');
@@ -5705,11 +5819,14 @@ document.getElementById('alphaWarnClose').addEventListener('click', () => {
     view = v;
     const grid_ = v === 'grid';
     const single = !grid_ && v !== 'all';
-    gal.style.display = (grid_ || single) ? '' : 'none';              // grid stays behind the pop-up
-    bar.style.display = grid_ ? 'none' : '';
+    gal.style.display = '';                                            // the header (with its one button) is always there; the grid stays behind the pop-up
+    grid.style.display = v === 'all' ? 'none' : '';
+    const allBtn = gal.querySelector('#galAll'); allBtn.textContent = v === 'all' ? '← All transitions' : 'Show all on one page';
+    gal.querySelector('#galHead span').textContent = v === 'all' ? 'All on one page' : secs.length + ' transitions';
+    bar.style.display = (grid_ || v === 'all') ? 'none' : '';
     bar.classList.toggle('modal', single); backdrop.style.display = single ? 'block' : 'none';
     document.body.classList.toggle('modal-open', single);
-    secs.forEach(s => { const on = (v === 'all' || v === s.slug); s.sec.style.display = on ? '' : 'none'; s.sec.classList.toggle('open', single && on); s.sec.querySelector('p').style.display = (single && on) ? 'none' : ''; if (single && on) s.sec.scrollTop = 0; });
+    secs.forEach(s => { const on = (v === 'all' || v === s.slug); s.sec.style.display = on ? '' : 'none'; s.sec.classList.toggle('open', single && on); s.sec.querySelector('p').style.display = ''; if (single && on) s.sec.scrollTop = 0; });
     const cur = secs.find(s => s.slug === v);
     bar.querySelector('#dbTitle').textContent = cur ? cur.title : 'All transitions';
     bar.querySelector('#dbNav').style.visibility = cur ? 'visible' : 'hidden';
@@ -5737,7 +5854,7 @@ document.getElementById('alphaWarnClose').addEventListener('click', () => {
     e.preventDefault();
     const t = secs[cards.indexOf(card)]; if (t) go(t.slug);
   });
-  gal.querySelector('#galAll').addEventListener('click', () => go('all'));
+  gal.querySelector('#galAll').addEventListener('click', () => go(view === 'all' ? 'grid' : 'all'));
   bar.querySelector('#dbBack').addEventListener('click', () => go('grid'));
   const step = d => { const i = secs.findIndex(s => s.slug === view); if (i >= 0) go(secs[(i + d + secs.length) % secs.length].slug); };
   bar.querySelector('#dbFull').addEventListener('click', () => {
@@ -5750,8 +5867,9 @@ document.getElementById('alphaWarnClose').addEventListener('click', () => {
     if (/^(INPUT|TEXTAREA|SELECT)$/.test((e.target.tagName || ''))) return;
     if (e.key === 'Escape' && view !== 'grid') go('grid');
     else if ((e.key === 'f' || e.key === 'F') && view !== 'grid' && view !== 'all') bar.querySelector('#dbFull').click();
-    else if (e.key === 'ArrowLeft') step(-1);
-    else if (e.key === 'ArrowRight') step(1);
+    else if (e.ctrlKey || e.metaKey || e.altKey) return;
+    else if (e.key === 'ArrowLeft' || e.key === 'p' || e.key === 'P') step(-1);
+    else if (e.key === 'ArrowRight' || e.key === 'n' || e.key === 'N') step(1);
   });
   // Redraw a thumbnail only when its A or B actually changed.
   setInterval(() => { if (!document.hidden) secs.forEach(q => { if (q.sig !== sig(q.i)) rest(q); }); }, 1500);
