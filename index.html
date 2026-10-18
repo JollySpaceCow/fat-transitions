@@ -112,6 +112,7 @@
     #galHead button, #detailBar button { font-size:12px; padding:6px 14px; border-radius:16px; cursor:pointer; }
     #galGrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(270px,1fr)); gap:14px; margin-bottom:24px; }
     .tcard { display:block; text-decoration:none; color:inherit; background:var(--color-bg-secondary); border:.5px solid var(--color-border-tertiary); border-radius:12px; overflow:hidden; transition:transform .12s, border-color .12s, box-shadow .12s; }
+    .tcard.playing { border-color:var(--color-accent-primary); }
     .tcard:hover, .tcard:focus-visible { transform:translateY(-2px); border-color:var(--color-accent-primary); box-shadow:0 6px 22px rgba(0,0,0,.45); outline:none; }
     .tcard canvas { display:block; width:100%; height:auto; background:#000; }
     .tmeta { display:flex; justify-content:space-between; align-items:baseline; gap:8px; padding:9px 12px 10px; }
@@ -5871,6 +5872,32 @@ document.getElementById('alphaWarnClose').addEventListener('click', () => {
     else if (e.key === 'ArrowLeft' || e.key === 'p' || e.key === 'P') step(-1);
     else if (e.key === 'ArrowRight' || e.key === 'n' || e.key === 'N') step(1);
   });
+  // ── Space over a thumbnail: play the real transition and mirror it onto that card ──
+  // Runs the transition's own Play (its hidden page keeps drawing even while the grid is showing), copies each
+  // frame onto the thumbnail, and puts the usual picture back when it ends. Starting a second one stops the first.
+  let prev = -1;
+  const stopPrev = () => { if (prev >= 0) { const s = secs[prev]; cards[prev].classList.remove('playing'); rest(s); prev = -1; } };
+  setInterval(() => {
+    if (prev < 0) return;
+    const s = secs[prev], cfg = TRANSITIONS[s.k];
+    if (!cfg.running) { stopPrev(); return; }                       // finished, stopped or cancelled elsewhere
+    const src = document.getElementById('c' + (s.i + 1)), x = s.cv.getContext('2d');
+    x.fillStyle = x.createPattern(chk, 'repeat'); x.fillRect(0, 0, s.cv.width, s.cv.height);
+    x.drawImage(src, 0, 0, s.cv.width, s.cv.height);
+  }, 33);
+  document.addEventListener('keydown', e => {
+    if (e.key !== ' ' || view !== 'grid' || e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+    const t = e.target, tag = t && t.tagName; if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (t && t.isContentEditable)) return;
+    let h = cards.findIndex(c => c.matches(':hover')); if (h < 0) h = cards.indexOf(document.activeElement);
+    if (h < 0) return;
+    e.preventDefault(); e.stopImmediatePropagation();               // before the player's own Space handler
+    if (PLAYER.recording()) { setStatus('Wait for the current Record to finish first.'); return; }
+    const was = prev; stopPrev();
+    if (anyRunning()) PLAYER.cancel();                              // only one at a time
+    if (was === h) return;                                          // Space again on the same card = stop it
+    const btn = document.getElementById(TRANSITIONS[secs[h].k].playBtnId); if (!btn || btn.disabled) return;
+    prev = h; cards[h].classList.add('playing'); btn.click();
+  }, true);
   // Redraw a thumbnail only when its A or B actually changed.
   setInterval(() => { if (!document.hidden) secs.forEach(q => { if (q.sig !== sig(q.i)) rest(q); }); }, 1500);
 
