@@ -554,6 +554,7 @@
     <span style="font-size:10px;color:var(--color-text-tertiary);">Style:</span>
     <button class="pswstyle" data-mode="0" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">Super Paper Mario</button>
     <button class="pswstyle" data-mode="1" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">Thousand-Year Door</button>
+    <button class="pswstyle" data-mode="2" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">TTYD Scrunch</button>
   </div>
   <span id="pswInfo" hidden></span>
 </div>
@@ -604,7 +605,7 @@
   const FIXED = {
     glassOrb:     () => 4.4 / (sv('orbSpeed', 100) / 100),
     liquidChrome: () => 4.4 / (sv('chrSpeed', 100) / 100),
-    paperSwirl:   () => 2.3 / (sv('pswSpeed', 100) / 100),
+    paperSwirl:   () => (document.querySelector('.pswstyle.pswstyle-active[data-mode="2"]') ? 2.5 : 2.3) / (sv('pswSpeed', 100) / 100),
     caustics:     () => 4.2 / (sv('cauSpeed', 100) / 100),
   };
   const cardOf = k => { const b = document.getElementById(TRANSITIONS[k].playBtnId); return b && (b.closest('.tsec') || b.parentElement.parentElement); };
@@ -3724,6 +3725,7 @@ function runRippleRefraction(onDone) {
   const WF      = 0.07;     // soft width of the leading edge
   const TAILQ   = LD * 3.2; // behind the front by this much, everything has settled
   const SKY     = [168, 200, 228];
+  const RIP_MAXSHIFT = 56;  // px (at 1080p): biggest refraction shift of the picture
 
   const activeBtn = document.querySelector('.ripgb.ripgb-active');
   const mode = activeBtn ? activeBtn.dataset.mode : 'B';
@@ -3812,7 +3814,11 @@ function runRippleRefraction(onDone) {
 
         // Refraction: displace in ground space, project to screen (foreshortened).
         const dg  = DEPTH * sl;
-        const dxp = dg * ux * gPpuX[i], dyp = -dg * uz * gPpuZ[i];
+        let dxp = dg * ux * gPpuX[i], dyp = -dg * uz * gPpuZ[i];
+        // Soft ceiling on the shift, in pixels. Close to the drop (and looking steeply down) one ground unit is
+        // ~1500 px, so the raw shift swung 200+ px and moved 50-70 px between frames: the centre looked like it
+        // was running at a few fps. Capped, it stays smooth, and the ripple still reads the same.
+        { const mg = Math.hypot(dxp, dyp); if (mg > 1e-3) { const k = RIP_MAXSHIFT * Math.tanh(mg / RIP_MAXSHIFT) / mg; dxp *= k; dyp *= k; } }
         const gx = cl(Math.round(px + dxp), RW - 1),               gy = cl(Math.round(py + dyp), RH - 1);
         const rx = cl(Math.round(px + dxp * (1 + CHROM)), RW - 1), ry = cl(Math.round(py + dyp * (1 + CHROM)), RH - 1);
         const bx = cl(Math.round(px + dxp * (1 - CHROM)), RW - 1), by = cl(Math.round(py + dyp * (1 - CHROM)), RH - 1);
@@ -4413,6 +4419,8 @@ uniform mediump float uFlip;   // 1 = mirrored top-to-bottom (B arrives from the
 uniform float uTw;     // swirl twist amount
 uniform float uRot;    // direction the sheet drains: 0 = down, +90deg = right, -90deg = left
 uniform float uT, uDm, uRl, uCr, uPt, uYw, uRo, uSc, uCy, uCx;   // per-frame channels from a smooth spline
+uniform float uMode;   // 1 = TTYD Scrunch: the sheet is wrung into a wad instead of draining down a funnel
+uniform float uWr, uCt, uWx, uFn;   // scrunch only: lengthwise wring, and how far the wad has pulled together
 varying vec2 vUV; varying vec3 vN; varying float vBack; varying float vZ;
 float ss(float a, float b, float x){ float t = clamp((x - a) / (b - a), 0., 1.); return t * t * (3. - 2. * t); }
 float K(float s, float a, float b, float c, float d, float e, float f, float g, float h, float i){
@@ -4420,6 +4428,26 @@ float K(float s, float a, float b, float c, float d, float e, float f, float g, 
   float v0 = k < .5 ? a : k < 1.5 ? b : k < 2.5 ? c : k < 3.5 ? d : k < 4.5 ? e : k < 5.5 ? f : k < 6.5 ? g : h;
   float v1 = k < .5 ? b : k < 1.5 ? c : k < 2.5 ? d : k < 3.5 ? e : k < 4.5 ? f : k < 5.5 ? g : k < 6.5 ? h : i;
   return mix(v0, v1, t);
+}
+vec3 wrung(vec2 q){               // TTYD Scrunch: S-bend, a pinch across the middle, then wrung and pulled together into a lumpy wad
+  float k = uTw / 2.2;
+  float rho = length(q), phi0 = atan(q.y, q.x), fr = 1. - clamp(rho / sqrt(uAsp * uAsp + 1.), 0., 1.);
+  float Tk = clamp(uFn * (.35 + .9 * fr), 0., 1.);                              // funnel: the middle is drawn in far more than the rim, leaving long arms
+  float rp = rho * (1. - .88 * pow(Tk, 1.15)) * (1. + .22 * sin(4. * phi0 + 1.3) * Tk * (1. - .6 * Tk));
+  vec3 P = vec3(rp * cos(phi0), rp * sin(phi0), -.9 * fr * fr * fr * uFn + .15 * sin(4. * phi0 + 1.3) * rho * Tk);
+  P.z += uCr * .5 * sin(q.x * 1.6 + .4) * (1. - .3 * q.y);
+  float a1 = k * (uT * 3.3 * exp(-5. * q.y * q.y) + uWr * 4.5 * q.y);       // pinch: the middle turns edge-on, then back-to-front; wring: a screw along the length
+  P.xz = vec2(P.x * cos(a1) - P.z * sin(a1), P.x * sin(a1) + P.z * cos(a1));
+  { float r1 = length(P.xy), a = atan(P.y, P.x), r0 = .3;                           // petals: the arms fold back over a ring round the middle, a few of them further than the rest, so their white backs show
+    float beta = uRl * 2.6 * smoothstep(.1, .8, r1) * (.55 + .45 * sin(3. * a + 1.6 * r1 + uRo * 2.));
+    float d = max(r1 - r0, 0.), r2 = min(r1, r0) + d * cos(beta);
+    P.xy = vec2(cos(a), sin(a)) * r2; P.z += d * sin(beta); }
+  P.x *= 1. - .85 * uWx;
+  P *= 1. - .90 * uCt;
+  P += uDm * .22 * uCt * (vec3(sin(5.1 * q.y + 2. * q.x), sin(4.3 * q.x - 3. * q.y), sin(6. * q.x + 4. * q.y)) + .6 * vec3(sin(11. * q.x + 7. * q.y), sin(9. * q.y - 8. * q.x), sin(13. * q.x - 5. * q.y)));
+  float cr = cos(uRo), sr = sin(uRo);
+  P.xy = vec2(cr * P.x - sr * P.y, sr * P.x + cr * P.y);
+  return P;
 }
 vec3 deform(vec2 q){
   float s = uS;
@@ -4448,6 +4476,7 @@ vec3 deform(vec2 q){
   P.z -= (uAsp - abs(P.x)) * sin(b) * .75; P.x *= cos(b);
   // The sheet is always the same landscape sheet, swirled and folded exactly as for "down the drain".
   // Only the tilt and the fall are turned toward the chosen exit (tilt axes rotated by uRot, drift along the exit).
+  if (uMode > .5) P = wrung(q);
   float rc = cos(uRot), rs = sin(uRot);
   P.xy = vec2(rc * P.x + rs * P.y, -rs * P.x + rc * P.y);
   float ct = cos(Pt), st = sin(Pt);
@@ -4527,6 +4556,52 @@ const PS_KEYS_TTYD = {
   Cy: [0, 0, -.01, -.03, -.07, -.16, -.34, -.62, -1.0],
   Cx: [0, -.03, -.10, -.18, -.36, -.70, -.98, -1.03, -1.03]
 };
+// TTYD Scrunch, read off a 150-frame (60 fps) capture of the game's own transition: the sheet rolls, folds in the middle, wrings into a
+// small white-backed wad that holds and sinks out of the bottom; the next wad drops straight in from the top to the centre, spins,
+// then opens out and settles flat. Each half has its own table (A leaving, B arriving) because they are not mirror images.
+// Tables are [frame, value] points on the capture's own 150-frame (60 fps) clock, so they can be read straight off the video.
+const PS_KEYS_SCR_A = {
+  T: [[0,0],[8,0],[11,0.08],[14,0.25],[17,0.35],[20,0.3],[24,0.2],[28,0.1],[32,0],[75,0]],
+  Fn: [[0,0],[10,0],[14,0.2],[18,0.5],[22,0.75],[26,0.9],[30,1],[75,1]],
+  Wr: [[0,0],[14,0],[22,0.05],[30,0.15],[34,0.25],[40,0.35],[75,0.35]],
+  Rl: [[0,0],[14,0],[18,0.4],[22,1],[26,1.4],[30,1.5],[34,1.5],[75,1.3]],
+  Dm: [[0,0],[16,0],[24,0.4],[34,0.8],[75,0.8]],
+  Wx: [[0,0],[10,0],[14,0.2],[18,0.3],[22,0.3],[26,0.3],[30,0.35],[34,0.5],[38,0.6],[75,0.6]],
+  Ct: [[0,0],[24,0],[28,0.05],[32,0.15],[34,0.3],[36,0.55],[38,0.65],[45,0.7],[60,0.74],[75,0.78]],
+  Cr: [[0,0],[4,0.2],[8,0.5],[12,0.8],[16,0.5],[20,0.2],[26,0],[75,0]],
+  Pt: [[0,0],[6,0.08],[10,0.12],[75,0.12]],
+  Yw: [[0,0],[5,0.12],[10,0.2],[16,0.2],[24,0.12],[34,0.04],[44,0],[75,0]],
+  Ro: [[0,0],[4,-0.05],[8,-0.13],[12,-0.15],[16,-0.2],[24,-0.4],[38,-0.6],[75,-0.9]],
+  Sc: [[0,1],[4,0.95],[8,0.92],[12,0.9],[16,0.84],[19,0.95],[22,1.1],[25,1.4],[34,1.4],[38,1.2],[45,1.05],[75,0.95]],
+  Cy: [[0,0],[37,0.1],[48,0.04],[60,-0.02],[66,-0.1],[70,-0.2],[73,-0.52],[74.25,-1.4],[75,-1.6]],
+  Cx: [[0,0],[75,0]]
+};
+const PS_KEYS_SCR_B = {
+  T: [[78,0],[86,0],[94,0],[102,0],[110,0],[118,0],[122,0],[124,0],[126,0],[128,0],[130,0],[132,0],[134,0.038],[136,0.1],[137,0.15],[138,0.2],[139,0.253],[140,0.329],[141,0.309],[142,0.131],[143,0.032],[144,0],[145,0],[146,0],[147,0],[148,0],[150,0]],
+  Fn: [[78,1],[86,1],[94,1],[102,1],[110,1],[118,1],[122,1],[124,1],[126,1],[128,1],[130,1],[132,1],[134,1],[136,0.965],[137,0.9],[138,0.833],[139,0.75],[140,0.546],[141,0.293],[142,0.07],[143,0],[144,0],[145,0],[146,0],[147,0],[148,0],[150,0]],
+  Wr: [[78,0.343],[86,0.341],[94,0.339],[102,0.338],[110,0.336],[118,0.334],[122,0.326],[124,0.308],[126,0.289],[128,0.269],[130,0.25],[132,0.199],[134,0.15],[136,0.118],[137,0.091],[138,0.069],[139,0.05],[140,0.022],[141,0.002],[142,0],[143,0],[144,0],[145,0],[146,0],[147,0],[148,0],[150,0]],
+  Rl: [[78,0.8222500000000001],[86,0.8222500000000001],[94,0.8228000000000001],[102,0.8228000000000001],[110,0.8228000000000001],[118,0.8228000000000001],[122,0.8233500000000001],[124,0.8239000000000001],[126,0.8244500000000001],[128,0.8250000000000001],[130,0.8250000000000001],[132,0.8250000000000001],[134,0.8250000000000001],[136,0.8085],[137,0.77],[138,0.682],[139,0.55],[140,0.26895],[141,0.0374],[142,0],[143,0],[144,0],[145,0],[146,0],[147,0],[148,0],[150,0]],
+  Dm: [[78,0.48],[86,0.48],[94,0.48],[102,0.48],[110,0.48],[118,0.48],[122,0.48],[124,0.48],[126,0.48],[128,0.48],[130,0.48],[132,0.4638],[134,0.42119999999999996],[136,0.363],[137,0.2994],[138,0.24],[139,0.1722],[140,0.0462],[141,0],[142,0],[143,0],[144,0],[145,0],[146,0],[147,0],[148,0],[150,0]],
+  Wx: [[78,0.6],[86,0.6],[94,0.6],[102,0.6],[110,0.6],[118,0.6],[122,0.598],[124,0.583],[126,0.558],[128,0.529],[130,0.5],[132,0.419],[134,0.35],[136,0.316],[137,0.3],[138,0.3],[139,0.3],[140,0.3],[141,0.246],[142,0.083],[143,0],[144,0],[145,0],[146,0],[147,0],[148,0],[150,0]],
+  Ct: [[78,0.66],[86,0.658],[94,0.656],[102,0.654],[110,0.653],[118,0.651],[122,0.639],[124,0.595],[126,0.531],[128,0.414],[130,0.3],[132,0.15],[134,0.088],[136,0.05],[137,0.017],[138,0],[139,0],[140,0],[141,0],[142,0],[143,0],[144,0],[145,0],[146,0],[147,0],[148,0],[150,0]],
+  Cr: [[78,0],[86,0],[94,0],[102,0],[110,0],[118,0],[122,0],[124,0],[126,0],[128,0],[130,0],[132,0],[134,0],[136,0],[137,0],[138,0.031],[139,0.106],[140,0.284],[141,0.557],[142,0.8],[143,0.655],[144,0.449],[145,0.267],[146,0.119],[147,0],[148,0],[150,0]],
+  Pt: [[78,-0.12],[86,-0.12],[94,-0.12],[102,-0.12],[110,-0.12],[118,-0.12],[122,-0.12],[124,-0.12],[126,-0.12],[128,-0.12],[130,-0.12],[132,-0.12],[134,-0.12],[136,-0.12],[137,-0.12],[138,-0.12],[139,-0.12],[140,-0.12],[141,-0.12],[142,-0.12],[143,-0.12],[144,-0.097],[145,-0.068],[146,-0.035],[147,0],[148,0],[150,0]],
+  Yw: [[78,0.015],[86,0.015],[94,0.016],[102,0.017],[110,0.017],[118,0.018],[122,0.021],[124,0.025],[126,0.03],[128,0.035],[130,0.04],[132,0.052],[134,0.067],[136,0.084],[137,0.102],[138,0.12],[139,0.143],[140,0.185],[141,0.2],[142,0.2],[143,0.199],[144,0.169],[145,0.12],[146,0.063],[147,0],[148,0],[150,0]],
+  Ro: [[78,-5.672],[86,-4.808],[94,-3.943],[102,-3.078],[110,-2.213],[118,-1.348],[122,-0.921],[124,-0.714],[126,-0.508],[128,-0.302],[130,-0.096],[132,0.094],[134,0.283],[136,0.469],[137,0.436],[138,0.4],[139,0.354],[140,0.26],[141,0.19],[142,0.15],[143,0.139],[144,0.122],[145,0.07],[146,0.03],[147,0],[148,0],[150,0]],
+  Sc: [[78,0.648],[86,0.65],[94,0.652],[102,0.655],[110,0.657],[118,0.659],[122,0.67],[124,0.699],[126,0.732],[128,0.759],[130,0.77],[132,0.77],[134,0.77],[136,0.77],[137,0.863],[138,0.914],[139,0.825],[140,0.779],[141,0.773],[142,0.9],[143,0.912],[144,0.924],[145,0.941],[146,0.967],[147,1],[148,1],[150,1]],
+  Cx: [[78,0],[82,0],[85,0],[88,0],[91,0],[94,0],[97,0],[100,0],[103,0],[106,0],[109,0],[112,0],[115,0],[121,0],[127,0],[130,0],[133,0],[136,0],[139,0],[142,0],[146,0],[150,0]],
+  Cy: [[78,-0.92],[82,-0.702],[85,-0.52],[88,-0.32],[91,-0.2],[94,-0.11],[97,-0.068],[100,-0.04],[103,-0.032],[106,-0.026],[109,-0.022],[112,-0.02],[115,-0.02],[121,-0.02],[127,0.008],[130,0.04],[133,0.016],[136,-0.04],[139,0.006],[142,0.032],[146,0.02],[150,0]]
+};
+// Monotone cubic through [x, y] points that need not be evenly spaced (Fritsch–Carlson).
+function psSplineK(pts, x) {
+  const n = pts.length - 1;
+  if (x <= pts[0][0]) return pts[0][1]; if (x >= pts[n][0]) return pts[n][1];
+  let k = 0; while (x > pts[k + 1][0]) k++;
+  const h = i => pts[i + 1][0] - pts[i][0], d = i => (pts[i + 1][1] - pts[i][1]) / h(i);
+  const m = i => { if (i === 0) return d(0); if (i === n) return d(n - 1); const a = d(i - 1), b = d(i); if (a * b <= 0) return 0; const w1 = 2 * h(i) + h(i - 1), w2 = h(i) + 2 * h(i - 1); return (w1 + w2) / (w1 / a + w2 / b); };
+  const hk = h(k), t = (x - pts[k][0]) / hk, t2 = t * t, t3 = t2 * t;
+  return (2 * t3 - 3 * t2 + 1) * pts[k][1] + (t3 - 2 * t2 + t) * hk * m(k) + (-2 * t3 + 3 * t2) * pts[k + 1][1] + (t3 - t2) * hk * m(k + 1);
+}
 // Monotone cubic (PCHIP) through the keyframes: continuous velocity, no overshoot, no stop at each key.
 function psSpline(y, s) {
   const n = y.length - 1, x = Math.min(Math.max(s, 0), 1) * n, k = Math.min(Math.floor(x), n - 1), t = x - k;
@@ -4552,10 +4627,10 @@ function psCreate(gl, asp) {
 }
 // draw one frame. p = 0..1 over the whole transition. texA / texB are WebGL textures.
 function psDraw(R, p, texA, texB, tw, inv, rot, style) {
-  const gl = R.gl, GAP = .04, HALF = .5 - GAP;
+  const gl = R.gl, SCR = style === 2, GAP = .04, HALF = .5 - GAP, PA = SCR ? .495 : HALF, PB = SCR ? .52 : 1 - HALF;   // scrunch: A is gone 74 frames in, B appears at frame 78 of 150
   let s, flip, tex;
-  if (p < HALF)            { s = p / HALF;           flip = 0; tex = texA; }
-  else if (p > 1 - HALF)   { s = (1 - p) / HALF;     flip = 1; tex = texB; }
+  if (p < PA)              { s = p / PA;             flip = 0; tex = texA; }
+  else if (p > PB)         { s = (1 - p) / (1 - PB); flip = 1; tex = texB; }
   else                     { s = 1; flip = 0; tex = texA; }
   gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
   gl.clearColor(0, 0, 0, 0); gl.clearDepth(1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
@@ -4564,9 +4639,9 @@ function psDraw(R, p, texA, texB, tw, inv, rot, style) {
   gl.bindBuffer(gl.ARRAY_BUFFER, R.vb); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, R.ib);
   gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, tex);
-  gl.uniform1i(R.U('uTex'), 0); gl.uniform1f(R.U('uS'), s); gl.uniform1f(R.U('uAsp'), R.asp); gl.uniform1f(R.U('uFlip'), inv ? 1 - flip : flip); const KS = style === 1 ? PS_KEYS_TTYD : PS_KEYS; for (const k in KS) gl.uniform1f(R.U('u' + k), psSpline(KS[k], s));
-  gl.uniform1f(R.U('uCx'), style === 1 && p > 1 - HALF ? psSpline(PS_KEYS_TTYD.Cx, s) : 0);   // only the arriving sheet slides in from the side
-  gl.uniform1f(R.U('uRot'), rot || 0); gl.uniform1f(R.U('uTw'), tw == null ? 2.2 : tw);
+  gl.uniform1i(R.U('uTex'), 0); gl.uniform1f(R.U('uS'), s); gl.uniform1f(R.U('uAsp'), R.asp); gl.uniform1f(R.U('uFlip'), inv ? 1 - flip : flip); const KS = SCR ? (flip ? PS_KEYS_SCR_B : PS_KEYS_SCR_A) : style === 1 ? PS_KEYS_TTYD : PS_KEYS, fr = p * 150, ev = SCR ? k => psSplineK(KS[k], fr) : k => psSpline(KS[k], s); for (const k in KS) gl.uniform1f(R.U('u' + k), ev(k));
+  gl.uniform1f(R.U('uCx'), SCR ? ev('Cx') : style === 1 && p > 1 - HALF ? psSpline(PS_KEYS_TTYD.Cx, s) : 0);   // only the arriving sheet slides in from the side
+  gl.uniform1f(R.U('uMode'), SCR ? 1 : 0); gl.uniform1f(R.U('uRot'), rot || 0); gl.uniform1f(R.U('uTw'), tw == null ? 2.2 : tw);
   const wire = !!window.PS_WIRE;
   if (wire) { gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(1, 1); gl.uniform1f(R.U('uWire'), 2); }
   else gl.uniform1f(R.U('uWire'), 0);
@@ -4599,7 +4674,7 @@ function runPaperSwirl(onDone) {
   const gl = g.gl, src = psw_srcC, dst = psw_dstC, rec = recCtx14, recCanvas = recC14, disp = ctx14;
   const texA = glTex(gl, 0, src), texB = glTex(gl, 1, dst);
   PLAYER.hooks.length = 0; PLAYER.hooks.push(() => { try { gl.deleteTexture(texA); gl.deleteTexture(texB); } catch (e) {} });
-  const DURATION = 2.3 / (glSl('pswSpeed', 100) / 100), tw = 2.2 * glSl('pswTwist', 100) / 100, mode = glMode('pswflow'), pstyle = glMode('pswstyle'), inv = mode === 1, rot = mode === 2 ? -Math.PI / 2 : mode === 3 ? Math.PI / 2 : 0;
+  const pstyle = glMode('pswstyle'), DURATION = (pstyle === 2 ? 2.5 : 2.3) / (glSl('pswSpeed', 100) / 100), tw = 2.2 * glSl('pswTwist', 100) / 100, mode = glMode('pswflow'), inv = mode === 1, rot = mode === 2 ? -Math.PI / 2 : mode === 3 ? Math.PI / 2 : 0;
   function drawFrame(el) {
     psDraw(g.R, Math.min(1, Math.max(0, el / DURATION)), texA, texB, tw, inv, rot, pstyle);
     rec.clearRect(0, 0, RW, RH); rec.drawImage(g.cv, 0, 0);
