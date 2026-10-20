@@ -4391,12 +4391,20 @@ void main(){
   float sb = max(s - cw, 0.);
   float embAmt = exp(-sb * 6.5) * fade * ss(cw * .6, cw, s);
   float coals = 0.;
-  for (int K = 0; K < 2; K++) {                                              // glowing coals: round dots that flicker and go out the longer they have burnt
-    float kf = float(K), cs = 58. - kf * 30.;
-    vec2 eq = pc * cs + vec2(kf * 13.1, kf * 7.7), ec = floor(eq), er = h22(ec + 3.3 + kf * 19.);
-    float life = h21(ec + 9.1 + kf * 5.), rad = .2 + .22 * er.y;
-    float dot_ = 1. - smoothstep(0., rad, length(fract(eq) - .5 - (er - .5) * .45));
-    coals += dot_ * step(.30 + sb * 2.6, life) * (.55 + .45 * sin(T * 8. + er.x * 40.)) * (1. - .35 * kf);
+  float clus = .35 + .65 * ss(.3, .7, vn(pc * 5. + 7.7));                      // coals bunch up in patches instead of sitting on an even grid
+  for (int K = 0; K < 3; K++) {                                              // glowing coals: three tilted, drifting layers so no lattice shows through
+    float kf = float(K), cs = 52. - kf * 15.;
+    float ca = .55 + kf * 1.9, cc = cos(ca), sn_ = sin(ca);
+    vec2 pr = vec2(cc * pc.x - sn_ * pc.y, sn_ * pc.x + cc * pc.y);
+    vec2 eq = pr * cs + vec2(kf * 13.1, kf * 7.7 + T * (.35 + .25 * kf)), ec = floor(eq);   // rising slowly
+    vec2 er = h22(ec + 3.3 + kf * 19.);
+    float life = h21(ec + 9.1 + kf * 5.), pres = h21(ec + 41. + kf * 3.);
+    float rad = .1 + .12 * er.y * er.y;
+    vec2 off = (er - .5) * .3 + .2 * vec2(sin(T * (.9 + 2.4 * er.x) + life * 40.), cos(T * (.8 + 2.2 * er.y) + pres * 40.));   // every coal wanders on its own path
+    float dot_ = 1. - smoothstep(0., rad, length(fract(eq) - .5 - off));
+    float alive = 1. - ss(0., .35, sb / (.2 + life * 1.8));                    // each coal dies out at its own time, smoothly
+    float fl = .5 + .5 * sin(T * (4. + 9. * er.x) + life * 60.);
+    coals += dot_ * step(1. - .8 * clus, pres) * alive * (.35 + .65 * fl * fl) * (1. - .25 * kf);
   }
   vec3 bedGlow = (vec3(1., .42, .1) * coals * 1.5 + vec3(.9, .25, .05) * .18) * embAmt * uLight;
   vec3 bCol = b4.rgb * (1. - .6 * exp(-sb * 8.) * fade);
