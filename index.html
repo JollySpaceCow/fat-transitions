@@ -558,6 +558,42 @@
   </div>
   <span id="pswInfo" hidden></span>
 </div>
+<div style="margin-bottom:14px;">
+  <p style="font-size:11px;font-weight:500;letter-spacing:.1em;color:var(--color-text-secondary);text-align:center;margin:0 0 6px;">HEAT SHIMMER TO EMBER</p>
+  <canvas id="c15" width="3840" height="2160" style="display:block;width:100%;height:auto;border-radius:8px;border:.5px solid var(--color-border-tertiary);"></canvas>
+  <div style="display:flex;gap:8px;justify-content:center;margin-top:8px;">
+    <button id="btn15p" style="font-size:12px;padding:7px 20px;">▶ Play</button>
+    <button id="btn15r" style="font-size:12px;padding:7px 20px;border-color:#e05555;color:#e05555;">⏺ Record 1080p</button>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:6px;align-items:center;margin-top:10px;">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span style="font-size:10px;color:var(--color-text-tertiary);width:78px;text-align:right;">Speed</span>
+      <input type="range" id="embSpeed" min="40" max="200" step="1" value="100" style="width:180px;">
+      <span id="embSpeedVal" style="font-size:11px;color:var(--color-text-secondary);min-width:44px;">100%</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span style="font-size:10px;color:var(--color-text-tertiary);width:78px;text-align:right;">Heat shimmer</span>
+      <input type="range" id="embHeat" min="0" max="250" step="1" value="100" style="width:180px;">
+      <span id="embHeatVal" style="font-size:11px;color:var(--color-text-secondary);min-width:44px;">100%</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span style="font-size:10px;color:var(--color-text-tertiary);width:78px;text-align:right;">Glow</span>
+      <input type="range" id="embGlow" min="0" max="200" step="1" value="100" style="width:180px;">
+      <span id="embGlowVal" style="font-size:11px;color:var(--color-text-secondary);min-width:44px;">100%</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span style="font-size:10px;color:var(--color-text-tertiary);width:78px;text-align:right;">Ragged edge</span>
+      <input type="range" id="embRag" min="0" max="200" step="1" value="100" style="width:180px;">
+      <span id="embRagVal" style="font-size:11px;color:var(--color-text-secondary);min-width:44px;">100%</span>
+    </div>
+  </div>
+  <div style="display:flex;gap:6px;justify-content:center;align-items:center;flex-wrap:wrap;margin-top:10px;">
+    <span style="font-size:10px;color:var(--color-text-tertiary);">Burns:</span>
+    <button class="emberdir" data-mode="0" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">Upward</button>
+    <button class="emberdir" data-mode="1" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">Downward</button>
+    <button class="emberdir" data-mode="2" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">From the centre</button>
+  </div>
+</div>
 <p id="status" style="text-align:center;font-size:11px;color:var(--color-text-tertiary);margin:.4rem 0 .5rem;min-height:1.4em;">Display 4K · Shimmer 1280×720 · Records 1080p · frame-accurate WebCodecs export (real-time fallback)</p>
 </div>
 
@@ -605,6 +641,7 @@
   const FIXED = {
     glassOrb:     () => 4.4 / (sv('orbSpeed', 100) / 100),
     liquidChrome: () => 4.4 / (sv('chrSpeed', 100) / 100),
+    emberBurn:    () => 4.0 / (sv('embSpeed', 100) / 100),
     paperSwirl:   () => (document.querySelector('.pswstyle.pswstyle-active[data-mode="2"]') ? 2.5 : 2.3) / (sv('pswSpeed', 100) / 100),
     caustics:     () => 4.2 / (sv('cauSpeed', 100) / 100),
   };
@@ -853,6 +890,8 @@ const recC13 = mkc(RW, RH), recCtx13 = recC13.getContext('2d');
 const chr_srcC = mkc(RW, RH), chr_dstC = mkc(RW, RH);   // liquid chrome A / B
 const recC14 = mkc(RW, RH), recCtx14 = recC14.getContext('2d');
 const psw_srcC = mkc(RW, RH), psw_dstC = mkc(RW, RH);   // paper swirl A / B
+const recC15 = mkc(RW, RH), recCtx15 = recC15.getContext('2d');
+const emb_srcC = mkc(RW, RH), emb_dstC = mkc(RW, RH);   // heat shimmer to ember A / B
 const CAU_RSCALE = 4;
 const CAU_RW2 = Math.round(RW / CAU_RSCALE), CAU_RH2 = Math.round(RH / CAU_RSCALE);
 const cau_smallC = mkc(CAU_RW2, CAU_RH2), cau_smallCx = cau_smallC.getContext('2d');   // refracted + lit overlay (alpha = how much it replaces the base)
@@ -883,6 +922,7 @@ const c11 = document.getElementById('c11'), ctx11 = c11.getContext('2d');
 const c12 = document.getElementById('c12'), ctx12 = c12.getContext('2d');
 const c13 = document.getElementById('c13'), ctx13 = c13.getContext('2d');
 const c14 = document.getElementById('c14'), ctx14 = c14.getContext('2d');
+const c15 = document.getElementById('c15'), ctx15 = c15.getContext('2d');
 
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -3725,7 +3765,7 @@ function runRippleRefraction(onDone) {
   const WF      = 0.07;     // soft width of the leading edge
   const TAILQ   = LD * 3.2; // behind the front by this much, everything has settled
   const SKY     = [168, 200, 228];
-  const RIP_MAXSHIFT = 56;  // px (at 1080p): biggest refraction shift of the picture
+  const RIP_MAXSHIFT = 22;  // px (at 1080p): biggest refraction shift of the picture
 
   const activeBtn = document.querySelector('.ripgb.ripgb-active');
   const mode = activeBtn ? activeBtn.dataset.mode : 'B';
@@ -4310,6 +4350,82 @@ void main(){
   float aOut = mix(aA, aLit, inside);
   gl_FragColor = vec4(mix(colA, lit, inside) * aOut, aOut);
 }`,
+  ember: GL_PRELUDE + `
+float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.-2.*f);
+  return mix(mix(h21(i), h21(i+vec2(1.,0.)), f.x), mix(h21(i+vec2(0.,1.)), h21(i+vec2(1.,1.)), f.x), f.y); }
+float fbm(vec2 p){ float a = .5, s = 0.; for (int i = 0; i < 4; i++) { s += a*vn(p); p = p*2.03 + vec2(17.3, 9.1); a *= .5; } return s; }
+void main(){
+  vec2 uv = gl_FragCoord.xy / uRes; float asp = uRes.x / uRes.y;
+  float p = uP, T = p * 4.;
+  vec2 pc = vec2(uv.x * asp, uv.y);
+  // how far along the burn this pixel is (0 where it starts, ~1 at the far side) with a ragged, paper-like edge
+  float g = uMode < .5 ? uv.y : (uMode < 1.5 ? 1. - uv.y : length((uv - .5) * vec2(asp, 1.)) / (.5 * length(vec2(asp, 1.))));
+  float nlow = fbm(pc * 2.2 + vec2(3.1, 0.)), nmid = fbm(pc * 7. + 11.), nfine = vn(pc * 38.);
+  float nfing = fbm(pc * vec2(5.5, 1.6) + vec2(8.7, 2.3));                                  // tall, narrow fingers: the fire runs ahead in places and lags in others
+  float f = g + uDisp * (.20 * (nlow - .5) + .26 * (nfing - .5) + .06 * (nmid - .5) + .012 * (nfine - .5));
+  float fp = mix(-.42, 1.46, ss(.10, .95, p));            // where the flame front is
+  float d = f - fp, s = -d;                                // s > 0: burnt for that long
+  float fade = 1. - ss(.82, 1., p), on = ss(0., .08, p);
+
+  // heat shimmer: noise that rises, strongest at the bottom early on, then hugging the flame front and the embers behind it
+  float ahead = exp(-max(d, 0.) * 5.5), behind = exp(min(d, 0.) * 9.);
+  float base = ss(0., .12, p) * (1. - ss(.14, .34, p)) * pow(clamp(1. - g, 0., 1.), 1.6);
+  float heat = (ahead * .9 + behind * .6 + base * .9) * (1. - ss(.92, 1., p)) * ss(0., .1, p) * uStr;
+  vec2 wob = vec2(fbm(vec2(pc.x * 9., pc.y * 5. - T * 2.6)), fbm(vec2(pc.x * 9. + 7.3, pc.y * 5. - T * 2.1 + 3.7))) - .5;
+  vec2 uvs = clamp(uv + wob * .07 * heat, 0., 1.);
+  vec4 a4 = texture2D(uA, uvs), b4 = texture2D(uB, uvs);
+
+  // A: browns ahead of the fire, glows along the edge, chars black behind it, then is gone
+  float cw = .035 + .03 * nmid;
+  float keepA = 1. - ss(cw * .78, cw, s + (nfine - .5) * .012);
+  float charT = ss(.004, .030, s);
+  vec3 aCol = a4.rgb * mix(vec3(1.), vec3(.35, .2, .12), ss(0., .012, s)) * mix(1., .12, charT);
+  float scorch = exp(-max(d, 0.) * 30.) * .55 * on * (1. - ss(0., .004, s));
+  aCol = mix(aCol, aCol * vec3(.85, .55, .30) + vec3(.12, .04, 0.), scorch);
+  float line = exp(-pow((s - .006) / .0075, 2.)) * keepA * on;
+  line *= (.75 + .5 * nfine) * (.8 + .4 * sin(T * 14. + nmid * 20.));
+  vec3 lineCol = mix(vec3(1., .28, .04), vec3(1., .93, .6), exp(-pow(s / .004, 2.)));
+  aCol += lineCol * line * 1.6 * uLight;
+
+  // B: comes out of the embers, sooty and speckled with glowing coals that die away
+  float sb = max(s - cw, 0.);
+  float embAmt = exp(-sb * 6.5) * fade * ss(cw * .6, cw, s);
+  float coals = 0.;
+  for (int K = 0; K < 2; K++) {                                              // glowing coals: round dots that flicker and go out the longer they have burnt
+    float kf = float(K), cs = 58. - kf * 30.;
+    vec2 eq = pc * cs + vec2(kf * 13.1, kf * 7.7), ec = floor(eq), er = h22(ec + 3.3 + kf * 19.);
+    float life = h21(ec + 9.1 + kf * 5.), rad = .2 + .22 * er.y;
+    float dot_ = 1. - smoothstep(0., rad, length(fract(eq) - .5 - (er - .5) * .45));
+    coals += dot_ * step(.30 + sb * 2.6, life) * (.55 + .45 * sin(T * 8. + er.x * 40.)) * (1. - .35 * kf);
+  }
+  vec3 bedGlow = (vec3(1., .42, .1) * coals * 1.5 + vec3(.9, .25, .05) * .18) * embAmt * uLight;
+  vec3 bCol = b4.rgb * (1. - .6 * exp(-sb * 8.) * fade);
+
+  float alphaA = a4.a * keepA;
+  vec3 bP = bCol * b4.a + bedGlow;
+  float bA = clamp(b4.a + max(max(bedGlow.r, bedGlow.g), bedGlow.b) * .9, 0., 1.);
+  vec3 resP = aCol * alphaA + (1. - alphaA) * bP;
+  float resA = alphaA + (1. - alphaA) * bA;
+
+  // warm bloom around the flame front and sparks drifting up ahead of it
+  float gate = ss(.02, .12, p) * (1. - ss(.9, .98, p));
+  vec3 glow = vec3(1., .4, .08) * (exp(-abs(d) * 13.) * .22 + exp(-max(d, 0.) * 6.) * .16 + base * .30) * uLight * gate;
+  vec3 spark = vec3(0.);
+  for (int L = 0; L < 3; L++) {
+    float fl = float(L), cs = 26. + fl * 14.;
+    vec2 gq = vec2(pc.x, pc.y - T * (.30 + .12 * fl)) * cs + vec2(fl * 17.1, fl * 5.3);
+    vec2 cell = floor(gq), lo = fract(gq) - .5, rn = h22(cell + fl * 31.);
+    vec2 pos = lo - (rn - .5) * .6 - vec2(sin(T * 3. + rn.x * 40. + gq.y * .5) * .15, 0.);
+    float r = .06 + .07 * rn.y, sp = 1. - smoothstep(0., r, length(pos));
+    float alive = step(.72, h21(cell + 7.7 + fl));
+    float w = ss(-.05, 0., d) * (1. - ss(0., .45, d));
+    spark += vec3(1., .55, .15) * sp * alive * w * (.6 + .4 * sin(T * 11. + rn.x * 30.)) * 1.6;
+  }
+  spark *= uLight * gate;
+  resP += glow + spark;
+  resA = clamp(resA + max(max(glow.r + spark.r, glow.g + spark.g), 0.) * .8, 0., 1.);
+  gl_FragColor = vec4(min(resP, vec3(resA)), resA);
+}`,
 };
 const GLB = { gl: null, cv: null, ok: null, progs: {} };
 function glBridge() {
@@ -4405,6 +4521,10 @@ function runGlassOrb(onDone) {
   runGLTransition({ key: 'orb', src: orb_srcC, dst: orb_dstC, rec: recCtx12, recCanvas: recC12, disp: ctx12, base: 4.4,
     params: () => ({ speed: glSl('orbSpeed', 100) / 100, str: (glSl('orbIor', 150) / 100 - 1) / 0.5, disp: glSl('orbDisp', 100) / 100, light: glSl('orbLight', 100) / 100, mode: glMode('orbpath') }) }, onDone);
 }
+function runEmber(onDone) {
+  runGLTransition({ key: 'ember', src: emb_srcC, dst: emb_dstC, rec: recCtx15, recCanvas: recC15, disp: ctx15, base: 4.0,
+    params: () => ({ speed: glSl('embSpeed', 100) / 100, str: glSl('embHeat', 100) / 100, disp: glSl('embRag', 100) / 100, light: glSl('embGlow', 100) / 100, mode: glMode('emberdir') }) }, onDone);
+}
 function runLiquidChrome(onDone) {
   runGLTransition({ key: glMode('chrmat') === 1 ? 'tallow' : 'chrome', src: chr_srcC, dst: chr_dstC, rec: recCtx13, recCanvas: recC13, disp: ctx13, base: 4.4,
     params: () => ({ speed: glSl('chrSpeed', 100) / 100, str: glSl('chrStr', 100) / 100, disp: 1, light: glSl('chrLight', 100) / 100, mode: glMode('chrpath') }) }, onDone);
@@ -4431,14 +4551,14 @@ float K(float s, float a, float b, float c, float d, float e, float f, float g, 
 }
 vec3 wrung(vec2 q){               // TTYD Scrunch: S-bend, a pinch across the middle, then wrung and pulled together into a lumpy wad
   float k = uTw / 2.2;
-  float rho = length(q), phi0 = atan(q.y, q.x), fr = 1. - clamp(rho / sqrt(uAsp * uAsp + 1.), 0., 1.);
+  float rho = length(q), phi0 = atan(q.y, q.x + 1e-5), fr = 1. - clamp(rho / sqrt(uAsp * uAsp + 1.), 0., 1.);
   float Tk = clamp(uFn * (.35 + .9 * fr), 0., 1.);                              // funnel: the middle is drawn in far more than the rim, leaving long arms
   float rp = rho * (1. - .88 * pow(Tk, 1.15)) * (1. + .22 * sin(4. * phi0 + 1.3) * Tk * (1. - .6 * Tk));
   vec3 P = vec3(rp * cos(phi0), rp * sin(phi0), -.9 * fr * fr * fr * uFn + .15 * sin(4. * phi0 + 1.3) * rho * Tk);
   P.z += uCr * .5 * sin(q.x * 1.6 + .4) * (1. - .3 * q.y);
   float a1 = k * (uT * 3.3 * exp(-5. * q.y * q.y) + uWr * 4.5 * q.y);       // pinch: the middle turns edge-on, then back-to-front; wring: a screw along the length
   P.xz = vec2(P.x * cos(a1) - P.z * sin(a1), P.x * sin(a1) + P.z * cos(a1));
-  { float r1 = length(P.xy), a = atan(P.y, P.x), r0 = .3;                           // petals: the arms fold back over a ring round the middle, a few of them further than the rest, so their white backs show
+  { float r1 = length(P.xy), a = atan(P.y, P.x + 1e-5), r0 = .3;                           // petals: the arms fold back over a ring round the middle, a few of them further than the rest, so their white backs show
     float beta = uRl * 2.6 * smoothstep(.1, .8, r1) * (.55 + .45 * sin(3. * a + 1.6 * r1 + uRo * 2.));
     float d = max(r1 - r0, 0.), r2 = min(r1, r0) + d * cos(beta);
     P.xy = vec2(cos(a), sin(a)) * r2; P.z += d * sin(beta); }
@@ -4836,6 +4956,15 @@ const TRANSITIONS = {
     recordFilename: 'paper-swirl',
     playBtnId:      'btn14p',
     recBtnId:       'btn14r',
+    padSecs:        0,
+    running:        false,
+  },
+  emberBurn: {
+    runFn:          runEmber,
+    recCanvas:      recC15,
+    recordFilename: 'heat-shimmer-ember',
+    playBtnId:      'btn15p',
+    recBtnId:       'btn15r',
     padSecs:        0,
     running:        false,
   },
@@ -5408,9 +5537,9 @@ function registerTransition(key) {
 // Wire the Glass Orb / Liquid Chrome pickers (default: first option).
 (function() {
   const style = document.createElement('style');
-  style.textContent = '.orbpath.orbpath-active, .chrpath.chrpath-active, .chrmat.chrmat-active, .pswflow.pswflow-active, .pswstyle.pswstyle-active { border-color: var(--color-text-primary) !important; color: var(--color-text-primary) !important; }';
+  style.textContent = '.orbpath.orbpath-active, .chrpath.chrpath-active, .chrmat.chrmat-active, .pswflow.pswflow-active, .pswstyle.pswstyle-active, .emberdir.emberdir-active { border-color: var(--color-text-primary) !important; color: var(--color-text-primary) !important; }';
   document.head.appendChild(style);
-  [['orbpath', 'glassOrb'], ['chrpath', 'liquidChrome'], ['chrmat', 'liquidChrome'], ['pswflow', 'paperSwirl'], ['pswstyle', 'paperSwirl']].forEach(([cls, key]) => {
+  [['orbpath', 'glassOrb'], ['chrpath', 'liquidChrome'], ['chrmat', 'liquidChrome'], ['pswflow', 'paperSwirl'], ['pswstyle', 'paperSwirl'], ['emberdir', 'emberBurn']].forEach(([cls, key]) => {
     const btns = Array.from(document.querySelectorAll('.' + cls));
     const on = b => { btns.forEach(x => { x.classList.remove(cls + '-active'); x.style.borderColor = ''; x.style.color = ''; }); b.classList.add(cls + '-active'); };
     on(btns[0]);
@@ -5497,6 +5626,7 @@ function registerTransition(key) {
   wire('orbSpeed', 'orbSpeedVal', '%'); wire('orbDisp', 'orbDispVal', '%'); wire('orbLight', 'orbLightVal', '%');
   wire('chrSpeed', 'chrSpeedVal', '%'); wire('chrStr', 'chrStrVal', '%'); wire('chrLight', 'chrLightVal', '%');
   wire('pswSpeed', 'pswSpeedVal', '%'); wire('pswTwist', 'pswTwistVal', '%');
+  wire('embSpeed', 'embSpeedVal', '%'); wire('embHeat', 'embHeatVal', '%'); wire('embGlow', 'embGlowVal', '%'); wire('embRag', 'embRagVal', '%');
   { const sl = document.getElementById('orbIor'), lb = document.getElementById('orbIorVal'); const paint = () => { lb.textContent = (sl.value / 100).toFixed(2); }; sl.addEventListener('input', paint); paint(); }
   wire('cauSpeed', 'cauSpeedVal', '%'); wire('cauRefr', 'cauRefrVal', '%'); wire('cauCaus', 'cauCausVal', '%'); wire('cauSize', 'cauSizeVal', '%');
   wire('crumbleChunkSize', 'crumbleChunkSizeVal', 'px');
@@ -5566,6 +5696,7 @@ function registerTransition(key) {
   watchGroup('.chrmat', b => b.dataset.mode === '0');        // default: Water
   watchGroup('.pswflow', b => b.dataset.mode === '0');       // default: Down the drain
   watchGroup('.pswstyle', b => b.dataset.mode === '0');      // default: Super Paper Mario
+  watchGroup('.emberdir', b => b.dataset.mode === '0');      // default: Upward
 })();
 
 Object.keys(TRANSITIONS).forEach(registerTransition);
@@ -5607,6 +5738,8 @@ drawDefaultA (chr_srcC.getContext('2d'), RW, RH);
 drawDefaultB (chr_dstC.getContext('2d'), RW, RH);
 drawDefaultA (psw_srcC.getContext('2d'), RW, RH);
 drawDefaultB (psw_dstC.getContext('2d'), RW, RH);
+drawDefaultA (emb_srcC.getContext('2d'), RW, RH);
+drawDefaultB (emb_dstC.getContext('2d'), RW, RH);
 
 // Page peel's fixed "back of paper" texture — plain and unrelated to A/B,
 // same reasoning as real paper: the back looks the same regardless of
@@ -5635,6 +5768,7 @@ recCtx11.drawImage(cau_srcC, 0, 0); ctx11.drawImage(recC11, 0, 0, W, H);
 recCtx12.drawImage(orb_srcC, 0, 0); ctx12.drawImage(recC12, 0, 0, W, H);
 recCtx13.drawImage(chr_srcC, 0, 0); ctx13.drawImage(recC13, 0, 0, W, H);
 recCtx14.drawImage(psw_srcC, 0, 0); ctx14.drawImage(recC14, 0, 0, W, H);
+recCtx15.drawImage(emb_srcC, 0, 0); ctx15.drawImage(recC15, 0, 0, W, H);
 
 // ── File inputs — A = source (all transitions), B = destination (all transitions) ──
 //
@@ -5658,6 +5792,7 @@ function refreshAllIdle() {
   if (!TRANSITIONS.caustics.running) { recCtx11.clearRect(0,0,RW,RH); recCtx11.drawImage(cau_srcC, 0,0); ctx11.clearRect(0,0,W,H); ctx11.drawImage(recC11,0,0,W,H); }
   if (!TRANSITIONS.glassOrb.running) { recCtx12.clearRect(0,0,RW,RH); recCtx12.drawImage(orb_srcC, 0,0); ctx12.clearRect(0,0,W,H); ctx12.drawImage(recC12,0,0,W,H); }
   if (!TRANSITIONS.liquidChrome.running) { recCtx13.clearRect(0,0,RW,RH); recCtx13.drawImage(chr_srcC, 0,0); ctx13.clearRect(0,0,W,H); ctx13.drawImage(recC13,0,0,W,H); }
+  if (!TRANSITIONS.emberBurn.running) { recCtx15.clearRect(0,0,RW,RH); recCtx15.drawImage(emb_srcC, 0,0); ctx15.clearRect(0,0,W,H); ctx15.drawImage(recC15,0,0,W,H); }
   if (!TRANSITIONS.paperSwirl.running) { recCtx14.clearRect(0,0,RW,RH); recCtx14.drawImage(psw_srcC, 0,0); ctx14.clearRect(0,0,W,H); ctx14.drawImage(recC14,0,0,W,H); }
 }
 
@@ -5666,7 +5801,7 @@ document.getElementById('fA').addEventListener('change', function() {
   loadFromFile(this.files[0], img => {
     // Paint into all source canvases at their respective resolutions
     [milkC, trimC].forEach(c => drawCover(c.getContext('2d'), img, W,  H));
-    [bub_srcC, par_srcC, td_srcC, cone_srcC, peel_srcC, crumble_srcC, cube_srcC, rip_srcC, cau_srcC, orb_srcC, chr_srcC, psw_srcC].forEach(c => drawCover(c.getContext('2d'), img, RW, RH));
+    [bub_srcC, par_srcC, td_srcC, cone_srcC, peel_srcC, crumble_srcC, cube_srcC, rip_srcC, cau_srcC, orb_srcC, chr_srcC, psw_srcC, emb_srcC].forEach(c => drawCover(c.getContext('2d'), img, RW, RH));
     refreshAllIdle();
     setLbl('lblA', this.files[0].name);
     aIsTransparent = false;
@@ -5678,7 +5813,7 @@ document.getElementById('fB').addEventListener('change', function() {
   loadFromFile(this.files[0], img => {
     // Paint into all destination canvases at their respective resolutions
     [butC, talC].forEach(c => drawCover(c.getContext('2d'), img, W,  H));
-    [bub_dstC, par_dstC, td_dstC, cone_dstC, peel_dstC, crumble_dstC, cube_dstC, rip_dstC, cau_dstC, orb_dstC, chr_dstC, psw_dstC].forEach(c => drawCover(c.getContext('2d'), img, RW, RH));
+    [bub_dstC, par_dstC, td_dstC, cone_dstC, peel_dstC, crumble_dstC, cube_dstC, rip_dstC, cau_dstC, orb_dstC, chr_dstC, psw_dstC, emb_dstC].forEach(c => drawCover(c.getContext('2d'), img, RW, RH));
     setLbl('lblB', this.files[0].name);
     bIsTransparent = false;
   });
@@ -5718,7 +5853,7 @@ let aIsTransparent = false, bIsTransparent = false;
 function setSlotTransparent(which) {
   if (which === 'A') {
     [milkC, trimC].forEach(c => c.getContext('2d').clearRect(0, 0, c.width, c.height));
-    [bub_srcC, par_srcC, td_srcC, cone_srcC, peel_srcC, crumble_srcC, cube_srcC, rip_srcC, cau_srcC, orb_srcC, chr_srcC, psw_srcC].forEach(c => c.getContext('2d').clearRect(0, 0, RW, RH));
+    [bub_srcC, par_srcC, td_srcC, cone_srcC, peel_srcC, crumble_srcC, cube_srcC, rip_srcC, cau_srcC, orb_srcC, chr_srcC, psw_srcC, emb_srcC].forEach(c => c.getContext('2d').clearRect(0, 0, RW, RH));
     refreshAllIdle();
     document.getElementById('fA').value = '';
     const el = document.getElementById('lblA');
@@ -5726,7 +5861,7 @@ function setSlotTransparent(which) {
     aIsTransparent = true;
   } else {
     [butC, talC].forEach(c => c.getContext('2d').clearRect(0, 0, c.width, c.height));
-    [bub_dstC, par_dstC, td_dstC, cone_dstC, peel_dstC, crumble_dstC, cube_dstC, rip_dstC, cau_dstC, orb_dstC, chr_dstC, psw_dstC].forEach(c => c.getContext('2d').clearRect(0, 0, RW, RH));
+    [bub_dstC, par_dstC, td_dstC, cone_dstC, peel_dstC, crumble_dstC, cube_dstC, rip_dstC, cau_dstC, orb_dstC, chr_dstC, psw_dstC, emb_dstC].forEach(c => c.getContext('2d').clearRect(0, 0, RW, RH));
     document.getElementById('fB').value = '';
     const el = document.getElementById('lblB');
     el.textContent = '◱ Transparent'; el.style.color = '#4a9e5c';
@@ -5749,11 +5884,11 @@ document.getElementById('alphaWarnClose').addEventListener('click', () => {
 // every transition's own markup, canvas and buttons are untouched.
 // ══════════════════════════════════════════════════════════════════════════
 (function initGallery() {
-  const KEYS  = ['splash','solidify','bubbles','particles','tileDrop','coneRefraction','pagePeel','crumble','cubeAssembly','rippleRefraction','caustics','glassOrb','liquidChrome','paperSwirl'];
-  const SLUGS = ['milk-butter','trimmings-tallow','bubbles','particles','tile-drop','cone-refraction','page-peel','crumble','cube-assembly','ripple-refraction','caustics','glass-orb','crystal-clear-water','paper-swirl'];
+  const KEYS  = ['splash','solidify','bubbles','particles','tileDrop','coneRefraction','pagePeel','crumble','cubeAssembly','rippleRefraction','caustics','glassOrb','liquidChrome','paperSwirl','emberBurn'];
+  const SLUGS = ['milk-butter','trimmings-tallow','bubbles','particles','tile-drop','cone-refraction','page-peel','crumble','cube-assembly','ripple-refraction','caustics','glass-orb','crystal-clear-water','paper-swirl','heat-shimmer-ember'];
   const PAIRS = [[milkC, butC], [trimC, talC], [bub_srcC, bub_dstC], [par_srcC, par_dstC], [td_srcC, td_dstC],
-                 [cone_srcC, cone_dstC], [peel_srcC, peel_dstC], [crumble_srcC, crumble_dstC], [cube_srcC, cube_dstC], [rip_srcC, rip_dstC], [cau_srcC, cau_dstC], [orb_srcC, orb_dstC], [chr_srcC, chr_dstC], [psw_srcC, psw_dstC]];
-  const NOTES = ['', '', '', '', 'Gentle / Cranked', 'Four glass modes', 'Adjustable angle', '', 'Five modes', 'Pond view', 'Refracting water', 'Ray-traced glass', 'Clear water', '3D paper, down the drain'];
+                 [cone_srcC, cone_dstC], [peel_srcC, peel_dstC], [crumble_srcC, crumble_dstC], [cube_srcC, cube_dstC], [rip_srcC, rip_dstC], [cau_srcC, cau_dstC], [orb_srcC, orb_dstC], [chr_srcC, chr_dstC], [psw_srcC, psw_dstC], [emb_srcC, emb_dstC]];
+  const NOTES = ['', '', '', '', 'Gentle / Cranked', 'Four glass modes', 'Adjustable angle', '', 'Five modes', 'Pond view', 'Refracting water', 'Ray-traced glass', 'Clear water', '3D paper, down the drain', 'Burns upward'];
 
   const anyRunning = () => KEYS.some(k => TRANSITIONS[k].running);
   let view = 'grid';
@@ -5814,7 +5949,7 @@ document.getElementById('alphaWarnClose').addEventListener('click', () => {
     back(); x.drawImage(A, 0, 0, w, h);
     const R = rng(1000 + i * 77);
     const reveal = (pathFn) => { x.save(); x.beginPath(); pathFn(); x.clip(); back(); x.drawImage(B, 0, 0, w, h); x.restore(); };
-    if (i < 2 || i === 6 || i === 9 || i === 10 || i === 11 || i === 12 || i === 13) {
+    if (i < 2 || i === 6 || i === 9 || i === 10 || i === 11 || i === 12 || i === 13 || i === 14) {
       if (i === 6) {                                              // page peel: B left behind, paper curling off along a diagonal
         reveal(() => { x.moveTo(w * 0.42, 0); x.lineTo(w, 0); x.lineTo(w, h); x.lineTo(w * 0.05, h); x.closePath(); });
         const gr = x.createLinearGradient(w * 0.2, 0, w * 0.5, 0); gr.addColorStop(0, '#9a9a94'); gr.addColorStop(.35, '#f1efe6'); gr.addColorStop(1, '#bdbab0');
@@ -5842,6 +5977,14 @@ document.getElementById('alphaWarnClose').addEventListener('click', () => {
         x.fillStyle = gr; x.beginPath(); x.moveTo(w * .4, h * .62); x.lineTo(w * .6, h * .62); x.lineTo(w * .5, h * .97); x.closePath(); x.fill();
         half([[.12, .2], [.5, .3], [.5, .72], [.1, .84]], .18);
         half([[.5, .3], [.9, .12], [.88, .66], [.5, .72]], 0);
+      } else if (i === 14) {                                      // heat shimmer to ember: B behind a ragged glowing burn line, sparks above it
+        const ly = xx => h * (.56 + .06 * Math.sin(xx / w * 9 + .6) + .035 * Math.sin(xx / w * 23 + 2.1));
+        reveal(() => { x.moveTo(0, h); for (let xx = 0; xx <= w; xx += 4) x.lineTo(xx, ly(xx)); x.lineTo(w, h); x.closePath(); });
+        x.save(); x.beginPath(); x.moveTo(0, 0); for (let xx = 0; xx <= w; xx += 4) x.lineTo(xx, ly(xx) - 6); x.lineTo(w, 0); x.closePath(); x.clip();
+        const sc = x.createLinearGradient(0, h * .35, 0, h * .62); sc.addColorStop(0, 'rgba(60,25,8,0)'); sc.addColorStop(1, 'rgba(25,8,2,.75)'); x.fillStyle = sc; x.fillRect(0, 0, w, h); x.restore();
+        x.save(); x.shadowColor = 'rgba(255,120,20,.95)'; x.shadowBlur = 14; x.strokeStyle = 'rgba(255,190,90,.95)'; x.lineWidth = 3; x.beginPath();
+        for (let xx = 0; xx <= w; xx += 4) xx ? x.lineTo(xx, ly(xx)) : x.moveTo(xx, ly(xx)); x.stroke(); x.restore();
+        for (let n = 0; n < 34; n++) { const sx = R() * w, sy = ly(sx) - R() * h * .4, r = 1 + R() * 2; x.fillStyle = 'rgba(255,' + (140 + R() * 90 | 0) + ',50,' + (.5 + R() * .5) + ')'; x.beginPath(); x.arc(sx, sy, r, 0, 7); x.fill(); }
       } else if (i === 12) {                                      // liquid chrome: merged mirror blobs
         const blob = () => { x.moveTo(w * .38 + h * .3, h * .45); x.arc(w * .38, h * .45, h * .3, 0, 7); x.moveTo(w * .62 + h * .27, h * .55); x.arc(w * .62, h * .55, h * .27, 0, 7); x.moveTo(w * .5 + h * .22, h * .5); x.arc(w * .5, h * .5, h * .22, 0, 7); };
         x.strokeStyle = 'rgba(230,245,255,.8)'; x.lineWidth = 7; x.beginPath(); blob(); x.stroke();   // outer rim only: the fill below covers the inner overlaps
@@ -5940,8 +6083,10 @@ document.getElementById('alphaWarnClose').addEventListener('click', () => {
   bar.querySelector('#dbPrev').addEventListener('click', () => step(-1));
   bar.querySelector('#dbNext').addEventListener('click', () => step(1));
   document.addEventListener('keydown', e => {
-    if (/^(INPUT|TEXTAREA|SELECT)$/.test((e.target.tagName || ''))) return;
-    if (e.key === 'Escape' && view !== 'grid') go('grid');
+    const tg = e.target, tt = tg && tg.tagName;
+    if (e.key === 'Escape' && view !== 'grid' && !document.fullscreenElement && !(tt === 'TEXTAREA' || (tt === 'INPUT' && tg.type !== 'range' && tg.type !== 'checkbox'))) { if (tg && tg.blur) tg.blur(); go('grid'); return; }
+    if (/^(INPUT|TEXTAREA|SELECT)$/.test(tt || '')) return;
+    if (e.key === 'Escape') return;
     else if ((e.key === 'f' || e.key === 'F') && view !== 'grid' && view !== 'all') bar.querySelector('#dbFull').click();
     else if (e.ctrlKey || e.metaKey || e.altKey) return;
     else if (e.key === 'ArrowLeft' || e.key === 'p' || e.key === 'P') step(-1);
