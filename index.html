@@ -594,6 +594,46 @@
     <button class="emberdir" data-mode="2" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">From the centre</button>
   </div>
 </div>
+<div style="margin-bottom:14px;">
+  <p style="font-size:11px;font-weight:500;letter-spacing:.1em;color:var(--color-text-secondary);text-align:center;margin:0 0 6px;">FROST GROWTH</p>
+  <canvas id="c16" width="3840" height="2160" style="display:block;width:100%;height:auto;border-radius:8px;border:.5px solid var(--color-border-tertiary);"></canvas>
+  <div style="display:flex;gap:8px;justify-content:center;margin-top:8px;">
+    <button id="btn16p" style="font-size:12px;padding:7px 20px;">▶ Play</button>
+    <button id="btn16r" style="font-size:12px;padding:7px 20px;border-color:#e05555;color:#e05555;">⏺ Record 1080p</button>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:6px;align-items:center;margin-top:10px;">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span style="font-size:10px;color:var(--color-text-tertiary);width:78px;text-align:right;">Speed</span>
+      <input type="range" id="frzSpeed" min="40" max="200" step="1" value="100" style="width:180px;">
+      <span id="frzSpeedVal" style="font-size:11px;color:var(--color-text-secondary);min-width:44px;">100%</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span style="font-size:10px;color:var(--color-text-tertiary);width:78px;text-align:right;">Frost depth</span>
+      <input type="range" id="frzDepth" min="0" max="250" step="1" value="100" style="width:180px;">
+      <span id="frzDepthVal" style="font-size:11px;color:var(--color-text-secondary);min-width:44px;">100%</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span style="font-size:10px;color:var(--color-text-tertiary);width:78px;text-align:right;">Sparkle</span>
+      <input type="range" id="frzSparkle" min="0" max="200" step="1" value="100" style="width:180px;">
+      <span id="frzSparkleVal" style="font-size:11px;color:var(--color-text-secondary);min-width:44px;">100%</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span style="font-size:10px;color:var(--color-text-tertiary);width:78px;text-align:right;">Branching</span>
+      <input type="range" id="frzBranch" min="0" max="200" step="1" value="100" style="width:180px;">
+      <span id="frzBranchVal" style="font-size:11px;color:var(--color-text-secondary);min-width:44px;">100%</span>
+    </div>
+  </div>
+  <div style="display:flex;gap:6px;justify-content:center;align-items:center;flex-wrap:wrap;margin-top:10px;">
+    <span style="font-size:10px;color:var(--color-text-tertiary);">Grows from:</span>
+    <button class="frzdir" data-mode="0" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">The edges</button>
+    <button class="frzdir" data-mode="1" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">The centre</button>
+    <button class="frzdir" data-mode="2" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">A corner</button>
+  
+    <span style="font-size:10px;color:var(--color-text-tertiary);margin-left:10px;">Ends:</span>
+    <button class="frzend" data-mode="1" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">Shatters</button>
+    <button class="frzend" data-mode="0" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">Melts</button>
+  </div>
+</div>
 <p id="status" style="text-align:center;font-size:11px;color:var(--color-text-tertiary);margin:.4rem 0 .5rem;min-height:1.4em;">Display 4K · Shimmer 1280×720 · Records 1080p · frame-accurate WebCodecs export (real-time fallback)</p>
 </div>
 
@@ -642,6 +682,7 @@
     glassOrb:     () => 4.4 / (sv('orbSpeed', 100) / 100),
     liquidChrome: () => 4.4 / (sv('chrSpeed', 100) / 100),
     emberBurn:    () => 4.0 / (sv('embSpeed', 100) / 100),
+    frostGrow:    () => 4.2 / (sv('frzSpeed', 100) / 100),
     paperSwirl:   () => (document.querySelector('.pswstyle.pswstyle-active[data-mode="2"]') ? 2.5 : 2.3) / (sv('pswSpeed', 100) / 100),
     caustics:     () => 4.2 / (sv('cauSpeed', 100) / 100),
   };
@@ -892,6 +933,8 @@ const recC14 = mkc(RW, RH), recCtx14 = recC14.getContext('2d');
 const psw_srcC = mkc(RW, RH), psw_dstC = mkc(RW, RH);   // paper swirl A / B
 const recC15 = mkc(RW, RH), recCtx15 = recC15.getContext('2d');
 const emb_srcC = mkc(RW, RH), emb_dstC = mkc(RW, RH);   // heat shimmer to ember A / B
+const recC16 = mkc(RW, RH), recCtx16 = recC16.getContext('2d');
+const frz_srcC = mkc(RW, RH), frz_dstC = mkc(RW, RH);   // frost growth A / B
 const CAU_RSCALE = 4;
 const CAU_RW2 = Math.round(RW / CAU_RSCALE), CAU_RH2 = Math.round(RH / CAU_RSCALE);
 const cau_smallC = mkc(CAU_RW2, CAU_RH2), cau_smallCx = cau_smallC.getContext('2d');   // refracted + lit overlay (alpha = how much it replaces the base)
@@ -923,6 +966,7 @@ const c12 = document.getElementById('c12'), ctx12 = c12.getContext('2d');
 const c13 = document.getElementById('c13'), ctx13 = c13.getContext('2d');
 const c14 = document.getElementById('c14'), ctx14 = c14.getContext('2d');
 const c15 = document.getElementById('c15'), ctx15 = c15.getContext('2d');
+const c16 = document.getElementById('c16'), ctx16 = c16.getContext('2d');
 
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -4434,6 +4478,223 @@ void main(){
   resA = clamp(resA + max(max(glow.r + spark.r, glow.g + spark.g), 0.) * .8, 0., 1.);
   gl_FragColor = vec4(min(resP, vec3(resA)), resA);
 }`,
+  frost: GL_PRELUDE + `
+#define ASP (uRes.x / uRes.y)
+float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.-2.*f);
+  return mix(mix(h21(i), h21(i+vec2(1.,0.)), f.x), mix(h21(i+vec2(0.,1.)), h21(i+vec2(1.,1.)), f.x), f.y); }
+float fbm(vec2 p){ float a = .5, s = 0.; for (int i = 0; i < 4; i++) { s += a*vn(p); p = p*2.03 + vec2(17.3, 9.1); a *= .5; } return s; }
+float ridge(vec2 p){ float a = .5, s = 0.; for (int i = 0; i < 4; i++) { float n = 1. - abs(2.*vn(p) - 1.); s += a*n*n; p = mat2(.80, .60, -.60, .80) * p * 2.11 + vec2(5.7, 13.3); a *= .5; } return s; }
+// how far along the freeze a point is (0 at the seeds ... ~1 farthest away)
+float gOf(vec2 uv){
+  float md = mod(uMode, 3.);
+  if (md < .5) return min(min(uv.x, 1. - uv.x) * ASP, min(uv.y, 1. - uv.y)) * 2.;
+  if (md < 1.5) return length((uv - .5) * vec2(ASP, 1.)) / (.5 * length(vec2(ASP, 1.)));
+  return length(uv * vec2(ASP, 1.)) / length(vec2(ASP, 1.));
+}
+float segd(vec2 p, vec2 a, vec2 b){ vec2 pa = p - a, ba = b - a; return length(pa - ba * clamp(dot(pa, ba) / dot(ba, ba), 0., 1.)); }
+// six-armed dendrite: tapered main arms with side branches, each crystal with its own size, spin and branching
+float flake(vec2 d, float R, float rot, vec2 var){
+  float cr_ = cos(rot), sr_ = sin(rot); d = vec2(cr_ * d.x - sr_ * d.y, sr_ * d.x + cr_ * d.y);
+  float a = atan(d.y, d.x + 1e-5); a = mod(a + .5236, 1.0472) - .5236;
+  vec2 l = length(d) * vec2(cos(a), sin(a));
+  float best = segd(l, vec2(0.), vec2(R, 0.)) - .0042 * (1. - .75 * clamp(l.x / R, 0., 1.));
+  float ang = .75 + .45 * var.x; vec2 dir = vec2(cos(ang), sin(ang));
+  float lenK = .32 + .38 * var.y;
+  for (int k = 1; k < 5; k++) {
+    float fk = float(k), bx = R * (.16 + .15 * var.x) * fk, bl = max((R - bx) * lenK, .004);
+    float wd = .0028 * (1. - bx / R);
+    vec2 o = vec2(bx, 0.), dv = dir * bl;
+    best = min(best, min(segd(l, o, o + dv), segd(l, o, o + dv * vec2(1., -1.))) - wd);
+    if (k < 3) { vec2 o2 = o + dv * .55; vec2 dr2 = vec2(dir.x, -dir.y) * bl * .4; best = min(best, min(segd(l, o2, o2 + dr2 * vec2(1., -1.)), segd(l, o2, o2 + dir * bl * .4)) - wd * .6); }
+  }
+  return best;
+}
+// crystal field: x = cover, y = halo, z = signed distance to the nearest arm. CS = crystal spacing, sc = size scale
+vec3 dendM(vec2 uv, float gf, float CS, float sc){
+  vec2 pq = vec2(uv.x * ASP, uv.y);
+  vec2 cell = floor(pq / CS); float dm = 9.;
+  for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
+    vec2 c = cell + vec2(float(i), float(j)); vec2 jt = h22(c + 41.), v2 = h22(c + 17.);
+    vec2 sp = (c + .1 + .8 * jt) * CS;
+    float sz = .55 + .9 * h21(c + 8.);
+    float gs = gOf(sp / vec2(ASP, 1.)) + .14 * (h21(c + 5.) - .5);
+    float R = min(clamp((gf - gs) * .55 * sc * sz, 0., .34 * sc * sz), CS * 1.05);
+    if (R > .008) dm = min(dm, flake(pq - sp, R, h21(c + 23.) * 6.283, v2));
+  }
+  return vec3(1. - smoothstep(-.0006, .0014, dm), exp(-max(dm, 0.) * 34.), dm);
+}
+vec3 iceTint(vec2 pw, float cr, float thick){ return mix(vec3(.58, .76, .92), vec3(.96, .98, 1.), cr * (.5 + .5 * thick)); }
+// the picture as it looks frozen inside thick, bumpy ice: A bent and split into colour by the crystals, cooled, whitened where the ice is cloudy
+vec4 iced(vec2 uv, vec2 dd){
+  vec2 pc = vec2(uv.x * ASP, uv.y);
+  vec2 pw = pc + .035 * vec2(fbm(pc * 6.), fbm(pc * 6. + 9.));
+  vec2 e = vec2(.0016, 0.);
+  float cr = clamp(ridge(pw * 26. + vec2(1.7, 8.2)) * .55 + ridge(pw * 61. + 3.3) * .35 + .25, 0., 1.);
+  float cx = ridge((pw + e.xy) * 18. + 4.1) - ridge((pw - e.xy) * 18. + 4.1);
+  float cy = ridge((pw + e.yx) * 18. + 4.1) - ridge((pw - e.yx) * 18. + 4.1);
+  vec2 gr = vec2(cx, cy) / (2. * e.x);
+  vec3 n = normalize(vec3(-gr * .010 * uStr, 1.));
+  vec2 rf = n.xy * .05 * uStr * vec2(1., ASP) + (dd.y - .1) * .01 * vec2(sin(pc.y * 70.), cos(pc.x * 70.));
+  vec4 a4 = texture2D(uA, clamp(uv + rf, 0., 1.));
+  float cr1 = texture2D(uA, clamp(uv + rf * 1.22, 0., 1.)).r, cb1 = texture2D(uA, clamp(uv + rf * .80, 0., 1.)).b;   // dispersion
+  vec3 col = vec3(cr1, a4.g, cb1);
+  col = mix(vec3(dot(col, vec3(.3, .55, .15))), col, .40) * vec3(.58, .86, 1.15);      // freezing drains the warmth out of the picture
+  float cloud = ss(.50, .98, cr) * .38 + dd.x * .40;
+  col = mix(col, vec3(.82, .92, 1.), clamp(cloud, 0., 1.) * .62);
+  vec3 L = normalize(vec3(-.45, .55, .70));
+  float spec = pow(max(dot(n, L), 0.), 40.) * 1.2 + pow(max(dot(n, normalize(vec3(.5, -.3, .8))), 0.), 60.) * .6;
+  col += (vec3(.85, .95, 1.) * spec + vec3(.45, .75, 1.) * pow(1. - n.z, 1.5) * 1.8 + vec3(.3, .6, 1.) * dd.y * .25) * uLight;   // glints, rim, and a cold glow around the crystal arms
+  col = col * (.8 + .3 * n.z);
+  float oa = a4.a;
+  return vec4(min(col, vec3(1.3)) * oa, oa);
+}
+void main(){
+  vec2 uv = gl_FragCoord.xy / uRes; float asp = ASP;
+  float p = uP, T = p * 4.2;
+  float shatter = step(2.5, uMode);
+  uv = .5 + (uv - .5) / (1. + shatter * .05 * ss(0., .6, p) * (1. - ss(.6, .85, p)));          // slow push-in while it freezes, then it lets go
+  vec2 pc = vec2(uv.x * asp, uv.y);
+  float g = gOf(uv);
+  float vein = ridge(pc * 7. + vec2(2.3, 0.) + 3. * fbm(pc * 2.5));
+  float vein2 = ridge(pc * 17. + 5.);
+  float nlow = fbm(pc * 2.6 + 4.1);
+  float gf = mix(-.06, 1.45, ss(.0, .58, p));
+  vec3 dS = dendM(uv, gf, .27, .85);                                              // surface crystals, small and sharp
+  vec3 dD = dendM(uv + vec2(.012 * (p - .3), .006), gf * .92, .52, 1.5);           // deeper, bigger ones seen through the ice, sliding with a little parallax
+  vec3 dE = dendM(uv + vec2(-.0016, .0021), gf, .27, .85);                         // nudged copy: the difference gives the bevel lighting
+  vec2 dd = vec2(max(dS.x, dD.x * .45), max(dS.y, dD.y * .6));
+  float emb = clamp((dE.z - dS.z) / .0026, -1., 1.) * dS.x;
+  float ta = g + uDisp * (.30 * (.5 - vein) + .08 * (.5 - vein2) + .10 * (nlow - .5)) - uDisp * .26 * dd.y;
+  float cov = max(ss(0., .20, gf - ta), dd.x * ss(-.05, .1, gf - g));
+  float thick = ss(0., .55, gf - ta);
+  float edge = exp(-pow((gf - ta - .02) / .06, 2.));
+  if (shatter > .5) {
+    vec2 ctr = mod(uMode, 3.) < .5 ? vec2(.5) : (mod(uMode, 3.) < 1.5 ? vec2(.5) : vec2(.0));
+    vec4 plain = texture2D(uA, uv);
+    vec4 ice = iced(uv, dd);
+    vec4 res = mix(plain, ice, cov);
+    res.rgb += (vec3(.9, .97, 1.) * max(emb, 0.) * .6 - vec3(.10, .16, .26) * max(-emb, 0.)) * res.a * (1. - ss(.5, .6, p)) * uLight;   // raised, bevelled arms
+    // growing tips glow cold cyan; breath of mist rolls off the freezing front
+    float tip = edge * .5 + dd.y * ss(0., .25, gf - g) * .35;
+    float mist = fbm(pc * 3. + vec2(T * .35, -T * .12));
+    float mmask = exp(-abs(gf - ta - .12) * 4.) * (1. - ss(.5, .62, p));
+    res.rgb += (vec3(.35, .75, 1.) * tip + vec3(.8, .92, 1.) * mist * mmask * .35) * uLight * res.a;
+    vec2 gq = pc * 120.; vec2 gc = floor(gq), gl = fract(gq) - .5, gn = h22(gc + 9.);
+    float tw = pow(max(sin(T * (2. + 5. * gn.x) + gn.y * 40.), 0.), 8.);
+    res.rgb += vec3(.9, .96, 1.) * (1. - smoothstep(0., .10 + .10 * gn.y, length(gl - (gn - .5) * .5))) * step(.86, h21(gc + 2.7)) * tw * 1.8 * uLight * cov * res.a;
+    float CSH = .15;
+    vec2 vc0 = floor(pc / CSH); float d1 = 9., d2 = 9.;
+    for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) { vec2 c = vc0 + vec2(float(i), float(j)); float dl = length(pc - (c + .15 + .7 * h22(c + 77.)) * CSH); if (dl < d1) { d2 = d1; d1 = dl; } else if (dl < d2) d2 = dl; }
+    float crack = (1. - smoothstep(0., .005, d2 - d1)) * ss(.36, .52, p + .06 * (nlow - .5)) * cov * (1. - ss(.6, .62, p));
+    res.rgb = mix(res.rgb, vec3(.2, .45, .75) * res.a, crack * .6) + vec3(.7, .9, 1.) * crack * .35 * uLight * res.a;
+    if (p > .6) {
+      vec2 dir = (uv - ctr) * vec2(asp, 1.); float rad = length(dir);
+      float ring = exp(-pow((rad - (p - .6) * 3.2) / .10, 2.)) * (1. - ss(.62, .8, p));
+      vec2 uvb = clamp(uv + normalize(dir + 1e-4) * ring * .03 * vec2(1., asp), 0., 1.);
+      vec4 b4 = texture2D(uB, uvb);
+      vec3 bClear = b4.rgb * b4.a * mix(vec3(1.), vec3(.80, .93, 1.07), (1. - ss(.6, .95, p)) * .6) + vec3(.4, .7, 1.) * ring * .25 * b4.a * uLight;
+      // light focused through the falling shards: drifting caustic bands across B
+      float cau = pow(ridge(pc * 7. + vec2(T * .5, -T * .8)) * ridge(pc * 11. - vec2(T * .4, T * .3) + 3.), 1.5) * 3.2;
+      bClear += vec3(.45, .80, 1.) * cau * ss(.60, .70, p) * (1. - ss(.74, .93, p)) * b4.a * uLight * .30;
+      vec3 shP = vec3(0.); float shA = 0.;
+      float ft0 = max(p - .66, 0.) / .21;                                              // the shards that could be here fell from above: search up the column by about the average fall
+      vec2 vc = floor((pc + vec2(0., ft0 * ft0 * 1.9 + ft0 * .08)) / CSH);
+      for (int j = -5; j <= 5; j++) for (int i = -2; i <= 2; i++) {
+        vec2 c = vc + vec2(float(i), float(j)); vec2 gen = (c + .15 + .7 * h22(c + 77.)) * CSH; vec2 rn = h22(c + 13.);
+        float tS = .60 + .09 * length((gen / vec2(asp, 1.) - ctr)) * 1.1 + .04 * rn.x;
+        float ft = max(p - tS, 0.) / .21;
+        vec2 m = vec2((rn.y - .5) * .30 * ft, -(ft * ft * 1.9 + ft * .08));
+        float th = (rn.x - .5) * 7. * ft, ph = (rn.y - .5) * 6. * ft;                      // each shard spins and tips over in 3D
+        float cth = cos(th), sth = sin(th);
+        vec2 v = pc - gen - m; v = vec2(cth * v.x + sth * v.y, -sth * v.x + cth * v.y);
+        v.x /= max(abs(cos(ph)), .25); v /= (1. - .35 * min(ft, 1.));
+        vec2 xq = gen + v; float dmine = length(xq - gen), mind = 9.;
+        if (dmine > CSH * 1.2) continue;
+        for (int b = -1; b <= 1; b++) for (int a2 = -1; a2 <= 1; a2++) { if (a2 == 0 && b == 0) continue; vec2 cn = c + vec2(float(a2), float(b)); mind = min(mind, length(xq - (cn + .15 + .7 * h22(cn + 77.)) * CSH) - dmine); }
+        float inside = smoothstep(0., .004, mind);
+        if (inside > .01) {
+          vec2 uq = xq / vec2(asp, 1.);
+          vec3 a1 = dendM(uq, 1.5, .27, .85), a2 = dendM(uq, 1.4, .52, 1.5);
+          vec4 ic = iced(uq, vec2(max(a1.x, a2.x * .45), max(a1.y, a2.y * .6)));
+          vec3 sn = normalize(vec3(sin(ph) * .8, sin(th * .7) * .35, max(cos(ph), .2)));
+          float flash = pow(max(dot(sn, normalize(vec3(-.4, .5, .76))), 0.), 14.);
+          float lit = 1. - ss(0., .02, mind);
+          // the shard is a tilted lens: what lies behind (B) is bent and split into colours through it, more so as the ice clears
+          vec2 rf = sn.xy * (.05 + .07 * min(ft, 1.)) * vec2(1., asp) + (v * .06) * vec2(1., asp) * min(ft, 1.);
+          vec3 bRef = vec3(texture2D(uB, clamp(uv + rf * 1.25, 0., 1.)).r, texture2D(uB, clamp(uv + rf, 0., 1.)).g, texture2D(uB, clamp(uv + rf * .78, 0., 1.)).b) * vec3(.85, 1., 1.12);
+          float clear = ss(0., .55, ft) * .7;
+          vec3 sc = mix(ic.rgb, bRef * ic.a + vec3(.30, .45, .60) * .22 * ic.a, clear) * (.7 + .45 * sn.z);
+          sc += vec3(.8, .93, 1.) * flash * (.9 + 1.2 * clear) * uLight * ic.a + vec3(.5, .8, 1.) * lit * .45 * uLight * ic.a;
+          sc += (.5 + .5 * cos(6.2832 * (ph * .3 + vec3(0., .33, .67)))) * lit * .35 * uLight * ic.a;      // rainbow fringe on the bevelled edges
+          float al = ic.a * inside * (1. - ss(.8, 1., ft));
+          shP = shP * (1. - al) + sc * al; shA = shA + al * (1. - shA);
+        }
+      }
+      // ice dust and glitter thrown off by the break
+      vec3 dust = vec3(0.);
+      for (int L = 0; L < 2; L++) {
+        float fl = float(L), cs = 40. + fl * 22.;
+        vec2 dq = vec2(pc.x + sin(T * 2. + fl * 3. + pc.y * 6.) * .02, pc.y + (T - 2.52) * (.55 + .25 * fl)) * cs + vec2(fl * 9.3, fl * 4.1);
+        vec2 dc = floor(dq), dl = fract(dq) - .5, dr = h22(dc + 60. + fl);
+        float live = step(.7, h21(dc + 3.3 + fl)) * ss(.6, .65, p) * (1. - ss(.82, .97, p));
+        dust += vec3(.8, .93, 1.) * (1. - smoothstep(0., .1 + .1 * dr.y, length(dl - (dr - .5) * .5))) * live * (.5 + .5 * sin(T * 12. + dr.x * 30.));
+      }
+      vec4 fin = vec4(shP + bClear * (1. - shA), shA + b4.a * (1. - shA));
+      fin.rgb += dust * uLight * .9; fin.a = clamp(fin.a + dot(dust, vec3(.33)) * .6, 0., 1.);
+      res = mix(res, fin, ss(.60, .625, p));
+    }
+    float flashT = exp(-pow((p - .6) / .02, 2.)) * .35 * uLight;                      // a white crack of light as it goes
+    res.rgb += vec3(.8, .92, 1.) * flashT * res.a;
+    gl_FragColor = vec4(min(res.rgb, vec3(res.a)), res.a);
+    return;
+  }
+
+  vec2 pw = pc + .035 * vec2(fbm(pc * 6.), fbm(pc * 6. + 9.));
+  float c0 = ridge(pw * 26. + vec2(1.7, 8.2)), c1 = ridge(pw * 61. + 3.3);
+  float cr = clamp(c0 * .55 + c1 * .35 + .25, 0., 1.);
+  vec2 e = vec2(.0016, 0.);
+  float cx = ridge((pw + e.xy) * 26. + vec2(1.7, 8.2)) - ridge((pw - e.xy) * 26. + vec2(1.7, 8.2));
+  float cy = ridge((pw + e.yx) * 26. + vec2(1.7, 8.2)) - ridge((pw - e.yx) * 26. + vec2(1.7, 8.2));
+  vec2 gr = vec2(cx, cy) / (2. * e.x);
+
+  float tm = nlow * .75 + (1. - g) * .15 + .22 * (1. - vein);
+  float mf = mix(-.25, 1.2, ss(.60, .98, p));
+  float melted = ss(0., .18, mf - tm) * (1. - shatter);
+  float wet = exp(-pow((mf - tm - .06) / .09, 2.)) * ss(.58, .64, p) * (1. - shatter);
+  float swap = ss(.575, .625, p);
+  float fo = cov * (.40 + .60 * thick) * (1. - melted);
+  float peak = ss(.40, .58, p) * (1. - ss(.62, .72, p) * (1. - shatter));
+  fo = clamp(max(fo, cov * peak * .97), 0., 1.) * (1. - melted * (1. - peak));
+
+  float k = (cov * (1. - melted) * .020 + wet * .014) * uStr;
+  vec2 tap = clamp(uv + gr * k * .035 * vec2(1., asp) + (dd.y * .006 * uStr) * vec2(sin(pc.y * 90.), cos(pc.x * 90.)), 0., 1.);
+  vec2 rb = vec2(.0045 * uStr * cov, .0045 * asp * uStr * cov);
+  vec4 s0 = vec4(0.); float wsum = 0.;
+  vec2 d5[5]; d5[0] = vec2(0.); d5[1] = vec2(1., 0.); d5[2] = vec2(-1., 0.); d5[3] = vec2(0., 1.); d5[4] = vec2(0., -1.);
+  for (int i = 0; i < 5; i++) { float wgt = i == 0 ? .36 : .16; vec2 tt = clamp(tap + d5[i] * rb, 0., 1.); vec4 a4 = texture2D(uA, tt), b4 = texture2D(uB, tt);
+    s0 += vec4(mix(a4.rgb * a4.a, b4.rgb * b4.a, swap), mix(a4.a, b4.a, swap)) * wgt; wsum += wgt; }
+  s0 /= wsum;
+  vec3 baseP = s0.rgb * mix(vec3(1.), vec3(.80, .93, 1.05), cov * (1. - melted) * .7);
+  float baseA = s0.a;
+
+  vec3 nrm = normalize(vec3(-gr * .007 * uStr, 1.));
+  float diff = .78 + .22 * dot(nrm, normalize(vec3(-.45, .55, .70)));
+  vec3 iceCol = iceTint(pw, cr, thick) * diff;
+  iceCol += vec3(.7, .85, 1.) * edge * .35 * uLight;
+  iceCol += vec3(.55, .80, 1.) * wet * .5 * uLight;
+  iceCol = mix(iceCol, vec3(.97, 1., 1.), dd.x * .85);                           // crystal arms: bright white
+  iceCol += (vec3(.25, .65, 1.) * dd.y * .22 + vec3(1., .5, .9) * pow(dd.y, 3.) * .12) * uLight;   // prismatic fringe
+  vec2 gq = pc * 120.; vec2 gc = floor(gq), gl = fract(gq) - .5, gn = h22(gc + 9.);
+  float tw = pow(max(sin(T * (2. + 5. * gn.x) + gn.y * 40.), 0.), 8.);
+  float spk = (1. - smoothstep(0., .10 + .10 * gn.y, length(gl - (gn - .5) * .5))) * step(.86, h21(gc + 2.7)) * tw;
+  iceCol += vec3(.9, .96, 1.) * spk * 1.8 * uLight * cov * (1. - melted);
+
+  float outA = clamp(baseA + fo * .5 * (1. - baseA), 0., 1.);
+  vec3 outP = baseP * (1. - fo) + iceCol * fo * outA;
+  vec4 res = vec4(outP, outA);
+
+  gl_FragColor = vec4(min(res.rgb, vec3(res.a)), res.a);
+}`,
 };
 const GLB = { gl: null, cv: null, ok: null, progs: {} };
 function glBridge() {
@@ -4528,6 +4789,10 @@ function runCaustics(onDone) {
 function runGlassOrb(onDone) {
   runGLTransition({ key: 'orb', src: orb_srcC, dst: orb_dstC, rec: recCtx12, recCanvas: recC12, disp: ctx12, base: 4.4,
     params: () => ({ speed: glSl('orbSpeed', 100) / 100, str: (glSl('orbIor', 150) / 100 - 1) / 0.5, disp: glSl('orbDisp', 100) / 100, light: glSl('orbLight', 100) / 100, mode: glMode('orbpath') }) }, onDone);
+}
+function runFrost(onDone) {
+  runGLTransition({ key: 'frost', src: frz_srcC, dst: frz_dstC, rec: recCtx16, recCanvas: recC16, disp: ctx16, base: 4.2,
+    params: () => ({ speed: glSl('frzSpeed', 100) / 100, str: glSl('frzDepth', 100) / 100, disp: glSl('frzBranch', 100) / 100, light: glSl('frzSparkle', 100) / 100, mode: glMode('frzdir') + 3 * glMode('frzend') }) }, onDone);
 }
 function runEmber(onDone) {
   runGLTransition({ key: 'ember', src: emb_srcC, dst: emb_dstC, rec: recCtx15, recCanvas: recC15, disp: ctx15, base: 4.0,
@@ -4973,6 +5238,15 @@ const TRANSITIONS = {
     recordFilename: 'heat-shimmer-ember',
     playBtnId:      'btn15p',
     recBtnId:       'btn15r',
+    padSecs:        0,
+    running:        false,
+  },
+  frostGrow: {
+    runFn:          runFrost,
+    recCanvas:      recC16,
+    recordFilename: 'frost-growth',
+    playBtnId:      'btn16p',
+    recBtnId:       'btn16r',
     padSecs:        0,
     running:        false,
   },
@@ -5545,9 +5819,9 @@ function registerTransition(key) {
 // Wire the Glass Orb / Liquid Chrome pickers (default: first option).
 (function() {
   const style = document.createElement('style');
-  style.textContent = '.orbpath.orbpath-active, .chrpath.chrpath-active, .chrmat.chrmat-active, .pswflow.pswflow-active, .pswstyle.pswstyle-active, .emberdir.emberdir-active { border-color: var(--color-text-primary) !important; color: var(--color-text-primary) !important; }';
+  style.textContent = '.orbpath.orbpath-active, .chrpath.chrpath-active, .chrmat.chrmat-active, .pswflow.pswflow-active, .pswstyle.pswstyle-active, .emberdir.emberdir-active, .frzdir.frzdir-active, .frzend.frzend-active { border-color: var(--color-text-primary) !important; color: var(--color-text-primary) !important; }';
   document.head.appendChild(style);
-  [['orbpath', 'glassOrb'], ['chrpath', 'liquidChrome'], ['chrmat', 'liquidChrome'], ['pswflow', 'paperSwirl'], ['pswstyle', 'paperSwirl'], ['emberdir', 'emberBurn']].forEach(([cls, key]) => {
+  [['orbpath', 'glassOrb'], ['chrpath', 'liquidChrome'], ['chrmat', 'liquidChrome'], ['pswflow', 'paperSwirl'], ['pswstyle', 'paperSwirl'], ['emberdir', 'emberBurn'], ['frzdir', 'frostGrow'], ['frzend', 'frostGrow']].forEach(([cls, key]) => {
     const btns = Array.from(document.querySelectorAll('.' + cls));
     const on = b => { btns.forEach(x => { x.classList.remove(cls + '-active'); x.style.borderColor = ''; x.style.color = ''; }); b.classList.add(cls + '-active'); };
     on(btns[0]);
@@ -5635,6 +5909,7 @@ function registerTransition(key) {
   wire('chrSpeed', 'chrSpeedVal', '%'); wire('chrStr', 'chrStrVal', '%'); wire('chrLight', 'chrLightVal', '%');
   wire('pswSpeed', 'pswSpeedVal', '%'); wire('pswTwist', 'pswTwistVal', '%');
   wire('embSpeed', 'embSpeedVal', '%'); wire('embHeat', 'embHeatVal', '%'); wire('embGlow', 'embGlowVal', '%'); wire('embRag', 'embRagVal', '%');
+  wire('frzSpeed', 'frzSpeedVal', '%'); wire('frzDepth', 'frzDepthVal', '%'); wire('frzSparkle', 'frzSparkleVal', '%'); wire('frzBranch', 'frzBranchVal', '%');
   { const sl = document.getElementById('orbIor'), lb = document.getElementById('orbIorVal'); const paint = () => { lb.textContent = (sl.value / 100).toFixed(2); }; sl.addEventListener('input', paint); paint(); }
   wire('cauSpeed', 'cauSpeedVal', '%'); wire('cauRefr', 'cauRefrVal', '%'); wire('cauCaus', 'cauCausVal', '%'); wire('cauSize', 'cauSizeVal', '%');
   wire('crumbleChunkSize', 'crumbleChunkSizeVal', 'px');
@@ -5705,6 +5980,8 @@ function registerTransition(key) {
   watchGroup('.pswflow', b => b.dataset.mode === '0');       // default: Down the drain
   watchGroup('.pswstyle', b => b.dataset.mode === '0');      // default: Super Paper Mario
   watchGroup('.emberdir', b => b.dataset.mode === '0');      // default: Upward
+  watchGroup('.frzdir', b => b.dataset.mode === '0');        // default: from the edges
+  watchGroup('.frzend', b => b.dataset.mode === '1');        // default: shatters
 })();
 
 Object.keys(TRANSITIONS).forEach(registerTransition);
@@ -5748,6 +6025,8 @@ drawDefaultA (psw_srcC.getContext('2d'), RW, RH);
 drawDefaultB (psw_dstC.getContext('2d'), RW, RH);
 drawDefaultA (emb_srcC.getContext('2d'), RW, RH);
 drawDefaultB (emb_dstC.getContext('2d'), RW, RH);
+drawDefaultA (frz_srcC.getContext('2d'), RW, RH);
+drawDefaultB (frz_dstC.getContext('2d'), RW, RH);
 
 // Page peel's fixed "back of paper" texture — plain and unrelated to A/B,
 // same reasoning as real paper: the back looks the same regardless of
@@ -5777,6 +6056,7 @@ recCtx12.drawImage(orb_srcC, 0, 0); ctx12.drawImage(recC12, 0, 0, W, H);
 recCtx13.drawImage(chr_srcC, 0, 0); ctx13.drawImage(recC13, 0, 0, W, H);
 recCtx14.drawImage(psw_srcC, 0, 0); ctx14.drawImage(recC14, 0, 0, W, H);
 recCtx15.drawImage(emb_srcC, 0, 0); ctx15.drawImage(recC15, 0, 0, W, H);
+recCtx16.drawImage(frz_srcC, 0, 0); ctx16.drawImage(recC16, 0, 0, W, H);
 
 // ── File inputs — A = source (all transitions), B = destination (all transitions) ──
 //
@@ -5800,6 +6080,7 @@ function refreshAllIdle() {
   if (!TRANSITIONS.caustics.running) { recCtx11.clearRect(0,0,RW,RH); recCtx11.drawImage(cau_srcC, 0,0); ctx11.clearRect(0,0,W,H); ctx11.drawImage(recC11,0,0,W,H); }
   if (!TRANSITIONS.glassOrb.running) { recCtx12.clearRect(0,0,RW,RH); recCtx12.drawImage(orb_srcC, 0,0); ctx12.clearRect(0,0,W,H); ctx12.drawImage(recC12,0,0,W,H); }
   if (!TRANSITIONS.liquidChrome.running) { recCtx13.clearRect(0,0,RW,RH); recCtx13.drawImage(chr_srcC, 0,0); ctx13.clearRect(0,0,W,H); ctx13.drawImage(recC13,0,0,W,H); }
+  if (!TRANSITIONS.frostGrow.running) { recCtx16.clearRect(0,0,RW,RH); recCtx16.drawImage(frz_srcC, 0,0); ctx16.clearRect(0,0,W,H); ctx16.drawImage(recC16,0,0,W,H); }
   if (!TRANSITIONS.emberBurn.running) { recCtx15.clearRect(0,0,RW,RH); recCtx15.drawImage(emb_srcC, 0,0); ctx15.clearRect(0,0,W,H); ctx15.drawImage(recC15,0,0,W,H); }
   if (!TRANSITIONS.paperSwirl.running) { recCtx14.clearRect(0,0,RW,RH); recCtx14.drawImage(psw_srcC, 0,0); ctx14.clearRect(0,0,W,H); ctx14.drawImage(recC14,0,0,W,H); }
 }
@@ -5809,7 +6090,7 @@ document.getElementById('fA').addEventListener('change', function() {
   loadFromFile(this.files[0], img => {
     // Paint into all source canvases at their respective resolutions
     [milkC, trimC].forEach(c => drawCover(c.getContext('2d'), img, W,  H));
-    [bub_srcC, par_srcC, td_srcC, cone_srcC, peel_srcC, crumble_srcC, cube_srcC, rip_srcC, cau_srcC, orb_srcC, chr_srcC, psw_srcC, emb_srcC].forEach(c => drawCover(c.getContext('2d'), img, RW, RH));
+    [bub_srcC, par_srcC, td_srcC, cone_srcC, peel_srcC, crumble_srcC, cube_srcC, rip_srcC, cau_srcC, orb_srcC, chr_srcC, psw_srcC, emb_srcC, frz_srcC].forEach(c => drawCover(c.getContext('2d'), img, RW, RH));
     refreshAllIdle();
     setLbl('lblA', this.files[0].name);
     aIsTransparent = false;
@@ -5821,7 +6102,7 @@ document.getElementById('fB').addEventListener('change', function() {
   loadFromFile(this.files[0], img => {
     // Paint into all destination canvases at their respective resolutions
     [butC, talC].forEach(c => drawCover(c.getContext('2d'), img, W,  H));
-    [bub_dstC, par_dstC, td_dstC, cone_dstC, peel_dstC, crumble_dstC, cube_dstC, rip_dstC, cau_dstC, orb_dstC, chr_dstC, psw_dstC, emb_dstC].forEach(c => drawCover(c.getContext('2d'), img, RW, RH));
+    [bub_dstC, par_dstC, td_dstC, cone_dstC, peel_dstC, crumble_dstC, cube_dstC, rip_dstC, cau_dstC, orb_dstC, chr_dstC, psw_dstC, emb_dstC, frz_dstC].forEach(c => drawCover(c.getContext('2d'), img, RW, RH));
     setLbl('lblB', this.files[0].name);
     bIsTransparent = false;
   });
@@ -5861,7 +6142,7 @@ let aIsTransparent = false, bIsTransparent = false;
 function setSlotTransparent(which) {
   if (which === 'A') {
     [milkC, trimC].forEach(c => c.getContext('2d').clearRect(0, 0, c.width, c.height));
-    [bub_srcC, par_srcC, td_srcC, cone_srcC, peel_srcC, crumble_srcC, cube_srcC, rip_srcC, cau_srcC, orb_srcC, chr_srcC, psw_srcC, emb_srcC].forEach(c => c.getContext('2d').clearRect(0, 0, RW, RH));
+    [bub_srcC, par_srcC, td_srcC, cone_srcC, peel_srcC, crumble_srcC, cube_srcC, rip_srcC, cau_srcC, orb_srcC, chr_srcC, psw_srcC, emb_srcC, frz_srcC].forEach(c => c.getContext('2d').clearRect(0, 0, RW, RH));
     refreshAllIdle();
     document.getElementById('fA').value = '';
     const el = document.getElementById('lblA');
@@ -5869,7 +6150,7 @@ function setSlotTransparent(which) {
     aIsTransparent = true;
   } else {
     [butC, talC].forEach(c => c.getContext('2d').clearRect(0, 0, c.width, c.height));
-    [bub_dstC, par_dstC, td_dstC, cone_dstC, peel_dstC, crumble_dstC, cube_dstC, rip_dstC, cau_dstC, orb_dstC, chr_dstC, psw_dstC, emb_dstC].forEach(c => c.getContext('2d').clearRect(0, 0, RW, RH));
+    [bub_dstC, par_dstC, td_dstC, cone_dstC, peel_dstC, crumble_dstC, cube_dstC, rip_dstC, cau_dstC, orb_dstC, chr_dstC, psw_dstC, emb_dstC, frz_dstC].forEach(c => c.getContext('2d').clearRect(0, 0, RW, RH));
     document.getElementById('fB').value = '';
     const el = document.getElementById('lblB');
     el.textContent = '◱ Transparent'; el.style.color = '#4a9e5c';
@@ -5892,11 +6173,11 @@ document.getElementById('alphaWarnClose').addEventListener('click', () => {
 // every transition's own markup, canvas and buttons are untouched.
 // ══════════════════════════════════════════════════════════════════════════
 (function initGallery() {
-  const KEYS  = ['splash','solidify','bubbles','particles','tileDrop','coneRefraction','pagePeel','crumble','cubeAssembly','rippleRefraction','caustics','glassOrb','liquidChrome','paperSwirl','emberBurn'];
-  const SLUGS = ['milk-butter','trimmings-tallow','bubbles','particles','tile-drop','cone-refraction','page-peel','crumble','cube-assembly','ripple-refraction','caustics','glass-orb','crystal-clear-water','paper-swirl','heat-shimmer-ember'];
+  const KEYS  = ['splash','solidify','bubbles','particles','tileDrop','coneRefraction','pagePeel','crumble','cubeAssembly','rippleRefraction','caustics','glassOrb','liquidChrome','paperSwirl','emberBurn','frostGrow'];
+  const SLUGS = ['milk-butter','trimmings-tallow','bubbles','particles','tile-drop','cone-refraction','page-peel','crumble','cube-assembly','ripple-refraction','caustics','glass-orb','crystal-clear-water','paper-swirl','heat-shimmer-ember','frost-growth'];
   const PAIRS = [[milkC, butC], [trimC, talC], [bub_srcC, bub_dstC], [par_srcC, par_dstC], [td_srcC, td_dstC],
-                 [cone_srcC, cone_dstC], [peel_srcC, peel_dstC], [crumble_srcC, crumble_dstC], [cube_srcC, cube_dstC], [rip_srcC, rip_dstC], [cau_srcC, cau_dstC], [orb_srcC, orb_dstC], [chr_srcC, chr_dstC], [psw_srcC, psw_dstC], [emb_srcC, emb_dstC]];
-  const NOTES = ['', '', '', '', 'Gentle / Cranked', 'Four glass modes', 'Adjustable angle', '', 'Five modes', 'Pond view', 'Refracting water', 'Ray-traced glass', 'Clear water', '3D paper, down the drain', 'Burns upward'];
+                 [cone_srcC, cone_dstC], [peel_srcC, peel_dstC], [crumble_srcC, crumble_dstC], [cube_srcC, cube_dstC], [rip_srcC, rip_dstC], [cau_srcC, cau_dstC], [orb_srcC, orb_dstC], [chr_srcC, chr_dstC], [psw_srcC, psw_dstC], [emb_srcC, emb_dstC], [frz_srcC, frz_dstC]];
+  const NOTES = ['', '', '', '', 'Gentle / Cranked', 'Four glass modes', 'Adjustable angle', '', 'Five modes', 'Pond view', 'Refracting water', 'Ray-traced glass', 'Clear water', '3D paper, down the drain', 'Burns upward', 'Ice creeps in'];
 
   const anyRunning = () => KEYS.some(k => TRANSITIONS[k].running);
   let view = 'grid';
@@ -5957,7 +6238,7 @@ document.getElementById('alphaWarnClose').addEventListener('click', () => {
     back(); x.drawImage(A, 0, 0, w, h);
     const R = rng(1000 + i * 77);
     const reveal = (pathFn) => { x.save(); x.beginPath(); pathFn(); x.clip(); back(); x.drawImage(B, 0, 0, w, h); x.restore(); };
-    if (i < 2 || i === 6 || i === 9 || i === 10 || i === 11 || i === 12 || i === 13 || i === 14) {
+    if (i < 2 || i === 6 || i === 9 || i === 10 || i === 11 || i === 12 || i === 13 || i === 14 || i === 15) {
       if (i === 6) {                                              // page peel: B left behind, paper curling off along a diagonal
         reveal(() => { x.moveTo(w * 0.42, 0); x.lineTo(w, 0); x.lineTo(w, h); x.lineTo(w * 0.05, h); x.closePath(); });
         const gr = x.createLinearGradient(w * 0.2, 0, w * 0.5, 0); gr.addColorStop(0, '#9a9a94'); gr.addColorStop(.35, '#f1efe6'); gr.addColorStop(1, '#bdbab0');
@@ -5985,6 +6266,15 @@ document.getElementById('alphaWarnClose').addEventListener('click', () => {
         x.fillStyle = gr; x.beginPath(); x.moveTo(w * .4, h * .62); x.lineTo(w * .6, h * .62); x.lineTo(w * .5, h * .97); x.closePath(); x.fill();
         half([[.12, .2], [.5, .3], [.5, .72], [.1, .84]], .18);
         half([[.5, .3], [.9, .12], [.88, .66], [.5, .72]], 0);
+      } else if (i === 15) {                                      // frost growth: B inside, ice crystals creeping in from the edges
+        reveal(() => { x.rect(w * .18, h * .2, w * .64, h * .6); });
+        x.save(); x.strokeStyle = 'rgba(225,242,255,.9)'; x.lineCap = 'round';
+        const br = (x0, y0, a, len, wd, dep) => { const x1 = x0 + Math.cos(a) * len, y1 = y0 + Math.sin(a) * len; x.lineWidth = wd; x.beginPath(); x.moveTo(x0, y0); x.lineTo(x1, y1); x.stroke();
+          if (dep > 0) { br(x1, y1, a + .55, len * .62, wd * .75, dep - 1); br(x1, y1, a - .55, len * .62, wd * .75, dep - 1); br(x0 + (x1 - x0) * .5, y0 + (y1 - y0) * .5, a + .9, len * .4, wd * .6, dep - 1); br(x0 + (x1 - x0) * .5, y0 + (y1 - y0) * .5, a - .9, len * .4, wd * .6, dep - 1); } };
+        x.shadowColor = 'rgba(150,210,255,.9)'; x.shadowBlur = 6;
+        for (let n = 0; n < 5; n++) { br(w * (.08 + n * .21), 0, 1.57 + (n - 2) * .12, h * .3, 2, 3); br(w * (.08 + n * .21), h, -1.57 - (n - 2) * .12, h * .3, 2, 3); }
+        br(0, h * .5, 0, w * .2, 2.2, 3); br(w, h * .5, 3.14, w * .2, 2.2, 3);
+        x.restore();
       } else if (i === 14) {                                      // heat shimmer to ember: B behind a ragged glowing burn line, sparks above it
         const ly = xx => h * (.56 + .06 * Math.sin(xx / w * 9 + .6) + .035 * Math.sin(xx / w * 23 + 2.1));
         reveal(() => { x.moveTo(0, h); for (let xx = 0; xx <= w; xx += 4) x.lineTo(xx, ly(xx)); x.lineTo(w, h); x.closePath(); });
