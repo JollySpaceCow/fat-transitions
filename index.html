@@ -127,6 +127,15 @@
     body.modal-open { overflow:hidden; }
     .tsec.open { position:fixed; z-index:60; top:16px; bottom:16px; left:50%; transform:translateX(-50%); width:min(1100px, calc(100vw - 24px)); overflow:auto; box-sizing:border-box; padding:14px 18px 18px; background:var(--color-bg-primary, #141414); border:.5px solid var(--color-border-secondary, #333); border-radius:14px; box-shadow:0 20px 70px rgba(0,0,0,.7); margin:0; }
     #detailBar.modal { position:fixed; z-index:61; top:14px; left:50%; transform:translateX(-50%); width:min(1100px, calc(100vw - 24px)); box-sizing:border-box; margin:0; padding:0 4px; }
+    /* Opened transition: the picture is sized to the window so its Play button and settings are always in view.
+       Wide windows put the settings in a column beside the picture; narrow ones stack them under it. */
+    .tsec.open > canvas { display:block; margin:0 auto; width:min(100%, calc((100vh - 230px) * 16 / 9)); height:auto; }
+    @media (min-width: 1000px) {
+      .tsec.open:not(:fullscreen) { width:min(1760px, calc(100vw - 24px)); display:grid; grid-template-columns:minmax(0, 1fr) 390px; grid-template-rows:auto repeat(24, min-content) 1fr; column-gap:22px; align-content:start; }
+      .tsec.open:not(:fullscreen) > p:first-child { grid-column:1 / -1; }
+      .tsec.open:not(:fullscreen) > canvas { grid-column:1; grid-row:2 / -1; align-self:start; width:min(100%, calc((100vh - 120px) * 16 / 9)); }
+      .tsec.open:not(:fullscreen) > :not(p):not(canvas) { grid-column:2; min-width:0; }
+    }
     .tsec:fullscreen { width:100vw !important; height:100vh !important; top:0 !important; left:0 !important; transform:none !important; border-radius:0 !important; border:0 !important; }
     #detailBar.modal { display:none !important; }
     #playerBar button, #playerBar #pbNav { display:none !important; }
@@ -670,8 +679,8 @@
   </div>
   <div style="display:flex;gap:6px;justify-content:center;align-items:center;flex-wrap:wrap;margin-top:10px;">
     <span style="font-size:10px;color:var(--color-text-tertiary);">Aimed at:</span>
-    <button class="ptaim" data-mode="0" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">Upper left</button>
-    <button class="ptaim" data-mode="1" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">The centre</button>
+    <button class="ptaim" data-mode="0" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">The centre</button>
+    <button class="ptaim" data-mode="1" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">Upper left</button>
     <button class="ptaim" data-mode="2" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">Lower right</button>
   
     </div>
@@ -3330,6 +3339,16 @@ function runCubeAssembly(onDone) {
     g.save();
     g.translate(px, py); g.rotate(rot); g.scale(sx, sy);
     const w = tileW, h = tileH;
+    if (bIsTransparent) {                       // holdout: the block has no picture to show, so its whole body cuts A away where it is
+      g.globalCompositeOperation = 'destination-out'; g.fillStyle = g.strokeStyle = '#000'; g.lineWidth = 1.5;
+      if (z > 0.5) {
+        g.beginPath(); g.moveTo(w/2, -h/2); g.lineTo(w/2 + z*0.7, -h/2 - z*0.5); g.lineTo(w/2 + z*0.7, h/2 - z*0.5); g.lineTo(w/2, h/2); g.closePath(); g.fill();
+        g.beginPath(); g.moveTo(-w/2, -h/2); g.lineTo(w/2, -h/2); g.lineTo(w/2 + z*0.7, -h/2 - z*0.5); g.lineTo(-w/2 + z*0.7, -h/2 - z*0.5); g.closePath(); g.fill();
+      }
+      g.fillRect(-w/2, -h/2, w, h); g.strokeRect(-w/2, -h/2, w, h);
+      g.restore();
+      return;
+    }
     if (z > 0.5) {
       g.fillStyle = 'rgba(30,28,25,0.4)';
       g.beginPath();
@@ -3387,7 +3406,6 @@ function runCubeAssembly(onDone) {
       g.fillStyle = `rgba(0,0,0,${dimA})`; g.fillRect(0, 0, RW, RH); g.restore();
 
       tiles.forEach(t => { t.u = easeInQuint(clamp((el - SLAM0 - t.sd) / SLAMDUR, 0, 1)); });
-      if (bIsTransparent) tiles.forEach(t => eraseSlot(t.col, t.row, t.u));
 
       const ant = easeInOutCubic(clamp((el - (SLAM0 - 0.22)) / 0.22, 0, 1));   // pull-back before the hit
       tiles.forEach(t => {
@@ -3482,7 +3500,6 @@ function runCubeAssembly(onDone) {
     render = (el, dt) => {
       g.drawImage(cube_srcC, 0, 0);
       let doneCount = 0;
-      if (bIsTransparent) tiles.forEach(t => eraseSlot(t.col, t.row, clamp(((el - t.delay) / DUR - 0.6) / 0.4, 0, 1)));
       tiles.forEach(t => {
         const raw = clamp((el - t.delay) / DUR, 0, 1);
         if (raw <= 0) return;
@@ -3632,6 +3649,11 @@ function runCubeAssembly(onDone) {
       for (const it of items) {
         const lit = 0.5 + 0.5 * Math.max(0, it.nrm[0] * LIGHT[0] + it.nrm[1] * LIGHT[1] + it.nrm[2] * LIGHT[2]);
         const p = it.pts;
+        if (bIsTransparent) {                                      // holdout: every face of the cube cuts A away behind it
+          g.save(); g.globalCompositeOperation = 'destination-out'; g.fillStyle = g.strokeStyle = '#000'; g.lineWidth = 1.5; g.lineJoin = 'round';
+          g.beginPath(); g.moveTo(p[0].x, p[0].y); for (let i = 1; i < 4; i++) g.lineTo(p[i].x, p[i].y); g.closePath(); g.fill(); g.stroke();
+          g.restore(); continue;
+        }
         if (it.f.front) {
           const dx1 = (p[1].x - p[0].x) / tileW, dy1 = (p[1].y - p[0].y) / tileW;
           const dx2 = (p[3].x - p[0].x) / tileH, dy2 = (p[3].y - p[0].y) / tileH;
@@ -3682,10 +3704,6 @@ function runCubeAssembly(onDone) {
       const dimA = 0.55 * smooth(clamp(el / 1.0, 0, 1)) * (1 - smooth(clamp((slab.p - 1.5) / 0.5, 0, 1)));
       g.save(); g.globalCompositeOperation = 'source-atop';
       g.fillStyle = `rgba(0,0,0,${dimA})`; g.fillRect(0, 0, RW, RH); g.restore();
-      if (bIsTransparent) {                                     // transparent B: A is swept away as the slab comes home
-        const ea = smooth(clamp((slab.p - 1.6) / 0.4, 0, 1));
-        if (ea > 0) { g.save(); g.globalCompositeOperation = 'destination-out'; g.globalAlpha = ea; g.fillStyle = '#000'; g.fillRect(0, 0, RW, RH); g.restore(); }
-      }
 
       // gather cubes, depth-sort (far first), draw with short motion trails while in flight
       const list = [];
@@ -3769,7 +3787,6 @@ function runCubeAssembly(onDone) {
     });
     render = el => {
       g.drawImage(cube_srcC, 0, 0);
-      if (bIsTransparent) tiles.forEach(t => eraseSlot(t.col, t.row, clamp(((el - t.delay) / t.dur - 0.6) / 0.4, 0, 1)));
       let doneCount = 0;
       tiles.forEach(tile => {
         const raw = clamp((el - tile.delay) / tile.dur, 0, 1);
@@ -4305,8 +4322,9 @@ void main(){
   vec2 uvg = vec2(u, g.y);
   vec4 A0 = texture2D(uA, uvg), B0 = texture2D(uB, uvg);
   // full-resolution base: B through the soft mask over A
-  float aB = B0.a * m, aBase = aB + A0.a * (1. - aB);
-  vec3 cBase = aBase > .0001 ? (B0.rgb * aB + A0.rgb * A0.a * (1. - aB)) / aBase : vec3(0.);
+  // Holdout: B replaces A (rather than being laid over it), so a transparent B cuts A away to nothing
+  float aBase = mix(A0.a, B0.a, m);
+  vec3 cBase = aBase > .0001 ? (A0.rgb * A0.a * (1. - m) + B0.rgb * B0.a * m) / aBase : vec3(0.);
   if (E < .002) { gl_FragColor = vec4(cBase * aBase, aBase); return; }
   // caustic + refraction field (the same five-step warp, now at every pixel)
   vec2 pq = vec2(u * asp * S + 250., v * S - 250.), iq = pq;
@@ -4325,10 +4343,14 @@ void main(){
   vec2 o1 = vec2(dq.x * k, -dq.y * k * asp);                              // bend, in picture units (screen y points down)
   vec2 u1 = uvg + o1, u2 = uvg + o1 * 1.08, u3 = uvg + o1 * 1.16;         // a touch of dispersion
   vec4 a1 = texture2D(uA, u1), b1 = texture2D(uB, u1), a2 = texture2D(uA, u2), b2 = texture2D(uB, u2), a3 = texture2D(uA, u3), b3 = texture2D(uB, u3);
-  float r = mix(a1.r, b1.r, m), gg = mix(a2.g, b2.g, m), bb = mix(a3.b, b3.b, m), al = mix(a2.a, b2.a, m);
+  // Holdout: mix the picture in premultiplied form, so a transparent A or B contributes no colour (not black),
+  // and let the caustic light and shade land only where there is actually picture to catch it.
+  vec3 Pm = vec3(mix(a1.r * a1.a, b1.r * b1.a, m), mix(a2.g * a2.a, b2.g * b2.a, m), mix(a3.b * a3.a, b3.b * b3.a, m));
+  float al = mix(a2.a, b2.a, m);
   float L = min(1.4, val * 1.9) * E * CAUS * (.55 + .45 * m);
   float sh = 1. - E * CAUS * .28 * (1. - min(1., val * 2.5));
-  vec3 cO = min(vec3(1.), vec3(r, gg, bb) * sh + uTint * L * .55);
+  Pm = Pm * sh + uTint * L * .55 * al;
+  vec3 cO = al > .0001 ? min(vec3(1.), Pm / al) : vec3(0.);
   float aO = min(1., E * 5.) * al;                                         // calms back to the sharp base as the water settles
   float aF = aO + aBase * (1. - aO);
   vec3 cF = aF > .0001 ? (cO * aO + cBase * aBase * (1. - aO)) / aF : vec3(0.);
@@ -6576,7 +6598,10 @@ document.getElementById('alphaWarnClose').addEventListener('click', () => {
 
   const backdrop = document.createElement('div'); backdrop.id = 'backdrop'; backdrop.style.display = 'none'; document.body.appendChild(backdrop);
   backdrop.addEventListener('click', () => go('grid'));
+  let scrollMemo = 0;                                                  // where the grid was scrolled to when a transition was opened
   function show(v) {
+    const prev = view, wasSingle = prev !== 'grid' && prev !== 'all', nowSingle = v !== 'grid' && v !== 'all';
+    if (!wasSingle && nowSingle) scrollMemo = window.scrollY || document.documentElement.scrollTop || 0;
     view = v;
     const grid_ = v === 'grid';
     const single = !grid_ && v !== 'all';
@@ -6591,13 +6616,26 @@ document.getElementById('alphaWarnClose').addEventListener('click', () => {
     const cur = secs.find(s => s.slug === v);
     bar.querySelector('#dbTitle').textContent = cur ? cur.title : 'All transitions';
     bar.querySelector('#dbNav').style.visibility = cur ? 'visible' : 'hidden';
-    if (!single) window.scrollTo(0, 0);
+    if (!single) { if (v === 'grid' && wasSingle) window.scrollTo(0, scrollMemo); else window.scrollTo(0, 0); }   // closing a transition puts you back where you were
   }
   
   function go(v, fromPop) {                                      // v: 'grid' | 'all' | slug
     if (anyRunning()) {
       if (PLAYER.recording()) { setStatus('Wait for the current Record to finish before switching transitions.'); return false; }
       PLAYER.cancel();                                           // playing: just stop it and move on
+    }
+    if (flipping) {
+      if (flipState && !flipState.closing && !flipState.aborted && v === 'grid') {      // Esc / click-out before it has finished opening: turn straight round from wherever it got to
+        flipState.aborted = true; flipState.all.forEach(x => { try { x.reverse(); } catch (e) {} });
+        if (!fromPop) { try { history.pushState(null, '', location.pathname + location.search); } catch (e) {} }
+        return true;
+      }
+      return false;
+    }
+    const leaving = secs.find(q => q.slug === view);
+    if (v === 'grid' && leaving && !fromPop && flipRun(cards[leaving.i], leaving.sec, true, () => show('grid'))) {
+      try { history.pushState(null, '', location.pathname + location.search); } catch (e) {}
+      return true;                                               // the view flips back into its thumbnail, then the grid takes over
     }
     show(v);                                                     // never depends on the address bar
     if (!fromPop) { try { history.pushState(null, '', v === 'grid' ? location.pathname + location.search : '#' + v); } catch (e) {} }
@@ -6613,8 +6651,53 @@ document.getElementById('alphaWarnClose').addEventListener('click', () => {
   grid.addEventListener('click', e => {
     const card = e.target.closest('.tcard'); if (!card) return;
     e.preventDefault();
-    const t = secs[cards.indexOf(card)]; if (t) go(t.slug);
+    const t = secs[cards.indexOf(card)];
+    if (t && go(t.slug)) flipOpen(card, t.sec);
   });
+  // The thumbnail does a quick 180° flip, swinging in towards the viewer, and the opened transition is on its back face.
+  // Closing plays the very same move backwards: the view swings back out and turns into the thumbnail again.
+  let flipping = false, flipState = null;
+  let shiftHeld = false;
+  ['keydown', 'keyup', 'mousedown', 'pointerdown', 'click', 'mousemove'].forEach(t => document.addEventListener(t, e => { shiftHeld = !!e.shiftKey; }, true));
+  function flipRun(card, sec, reverse, onEnd) {
+    try {
+      if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return false;
+      const cv0 = card.querySelector('canvas'); if (!cv0 || !sec.animate) return false;
+      if (reverse) card.scrollIntoView({ block: 'nearest' });
+      const C = cv0.getBoundingClientRect(), R = sec.getBoundingClientRect();
+      if (!C.width || !R.width) return false;
+      const DUR = shiftHeld ? 3500 : 280, PERSP = 1500, N = 24;          // twice as quick as before; hold Shift for a slow-motion flip
+      const front = document.createElement('canvas');
+      front.width = Math.round(C.width * 2); front.height = Math.round(C.height * 2);
+      front.getContext('2d').drawImage(cv0, 0, 0, front.width, front.height);
+      front.style.cssText = 'position:fixed;z-index:62;left:' + C.left + 'px;top:' + C.top + 'px;width:' + C.width + 'px;height:' + C.height + 'px;border-radius:8px;backface-visibility:hidden;pointer-events:none;box-shadow:0 10px 40px rgba(0,0,0,.6);';
+      document.body.appendChild(front);
+      const cC = [C.left + C.width / 2, C.top + C.height / 2], cR = [R.left + R.width / 2, R.top + R.height / 2];
+      const ease = u => u < .5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;          // fast out of the blocks, soft landing
+      const fr = [], bk = [];
+      for (let i = 0; i <= N; i++) {
+        const u = i / N, e = ease(u), th = 180 * e, z = Math.sin(Math.PI * u) * 260;       // z: swings toward the camera mid-flip
+        const cx = cC[0] + (cR[0] - cC[0]) * e, cy = cC[1] + (cR[1] - cC[1]) * e, w = C.width + (R.width - C.width) * e, h = C.height + (R.height - C.height) * e;
+        fr.push({ offset: u, transform: 'perspective(' + PERSP + 'px) translate3d(' + (cx - cC[0]) + 'px,' + (cy - cC[1]) + 'px,' + z + 'px) rotateY(' + (-th) + 'deg) scale(' + (w / C.width) + ',' + (h / C.height) + ')' });
+        bk.push({ offset: u, transform: 'translateX(-50%) perspective(' + PERSP + 'px) translate3d(' + (cx - cR[0]) + 'px,' + (cy - cR[1]) + 'px,' + z + 'px) rotateY(' + (180 - th) + 'deg) scale(' + (w / R.width) + ',' + (h / R.height) + ')' });
+      }
+      const dir = reverse ? 'reverse' : 'normal';
+      sec.style.backfaceVisibility = 'hidden';
+      const bd = document.getElementById('backdrop'), bb = document.getElementById('detailBar');
+      const all = [front.animate(fr, { duration: DUR, easing: 'linear', fill: 'both', direction: dir })];
+      const a2 = sec.animate(bk, { duration: DUR, easing: 'linear', fill: 'both', direction: dir }); all.push(a2);
+      if (bd && bd.animate) all.push(bd.animate([{ opacity: 0 }, { opacity: 1 }], { duration: DUR * .8, easing: 'ease-out', direction: dir, fill: 'both' }));
+      if (bb && bb.animate) all.push(bb.animate([{ opacity: 0 }, { opacity: 0, offset: .7 }, { opacity: 1 }], { duration: DUR, direction: dir, fill: 'both' }));
+      const st = flipState = { all, closing: reverse, aborted: false };
+      const cleanup = () => { all.forEach(x => { try { x.cancel(); } catch (e) {} }); front.remove(); sec.style.backfaceVisibility = ''; if (flipState === st) { flipState = null; flipping = false; } };
+      flipping = true;
+      a2.onfinish = () => { cleanup(); if (reverse || st.aborted) { if (onEnd) onEnd(); } };
+      a2.oncancel = () => { if (flipState === st) cleanup(); };
+      st.onEnd = onEnd;
+      return true;
+    } catch (err) { flipping = false; return false; }
+  }
+  const flipOpen = (card, sec) => { flipRun(card, sec, false, () => show('grid')); };
   gal.querySelector('#galAll').addEventListener('click', () => go(view === 'all' ? 'grid' : 'all'));
   bar.querySelector('#dbBack').addEventListener('click', () => go('grid'));
   const step = d => { const i = secs.findIndex(s => s.slug === view); if (i >= 0) go(secs[(i + d + secs.length) % secs.length].slug); };
