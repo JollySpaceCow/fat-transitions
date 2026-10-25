@@ -634,6 +634,58 @@
     <button class="frzend" data-mode="0" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">Melts</button>
   </div>
 </div>
+<div style="margin-bottom:14px;">
+  <p style="font-size:11px;font-weight:500;letter-spacing:.1em;color:var(--color-text-secondary);text-align:center;margin:0 0 6px;">PHOTON TORPEDO</p>
+  <canvas id="c17" width="3840" height="2160" style="display:block;width:100%;height:auto;border-radius:8px;border:.5px solid var(--color-border-tertiary);"></canvas>
+  <div style="display:flex;gap:8px;justify-content:center;margin-top:8px;">
+    <button id="btn17p" style="font-size:12px;padding:7px 20px;">▶ Play</button>
+    <button id="btn17r" style="font-size:12px;padding:7px 20px;border-color:#e05555;color:#e05555;">⏺ Record 1080p</button>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:6px;align-items:center;margin-top:10px;">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span style="font-size:10px;color:var(--color-text-tertiary);width:78px;text-align:right;">Speed</span>
+      <input type="range" id="ptSpeed" min="40" max="200" step="1" value="100" style="width:180px;">
+      <span id="ptSpeedVal" style="font-size:11px;color:var(--color-text-secondary);min-width:44px;">100%</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span style="font-size:10px;color:var(--color-text-tertiary);width:78px;text-align:right;">Glow</span>
+      <input type="range" id="ptGlow" min="0" max="250" step="1" value="100" style="width:180px;">
+      <span id="ptGlowVal" style="font-size:11px;color:var(--color-text-secondary);min-width:44px;">100%</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span style="font-size:10px;color:var(--color-text-tertiary);width:78px;text-align:right;">Shimmer rays</span>
+      <input type="range" id="ptRays" min="0" max="200" step="1" value="100" style="width:180px;">
+      <span id="ptRaysVal" style="font-size:11px;color:var(--color-text-secondary);min-width:44px;">100%</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span style="font-size:10px;color:var(--color-text-tertiary);width:78px;text-align:right;">Ragged ring</span>
+      <input type="range" id="ptRag" min="0" max="200" step="1" value="100" style="width:180px;">
+      <span id="ptRagVal" style="font-size:11px;color:var(--color-text-secondary);min-width:44px;">100%</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span style="font-size:10px;color:var(--color-text-tertiary);width:78px;text-align:right;">Spread time</span>
+      <input type="range" id="ptSpan" min="30" max="250" step="1" value="100" style="width:180px;">
+      <span id="ptSpanVal" style="font-size:11px;color:var(--color-text-secondary);min-width:44px;">100%</span>
+    </div>
+  </div>
+  <div style="display:flex;gap:6px;justify-content:center;align-items:center;flex-wrap:wrap;margin-top:10px;">
+    <span style="font-size:10px;color:var(--color-text-tertiary);">Aimed at:</span>
+    <button class="ptaim" data-mode="0" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">Upper left</button>
+    <button class="ptaim" data-mode="1" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">The centre</button>
+    <button class="ptaim" data-mode="2" style="font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">Lower right</button>
+  
+    </div>
+  <div style="display:flex;flex-direction:column;align-items:center;gap:6px;margin-top:12px;">
+    <span style="font-size:10px;color:var(--color-text-tertiary);">Ring spread curve · drag the dots (across = time after impact, up = how far the ring has reached)</span>
+    <canvas id="ptCurve" width="560" height="300" style="width:280px;height:150px;border-radius:8px;border:.5px solid var(--color-border-secondary);touch-action:none;cursor:crosshair;background:rgba(127,127,127,.06);"></canvas>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;">
+      <button class="ptcrv" data-c="0" style="font-size:10px;padding:3px 10px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">Speeds up</button>
+      <button class="ptcrv" data-c="1" style="font-size:10px;padding:3px 10px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">Steady</button>
+      <button class="ptcrv" data-c="2" style="font-size:10px;padding:3px 10px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">Slows down</button>
+      <button class="ptcrv" data-c="3" style="font-size:10px;padding:3px 10px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);">Slam</button>
+    </div>
+  </div>
+</div>
 <p id="status" style="text-align:center;font-size:11px;color:var(--color-text-tertiary);margin:.4rem 0 .5rem;min-height:1.4em;">Display 4K · Shimmer 1280×720 · Records 1080p · frame-accurate WebCodecs export (real-time fallback)</p>
 </div>
 
@@ -683,6 +735,7 @@
     liquidChrome: () => 4.4 / (sv('chrSpeed', 100) / 100),
     emberBurn:    () => 4.0 / (sv('embSpeed', 100) / 100),
     frostGrow:    () => 4.2 / (sv('frzSpeed', 100) / 100),
+    photonTorpedo: () => 3.2 / (sv('ptSpeed', 100) / 100),
     paperSwirl:   () => (document.querySelector('.pswstyle.pswstyle-active[data-mode="2"]') ? 2.5 : 2.3) / (sv('pswSpeed', 100) / 100),
     caustics:     () => 4.2 / (sv('cauSpeed', 100) / 100),
   };
@@ -935,6 +988,8 @@ const recC15 = mkc(RW, RH), recCtx15 = recC15.getContext('2d');
 const emb_srcC = mkc(RW, RH), emb_dstC = mkc(RW, RH);   // heat shimmer to ember A / B
 const recC16 = mkc(RW, RH), recCtx16 = recC16.getContext('2d');
 const frz_srcC = mkc(RW, RH), frz_dstC = mkc(RW, RH);   // frost growth A / B
+const recC17 = mkc(RW, RH), recCtx17 = recC17.getContext('2d');
+const pt_srcC = mkc(RW, RH), pt_dstC = mkc(RW, RH);   // photon torpedo A / B
 const CAU_RSCALE = 4;
 const CAU_RW2 = Math.round(RW / CAU_RSCALE), CAU_RH2 = Math.round(RH / CAU_RSCALE);
 const cau_smallC = mkc(CAU_RW2, CAU_RH2), cau_smallCx = cau_smallC.getContext('2d');   // refracted + lit overlay (alpha = how much it replaces the base)
@@ -967,6 +1022,7 @@ const c13 = document.getElementById('c13'), ctx13 = c13.getContext('2d');
 const c14 = document.getElementById('c14'), ctx14 = c14.getContext('2d');
 const c15 = document.getElementById('c15'), ctx15 = c15.getContext('2d');
 const c16 = document.getElementById('c16'), ctx16 = c16.getContext('2d');
+const c17 = document.getElementById('c17'), ctx17 = c17.getContext('2d');
 
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -4695,6 +4751,99 @@ void main(){
 
   gl_FragColor = vec4(min(res.rgb, vec3(res.a)), res.a);
 }`,
+  photon: GL_PRELUDE + `
+#define ASP (uRes.x / uRes.y)
+uniform vec4 uCrv0, uCrv1, uCrv2, uCrv3; uniform float uSpan;
+float crvAt(float k){ if (k < 8.) { if (k < 4.) return k < 1. ? uCrv0.x : k < 2. ? uCrv0.y : k < 3. ? uCrv0.z : uCrv0.w; return k < 5. ? uCrv1.x : k < 6. ? uCrv1.y : k < 7. ? uCrv1.z : uCrv1.w; }
+  if (k < 12.) return k < 9. ? uCrv2.x : k < 10. ? uCrv2.y : k < 11. ? uCrv2.z : uCrv2.w; return k < 13. ? uCrv3.x : k < 14. ? uCrv3.y : k < 15. ? uCrv3.z : uCrv3.w; }
+float crv(float x){ float t = clamp(x, 0., 1.) * 15.; float i = floor(t); if (i > 14.) i = 14.; float f = t - i; float a = crvAt(i), b = crvAt(i + 1.); return mix(a, b, f * f * (3. - 2. * f) * .0 + f); }
+float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.-2.*f);
+  return mix(mix(h21(i), h21(i+vec2(1.,0.)), f.x), mix(h21(i+vec2(0.,1.)), h21(i+vec2(1.,1.)), f.x), f.y); }
+float fbm(vec2 p){ float a = .5, s = 0.; for (int i = 0; i < 4; i++) { s += a*vn(p); p = p*2.03 + vec2(17.3, 9.1); a *= .5; } return s; }
+void main(){
+  vec2 uv = gl_FragCoord.xy / uRes; float asp = ASP;
+  float p = uP, T = p * 3.2;
+  vec2 sc2 = vec2(asp, 1.);
+  float md = uMode;
+  vec2 tg = md < .5 ? vec2(.5, .5) : (md < 1.5 ? vec2(.28, .66) : vec2(.72, .36));
+  float tHit = .36;
+
+  // ── the torpedo flies out of the audience, away from us, into the picture ──
+  float tf = clamp((p - .015) / (tHit - .015), 0., 1.);                 // constant speed through the world...
+  float te = (1. - 1. / (1. + 1.2 * tf)) / (1. - 1. / 2.2);                          // ...so on screen it races off at first, then seems to slow as it recedes
+  vec2 start = vec2(tg.x + (tg.x < .5 ? -.12 : .12) + .06, -.18);
+  vec2 pos = mix(start, tg, te) + vec2(sin(tf * 9.) * .012 * (1. - te), 0.);
+  float sz = .085 / (1. + 5. * tf);
+  float fly = ss(.0, .012, p) * (1. - ss(tHit - .005, tHit + .03, p));
+
+  // ── the shock ring: a circular spread from the impact, with ragged, ray-like edges ──
+  vec2 dv = (uv - tg) * sc2; float rd = length(dv); float ang = atan(dv.y, dv.x + 1e-5);
+  float ph = clamp((p - tHit) / (.44 * uSpan), 0., 1.);                      // the ring bursts out the instant it hits, then eases off
+  float rw = 1.78 * crv(ph);                                   // blast-wave growth: slams out, then keeps slowing as it spreads (starts at a decent clip and keeps getting faster)
+  float rag = uDisp * (.10 * (vn(vec2(ang * 5., T * 1.3)) - .5) + .06 * (vn(vec2(ang * 15., -T * 2.1)) - .5) + .02 * (vn(vec2(ang * 45., T * 3.)) - .5));
+  float fr = rd - rw * (1. + rag);                       // < 0 inside the ring (B), > 0 outside (A)
+  float lens = exp(-pow(fr / .075, 2.)) * ss(tHit - .01, tHit + .05, p) * (1. - ss(.9, 1., p));
+  vec2 dirn = dv / max(rd, 1e-4);
+  vec2 off = dirn * lens * .028 * uStr / sc2 * (fr > 0. ? -1. : 1.);       // the picture bends around the front, like a lens
+
+  float inB = 1. - ss(-.012, .012, fr);
+  vec4 a4 = vec4(0.), b4 = vec4(0.);
+  { float ch = lens * .012 * uStr;
+    vec4 aR = texture2D(uA, clamp(uv + off * 1.2 + dirn * ch / sc2, 0., 1.)), aG = texture2D(uA, clamp(uv + off, 0., 1.)), aB = texture2D(uA, clamp(uv + off * .8 - dirn * ch / sc2, 0., 1.));
+    vec4 bR = texture2D(uB, clamp(uv + off * 1.2 + dirn * ch / sc2, 0., 1.)), bG = texture2D(uB, clamp(uv + off, 0., 1.)), bB = texture2D(uB, clamp(uv + off * .8 - dirn * ch / sc2, 0., 1.));
+    a4 = vec4(vec3(aR.r * aR.a, aG.g * aG.a, aB.b * aB.a), aG.a);
+    b4 = vec4(vec3(bR.r * bR.a, bG.g * bG.a, bB.b * bB.a), bG.a); }
+  vec4 base = mix(a4, b4, inB);
+  vec3 col = base.rgb; float alpha = base.a;
+
+  float gate = (1. - ss(.9, 1., p));
+  // light thrown by the torpedo onto A, then the ring's glow and the afterglow it leaves in B
+  float rt = length((uv - pos) * sc2);
+  col += vec3(1., .5, .2) * exp(-rt * 2.6) * .26 * fly * (sz * 9. + .25) * uLight * alpha;
+  float ringGlow = exp(-pow(fr / .028, 2.)) * ss(tHit - .005, tHit + .04, p) * gate;
+  float spokes = .55 + .45 * pow(vn(vec2(ang * 28., T * .6)), 1.5) * 2.;
+  vec3 ringCol = mix(vec3(1., .42, .12), vec3(1., .96, .85), exp(-pow(fr / .010, 2.)));
+  col += ringCol * ringGlow * spokes * 1.5 * uLight;
+  col += vec3(.35, .30, 1.) * exp(-pow((fr - .03) / .05, 2.)) * ss(tHit, tHit + .05, p) * gate * .22 * uLight * alpha;   // cool plasma haze just ahead
+  // radial shimmering rays trailing back through the wake
+  float wake = (fr < 0. ? exp(fr * 4.2) : 0.) * ss(tHit, tHit + .06, p) * gate;
+  float rays = pow(vn(vec2(ang * 22., 3.)) , 2.) * (.6 + .4 * sin(rd * 70. - T * 24. + vn(vec2(ang * 9., 1.)) * 8.));
+  col += vec3(1., .55, .22) * wake * (.10 + .42 * rays * uStr) * uLight * alpha;
+  col += vec3(.25, .12, .06) * exp(fr * 2.2) * (fr < 0. ? 1. : 0.) * (1. - ss(.55, 1., p)) * ss(tHit, tHit + .1, p) * .5 * uLight * alpha;   // embers of heat in B, cooling
+  // sparkles spat off the front
+  { vec2 gq = vec2(ang * 60., rd * 40. - T * 3.); vec2 gc = floor(gq), gl = fract(gq) - .5, gn = h22(gc + 4.);
+    float live = step(.8, h21(gc + 8.1)) * exp(-pow(fr / .12, 2.)) * ss(tHit, tHit + .05, p) * gate;
+    col += vec3(1., .85, .55) * (1. - smoothstep(0., .12 + .1 * gn.y, length(gl - (gn - .5) * .5))) * live * (.5 + .5 * sin(T * 14. + gn.x * 30.)) * 1.3 * uLight * alpha; }
+
+  // ── the torpedo itself: white-hot core, orange plasma, violet haze, spinning shimmering rays, a long tail ──
+  if (fly > .001) {
+    vec2 dq = (uv - pos) * sc2; float r = length(dq); float a = atan(dq.y, dq.x + 1e-5);
+    float core = exp(-pow(r / (sz * .38), 2.));
+    float body = exp(-pow(r / (sz * 1.1), 2.));
+    float haze = exp(-r / (sz * 3.2));
+    float shim = .75 + .25 * sin(T * 31. + r / sz * 6.);
+    float rs = (pow(abs(cos(a * 2.5 + T * 2.2)), 26.) + .7 * pow(abs(cos(a * 4. - T * 3.1 + 1.)), 34.) + .5 * pow(abs(cos(a * 7. + T * 1.4)), 60.)) * exp(-r / (sz * 4.2)) * shim * uStr;
+    vec3 tc = vec3(1., .96, .88) * core * 2.4 + vec3(1., .48, .12) * body * 1.5 + vec3(.55, .30, 1.) * haze * .45 + vec3(1., .65, .35) * rs * .6;
+    // the tail: sparks streaming back toward the audience
+    vec2 axis = start - pos; float al = length(axis); vec2 ad = axis / max(al, 1e-4);
+    vec2 rel = (uv - pos) * sc2 / vec2(1., 1.); vec2 adn = ad * sc2 / max(length(ad * sc2), 1e-4);
+    float u = dot(rel, adn), w = length(rel - adn * u);
+    float tl = step(0., u) * exp(-u * 2.4 / max(sz * 5., .06)) * exp(-pow(w / (sz * (.5 + u * 1.6)), 2.)) * (.4 + .6 * vn(vec2(u * 60., w * 90. + T * 20.)));
+    tc += vec3(1., .50, .18) * tl * .8;
+    tc *= fly * uLight;
+    col += tc * alpha;
+    alpha = clamp(alpha + dot(tc, vec3(.33)) * .3, 0., 1.);
+  }
+  // impact: a white flash and a blooming star
+  float fl = exp(-pow((p - tHit - .01) / .028, 2.));
+  float rbloom = rd;
+  col += (vec3(1., .9, .7) * exp(-rbloom * 4.5) * .8 + vec3(1.) * exp(-rbloom * 14.) * 1.4) * fl * uLight * alpha;
+  float starA = (pow(abs(cos(ang * 4. + .4)), 40.) + pow(abs(cos(ang * 6.)), 70.) * .7) * exp(-rbloom * 6.) * fl;
+  col += vec3(1., .8, .5) * starA * 1.4 * uLight * alpha;
+
+  alpha = clamp(alpha + (ringGlow + wake * .2) * .5, 0., 1.);
+  gl_FragColor = vec4(min(col, vec3(alpha)), alpha);
+}`,
 };
 const GLB = { gl: null, cv: null, ok: null, progs: {} };
 function glBridge() {
@@ -4789,6 +4938,60 @@ function runCaustics(onDone) {
 function runGlassOrb(onDone) {
   runGLTransition({ key: 'orb', src: orb_srcC, dst: orb_dstC, rec: recCtx12, recCanvas: recC12, disp: ctx12, base: 4.4,
     params: () => ({ speed: glSl('orbSpeed', 100) / 100, str: (glSl('orbIor', 150) / 100 - 1) / 0.5, disp: glSl('orbDisp', 100) / 100, light: glSl('orbLight', 100) / 100, mode: glMode('orbpath') }) }, onDone);
+}
+// ── Photon torpedo: editable ring-spread curve ──
+const PT_PRESETS = [[[.25, .08], [.5, .30], [.75, .62]], [[.25, .25], [.5, .5], [.75, .75]], [[.25, .5], [.5, .78], [.75, .93]], [[.12, .55], [.4, .88], [.75, .98]]];
+const PT_CURVE = { pts: [[.25, .154], [.5, .39], [.75, .678]] };
+function ptLut() {
+  const X = [0], Y = [0];
+  PT_CURVE.pts.forEach(q => { X.push(Math.max(q[0], X[X.length - 1] + .02)); Y.push(Math.max(q[1], Y[Y.length - 1])); });
+  X.push(Math.max(1, X[X.length - 1] + .02)); Y.push(Math.max(1, Y[Y.length - 1]));
+  const n = X.length, h = [], d = [], m = [];
+  for (let k = 0; k < n - 1; k++) { h[k] = X[k + 1] - X[k]; d[k] = (Y[k + 1] - Y[k]) / h[k]; }
+  m[0] = d[0]; m[n - 1] = d[n - 2];
+  for (let k = 1; k < n - 1; k++) m[k] = d[k - 1] * d[k] <= 0 ? 0 : 2 * d[k - 1] * d[k] / (d[k - 1] + d[k]);
+  const out = [];
+  for (let i = 0; i < 16; i++) {
+    const t = i / 15 * X[n - 1]; let k = 0; while (k < n - 2 && t > X[k + 1]) k++;
+    const u = (t - X[k]) / h[k], u2 = u * u, u3 = u2 * u;
+    out.push(Math.min(1, Math.max(0, (2 * u3 - 3 * u2 + 1) * Y[k] + (u3 - 2 * u2 + u) * h[k] * m[k] + (-2 * u3 + 3 * u2) * Y[k + 1] + (u3 - u2) * h[k] * m[k + 1])));
+  }
+  out[0] = 0; out[15] = 1; return out;
+}
+(function ptCurveUI() {
+  const cv = document.getElementById('ptCurve'); if (!cv) return;
+  const x = cv.getContext('2d'), W2 = cv.width, H2 = cv.height, PAD = 18;
+  const sx = t => PAD + t * (W2 - 2 * PAD), sy = v => H2 - PAD - v * (H2 - 2 * PAD);
+  const cs = getComputedStyle(document.documentElement);
+  function draw() {
+    x.clearRect(0, 0, W2, H2);
+    const fg = (cs.getPropertyValue('--color-text-secondary') || '#888').trim() || '#888';
+    x.strokeStyle = 'rgba(128,128,128,.25)'; x.lineWidth = 1;
+    for (let k = 0; k <= 4; k++) { x.beginPath(); x.moveTo(sx(k / 4), sy(0)); x.lineTo(sx(k / 4), sy(1)); x.stroke(); x.beginPath(); x.moveTo(sx(0), sy(k / 4)); x.lineTo(sx(1), sy(k / 4)); x.stroke(); }
+    x.strokeStyle = 'rgba(128,128,128,.45)'; x.setLineDash([6, 6]); x.beginPath(); x.moveTo(sx(0), sy(0)); x.lineTo(sx(1), sy(1)); x.stroke(); x.setLineDash([]);
+    const L = ptLut();
+    x.strokeStyle = '#ff9a3c'; x.lineWidth = 3; x.beginPath();
+    L.forEach((v, i) => { const px = sx(i / 15), py = sy(v); i ? x.lineTo(px, py) : x.moveTo(px, py); }); x.stroke();
+    x.fillStyle = fg; x.beginPath(); x.arc(sx(0), sy(0), 4, 0, 7); x.fill(); x.beginPath(); x.arc(sx(1), sy(1), 4, 0, 7); x.fill();
+    PT_CURVE.pts.forEach(q => { x.fillStyle = '#ffd08a'; x.strokeStyle = '#ff7a1c'; x.lineWidth = 2.5; x.beginPath(); x.arc(sx(q[0]), sy(q[1]), 9, 0, 7); x.fill(); x.stroke(); });
+    x.fillStyle = fg; x.font = '20px sans-serif'; x.fillText('impact', PAD, H2 - 3); x.textAlign = 'right'; x.fillText('edge of screen', W2 - PAD, 16); x.textAlign = 'left';
+  }
+  let drag = -1;
+  const pos = e => { const r = cv.getBoundingClientRect(); return [((e.clientX - r.left) / r.width * W2 - PAD) / (W2 - 2 * PAD), 1 - ((e.clientY - r.top) / r.height * H2 - PAD) / (H2 - 2 * PAD)]; };
+  cv.addEventListener('pointerdown', e => { const [tx, ty] = pos(e); let best = 1e9; drag = -1;
+    PT_CURVE.pts.forEach((q, i) => { const dd = Math.hypot((q[0] - tx) * 1.8, q[1] - ty); if (dd < best) { best = dd; drag = i; } });
+    if (best > .25) drag = -1; if (drag >= 0) { cv.setPointerCapture(e.pointerId); e.preventDefault(); } });
+  cv.addEventListener('pointermove', e => { if (drag < 0) return; const [tx, ty] = pos(e), P = PT_CURVE.pts;
+    const lo = drag ? P[drag - 1][0] + .04 : .04, hi = drag < P.length - 1 ? P[drag + 1][0] - .04 : .96;
+    P[drag] = [Math.min(hi, Math.max(lo, tx)), Math.min(1, Math.max(0, ty))]; draw(); });
+  const up = () => { drag = -1; }; cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+  document.querySelectorAll('.ptcrv').forEach(b => b.addEventListener('click', () => { PT_CURVE.pts = PT_PRESETS[+b.dataset.c].map(q => q.slice()); draw(); }));
+  draw();
+})();
+function runPhoton(onDone) {
+  runGLTransition({ key: 'photon', src: pt_srcC, dst: pt_dstC, rec: recCtx17, recCanvas: recC17, disp: ctx17, base: 3.2,
+    params: () => ({ speed: glSl('ptSpeed', 100) / 100, str: glSl('ptRays', 100) / 100, disp: glSl('ptRag', 100) / 100, light: glSl('ptGlow', 100) / 100, mode: glMode('ptaim') }),
+    extra: (gl, U) => { const L = ptLut(); [0, 1, 2, 3].forEach(k => gl.uniform4f(U('uCrv' + k), L[k * 4], L[k * 4 + 1], L[k * 4 + 2], L[k * 4 + 3])); gl.uniform1f(U('uSpan'), glSl('ptSpan', 100) / 100); } }, onDone);
 }
 function runFrost(onDone) {
   runGLTransition({ key: 'frost', src: frz_srcC, dst: frz_dstC, rec: recCtx16, recCanvas: recC16, disp: ctx16, base: 4.2,
@@ -5247,6 +5450,15 @@ const TRANSITIONS = {
     recordFilename: 'frost-growth',
     playBtnId:      'btn16p',
     recBtnId:       'btn16r',
+    padSecs:        0,
+    running:        false,
+  },
+  photonTorpedo: {
+    runFn:          runPhoton,
+    recCanvas:      recC17,
+    recordFilename: 'photon-torpedo',
+    playBtnId:      'btn17p',
+    recBtnId:       'btn17r',
     padSecs:        0,
     running:        false,
   },
@@ -5819,9 +6031,9 @@ function registerTransition(key) {
 // Wire the Glass Orb / Liquid Chrome pickers (default: first option).
 (function() {
   const style = document.createElement('style');
-  style.textContent = '.orbpath.orbpath-active, .chrpath.chrpath-active, .chrmat.chrmat-active, .pswflow.pswflow-active, .pswstyle.pswstyle-active, .emberdir.emberdir-active, .frzdir.frzdir-active, .frzend.frzend-active { border-color: var(--color-text-primary) !important; color: var(--color-text-primary) !important; }';
+  style.textContent = '.orbpath.orbpath-active, .chrpath.chrpath-active, .chrmat.chrmat-active, .pswflow.pswflow-active, .pswstyle.pswstyle-active, .emberdir.emberdir-active, .frzdir.frzdir-active, .frzend.frzend-active, .ptaim.ptaim-active { border-color: var(--color-text-primary) !important; color: var(--color-text-primary) !important; }';
   document.head.appendChild(style);
-  [['orbpath', 'glassOrb'], ['chrpath', 'liquidChrome'], ['chrmat', 'liquidChrome'], ['pswflow', 'paperSwirl'], ['pswstyle', 'paperSwirl'], ['emberdir', 'emberBurn'], ['frzdir', 'frostGrow'], ['frzend', 'frostGrow']].forEach(([cls, key]) => {
+  [['orbpath', 'glassOrb'], ['chrpath', 'liquidChrome'], ['chrmat', 'liquidChrome'], ['pswflow', 'paperSwirl'], ['pswstyle', 'paperSwirl'], ['emberdir', 'emberBurn'], ['frzdir', 'frostGrow'], ['frzend', 'frostGrow'], ['ptaim', 'photonTorpedo']].forEach(([cls, key]) => {
     const btns = Array.from(document.querySelectorAll('.' + cls));
     const on = b => { btns.forEach(x => { x.classList.remove(cls + '-active'); x.style.borderColor = ''; x.style.color = ''; }); b.classList.add(cls + '-active'); };
     on(btns[0]);
@@ -5910,6 +6122,7 @@ function registerTransition(key) {
   wire('pswSpeed', 'pswSpeedVal', '%'); wire('pswTwist', 'pswTwistVal', '%');
   wire('embSpeed', 'embSpeedVal', '%'); wire('embHeat', 'embHeatVal', '%'); wire('embGlow', 'embGlowVal', '%'); wire('embRag', 'embRagVal', '%');
   wire('frzSpeed', 'frzSpeedVal', '%'); wire('frzDepth', 'frzDepthVal', '%'); wire('frzSparkle', 'frzSparkleVal', '%'); wire('frzBranch', 'frzBranchVal', '%');
+  wire('ptSpeed', 'ptSpeedVal', '%'); wire('ptGlow', 'ptGlowVal', '%'); wire('ptRays', 'ptRaysVal', '%'); wire('ptRag', 'ptRagVal', '%'); wire('ptSpan', 'ptSpanVal', '%');
   { const sl = document.getElementById('orbIor'), lb = document.getElementById('orbIorVal'); const paint = () => { lb.textContent = (sl.value / 100).toFixed(2); }; sl.addEventListener('input', paint); paint(); }
   wire('cauSpeed', 'cauSpeedVal', '%'); wire('cauRefr', 'cauRefrVal', '%'); wire('cauCaus', 'cauCausVal', '%'); wire('cauSize', 'cauSizeVal', '%');
   wire('crumbleChunkSize', 'crumbleChunkSizeVal', 'px');
@@ -5982,6 +6195,7 @@ function registerTransition(key) {
   watchGroup('.emberdir', b => b.dataset.mode === '0');      // default: Upward
   watchGroup('.frzdir', b => b.dataset.mode === '0');        // default: from the edges
   watchGroup('.frzend', b => b.dataset.mode === '1');        // default: shatters
+  watchGroup('.ptaim', b => b.dataset.mode === '0');         // default: the centre
 })();
 
 Object.keys(TRANSITIONS).forEach(registerTransition);
@@ -6027,6 +6241,8 @@ drawDefaultA (emb_srcC.getContext('2d'), RW, RH);
 drawDefaultB (emb_dstC.getContext('2d'), RW, RH);
 drawDefaultA (frz_srcC.getContext('2d'), RW, RH);
 drawDefaultB (frz_dstC.getContext('2d'), RW, RH);
+drawDefaultA (pt_srcC.getContext('2d'), RW, RH);
+drawDefaultB (pt_dstC.getContext('2d'), RW, RH);
 
 // Page peel's fixed "back of paper" texture — plain and unrelated to A/B,
 // same reasoning as real paper: the back looks the same regardless of
@@ -6057,6 +6273,7 @@ recCtx13.drawImage(chr_srcC, 0, 0); ctx13.drawImage(recC13, 0, 0, W, H);
 recCtx14.drawImage(psw_srcC, 0, 0); ctx14.drawImage(recC14, 0, 0, W, H);
 recCtx15.drawImage(emb_srcC, 0, 0); ctx15.drawImage(recC15, 0, 0, W, H);
 recCtx16.drawImage(frz_srcC, 0, 0); ctx16.drawImage(recC16, 0, 0, W, H);
+recCtx17.drawImage(pt_srcC, 0, 0); ctx17.drawImage(recC17, 0, 0, W, H);
 
 // ── File inputs — A = source (all transitions), B = destination (all transitions) ──
 //
@@ -6080,6 +6297,7 @@ function refreshAllIdle() {
   if (!TRANSITIONS.caustics.running) { recCtx11.clearRect(0,0,RW,RH); recCtx11.drawImage(cau_srcC, 0,0); ctx11.clearRect(0,0,W,H); ctx11.drawImage(recC11,0,0,W,H); }
   if (!TRANSITIONS.glassOrb.running) { recCtx12.clearRect(0,0,RW,RH); recCtx12.drawImage(orb_srcC, 0,0); ctx12.clearRect(0,0,W,H); ctx12.drawImage(recC12,0,0,W,H); }
   if (!TRANSITIONS.liquidChrome.running) { recCtx13.clearRect(0,0,RW,RH); recCtx13.drawImage(chr_srcC, 0,0); ctx13.clearRect(0,0,W,H); ctx13.drawImage(recC13,0,0,W,H); }
+  if (!TRANSITIONS.photonTorpedo.running) { recCtx17.clearRect(0,0,RW,RH); recCtx17.drawImage(pt_srcC, 0,0); ctx17.clearRect(0,0,W,H); ctx17.drawImage(recC17,0,0,W,H); }
   if (!TRANSITIONS.frostGrow.running) { recCtx16.clearRect(0,0,RW,RH); recCtx16.drawImage(frz_srcC, 0,0); ctx16.clearRect(0,0,W,H); ctx16.drawImage(recC16,0,0,W,H); }
   if (!TRANSITIONS.emberBurn.running) { recCtx15.clearRect(0,0,RW,RH); recCtx15.drawImage(emb_srcC, 0,0); ctx15.clearRect(0,0,W,H); ctx15.drawImage(recC15,0,0,W,H); }
   if (!TRANSITIONS.paperSwirl.running) { recCtx14.clearRect(0,0,RW,RH); recCtx14.drawImage(psw_srcC, 0,0); ctx14.clearRect(0,0,W,H); ctx14.drawImage(recC14,0,0,W,H); }
@@ -6090,7 +6308,7 @@ document.getElementById('fA').addEventListener('change', function() {
   loadFromFile(this.files[0], img => {
     // Paint into all source canvases at their respective resolutions
     [milkC, trimC].forEach(c => drawCover(c.getContext('2d'), img, W,  H));
-    [bub_srcC, par_srcC, td_srcC, cone_srcC, peel_srcC, crumble_srcC, cube_srcC, rip_srcC, cau_srcC, orb_srcC, chr_srcC, psw_srcC, emb_srcC, frz_srcC].forEach(c => drawCover(c.getContext('2d'), img, RW, RH));
+    [bub_srcC, par_srcC, td_srcC, cone_srcC, peel_srcC, crumble_srcC, cube_srcC, rip_srcC, cau_srcC, orb_srcC, chr_srcC, psw_srcC, emb_srcC, frz_srcC, pt_srcC].forEach(c => drawCover(c.getContext('2d'), img, RW, RH));
     refreshAllIdle();
     setLbl('lblA', this.files[0].name);
     aIsTransparent = false;
@@ -6102,7 +6320,7 @@ document.getElementById('fB').addEventListener('change', function() {
   loadFromFile(this.files[0], img => {
     // Paint into all destination canvases at their respective resolutions
     [butC, talC].forEach(c => drawCover(c.getContext('2d'), img, W,  H));
-    [bub_dstC, par_dstC, td_dstC, cone_dstC, peel_dstC, crumble_dstC, cube_dstC, rip_dstC, cau_dstC, orb_dstC, chr_dstC, psw_dstC, emb_dstC, frz_dstC].forEach(c => drawCover(c.getContext('2d'), img, RW, RH));
+    [bub_dstC, par_dstC, td_dstC, cone_dstC, peel_dstC, crumble_dstC, cube_dstC, rip_dstC, cau_dstC, orb_dstC, chr_dstC, psw_dstC, emb_dstC, frz_dstC, pt_dstC].forEach(c => drawCover(c.getContext('2d'), img, RW, RH));
     setLbl('lblB', this.files[0].name);
     bIsTransparent = false;
   });
@@ -6142,7 +6360,7 @@ let aIsTransparent = false, bIsTransparent = false;
 function setSlotTransparent(which) {
   if (which === 'A') {
     [milkC, trimC].forEach(c => c.getContext('2d').clearRect(0, 0, c.width, c.height));
-    [bub_srcC, par_srcC, td_srcC, cone_srcC, peel_srcC, crumble_srcC, cube_srcC, rip_srcC, cau_srcC, orb_srcC, chr_srcC, psw_srcC, emb_srcC, frz_srcC].forEach(c => c.getContext('2d').clearRect(0, 0, RW, RH));
+    [bub_srcC, par_srcC, td_srcC, cone_srcC, peel_srcC, crumble_srcC, cube_srcC, rip_srcC, cau_srcC, orb_srcC, chr_srcC, psw_srcC, emb_srcC, frz_srcC, pt_srcC].forEach(c => c.getContext('2d').clearRect(0, 0, RW, RH));
     refreshAllIdle();
     document.getElementById('fA').value = '';
     const el = document.getElementById('lblA');
@@ -6150,7 +6368,7 @@ function setSlotTransparent(which) {
     aIsTransparent = true;
   } else {
     [butC, talC].forEach(c => c.getContext('2d').clearRect(0, 0, c.width, c.height));
-    [bub_dstC, par_dstC, td_dstC, cone_dstC, peel_dstC, crumble_dstC, cube_dstC, rip_dstC, cau_dstC, orb_dstC, chr_dstC, psw_dstC, emb_dstC, frz_dstC].forEach(c => c.getContext('2d').clearRect(0, 0, RW, RH));
+    [bub_dstC, par_dstC, td_dstC, cone_dstC, peel_dstC, crumble_dstC, cube_dstC, rip_dstC, cau_dstC, orb_dstC, chr_dstC, psw_dstC, emb_dstC, frz_dstC, pt_dstC].forEach(c => c.getContext('2d').clearRect(0, 0, RW, RH));
     document.getElementById('fB').value = '';
     const el = document.getElementById('lblB');
     el.textContent = '◱ Transparent'; el.style.color = '#4a9e5c';
@@ -6159,6 +6377,24 @@ function setSlotTransparent(which) {
 }
 document.getElementById('btnATransparent').addEventListener('click', () => setSlotTransparent('A'));
 document.getElementById('btnBTransparent').addEventListener('click', () => setSlotTransparent('B'));
+// Hover an A / B picker and press Backspace (or Delete) to clear that image, same as the Transparent button.
+(function () {
+  let hov = null;
+  [['A', 'fA'], ['B', 'fB']].forEach(([slot, id]) => {
+    const pill = document.getElementById(id).parentElement;
+    pill.addEventListener('mouseenter', () => { hov = slot; });
+    pill.addEventListener('mouseleave', () => { if (hov === slot) hov = null; });
+    pill.title = 'Hover and press Backspace to clear this image';
+  });
+  document.addEventListener('keydown', e => {
+    if (!hov || (e.key !== 'Backspace' && e.key !== 'Delete') || e.ctrlKey || e.metaKey || e.altKey) return;
+    const t = e.target, tag = t && t.tagName;
+    if (tag === 'TEXTAREA' || tag === 'SELECT' || (t && t.isContentEditable) || (tag === 'INPUT' && t.type !== 'range' && t.type !== 'checkbox' && t.type !== 'file')) return;
+    e.preventDefault();
+    if (typeof PLAYER !== 'undefined' && PLAYER.recording && PLAYER.recording()) return;
+    setSlotTransparent(hov);
+  });
+})();
 document.getElementById('alphaWarnClose').addEventListener('click', () => {
   document.getElementById('alphaWarnBanner').style.display = 'none';
   clearTimeout(_alphaWarnHideTimer);
@@ -6173,11 +6409,11 @@ document.getElementById('alphaWarnClose').addEventListener('click', () => {
 // every transition's own markup, canvas and buttons are untouched.
 // ══════════════════════════════════════════════════════════════════════════
 (function initGallery() {
-  const KEYS  = ['splash','solidify','bubbles','particles','tileDrop','coneRefraction','pagePeel','crumble','cubeAssembly','rippleRefraction','caustics','glassOrb','liquidChrome','paperSwirl','emberBurn','frostGrow'];
-  const SLUGS = ['milk-butter','trimmings-tallow','bubbles','particles','tile-drop','cone-refraction','page-peel','crumble','cube-assembly','ripple-refraction','caustics','glass-orb','crystal-clear-water','paper-swirl','heat-shimmer-ember','frost-growth'];
+  const KEYS  = ['splash','solidify','bubbles','particles','tileDrop','coneRefraction','pagePeel','crumble','cubeAssembly','rippleRefraction','caustics','glassOrb','liquidChrome','paperSwirl','emberBurn','frostGrow','photonTorpedo'];
+  const SLUGS = ['milk-butter','trimmings-tallow','bubbles','particles','tile-drop','cone-refraction','page-peel','crumble','cube-assembly','ripple-refraction','caustics','glass-orb','crystal-clear-water','paper-swirl','heat-shimmer-ember','frost-growth','photon-torpedo'];
   const PAIRS = [[milkC, butC], [trimC, talC], [bub_srcC, bub_dstC], [par_srcC, par_dstC], [td_srcC, td_dstC],
-                 [cone_srcC, cone_dstC], [peel_srcC, peel_dstC], [crumble_srcC, crumble_dstC], [cube_srcC, cube_dstC], [rip_srcC, rip_dstC], [cau_srcC, cau_dstC], [orb_srcC, orb_dstC], [chr_srcC, chr_dstC], [psw_srcC, psw_dstC], [emb_srcC, emb_dstC], [frz_srcC, frz_dstC]];
-  const NOTES = ['', '', '', '', 'Gentle / Cranked', 'Four glass modes', 'Adjustable angle', '', 'Five modes', 'Pond view', 'Refracting water', 'Ray-traced glass', 'Clear water', '3D paper, down the drain', 'Burns upward', 'Ice creeps in'];
+                 [cone_srcC, cone_dstC], [peel_srcC, peel_dstC], [crumble_srcC, crumble_dstC], [cube_srcC, cube_dstC], [rip_srcC, rip_dstC], [cau_srcC, cau_dstC], [orb_srcC, orb_dstC], [chr_srcC, chr_dstC], [psw_srcC, psw_dstC], [emb_srcC, emb_dstC], [frz_srcC, frz_dstC], [pt_srcC, pt_dstC]];
+  const NOTES = ['', '', '', '', 'Gentle / Cranked', 'Four glass modes', 'Adjustable angle', '', 'Five modes', 'Pond view', 'Refracting water', 'Ray-traced glass', 'Clear water', '3D paper, down the drain', 'Burns upward', 'Ice creeps in', 'Fired from you'];
 
   const anyRunning = () => KEYS.some(k => TRANSITIONS[k].running);
   let view = 'grid';
@@ -6238,7 +6474,7 @@ document.getElementById('alphaWarnClose').addEventListener('click', () => {
     back(); x.drawImage(A, 0, 0, w, h);
     const R = rng(1000 + i * 77);
     const reveal = (pathFn) => { x.save(); x.beginPath(); pathFn(); x.clip(); back(); x.drawImage(B, 0, 0, w, h); x.restore(); };
-    if (i < 2 || i === 6 || i === 9 || i === 10 || i === 11 || i === 12 || i === 13 || i === 14 || i === 15) {
+    if (i < 2 || i === 6 || i === 9 || i === 10 || i === 11 || i === 12 || i === 13 || i === 14 || i === 15 || i === 16) {
       if (i === 6) {                                              // page peel: B left behind, paper curling off along a diagonal
         reveal(() => { x.moveTo(w * 0.42, 0); x.lineTo(w, 0); x.lineTo(w, h); x.lineTo(w * 0.05, h); x.closePath(); });
         const gr = x.createLinearGradient(w * 0.2, 0, w * 0.5, 0); gr.addColorStop(0, '#9a9a94'); gr.addColorStop(.35, '#f1efe6'); gr.addColorStop(1, '#bdbab0');
@@ -6266,6 +6502,14 @@ document.getElementById('alphaWarnClose').addEventListener('click', () => {
         x.fillStyle = gr; x.beginPath(); x.moveTo(w * .4, h * .62); x.lineTo(w * .6, h * .62); x.lineTo(w * .5, h * .97); x.closePath(); x.fill();
         half([[.12, .2], [.5, .3], [.5, .72], [.1, .84]], .18);
         half([[.5, .3], [.9, .12], [.88, .66], [.5, .72]], 0);
+      } else if (i === 16) {                                      // photon torpedo: B inside a glowing shock ring, the torpedo still flying below
+        const cx = w * .5, cy = h * .44, rr = h * .36;
+        reveal(() => { x.arc(cx, cy, rr, 0, 7); });
+        x.save(); x.shadowColor = 'rgba(255,120,30,.95)'; x.shadowBlur = 12; x.strokeStyle = 'rgba(255,205,130,.95)'; x.lineWidth = 3;
+        x.beginPath(); for (let a = 0; a <= 6.29; a += .05) { const q = rr * (1 + .05 * Math.sin(a * 7) + .03 * Math.sin(a * 17 + 1)); a ? x.lineTo(cx + Math.cos(a) * q, cy + Math.sin(a) * q) : x.moveTo(cx + q, cy); } x.closePath(); x.stroke(); x.restore();
+        x.strokeStyle = 'rgba(255,170,90,.55)'; x.lineWidth = 1; for (let a = 0; a < 6.28; a += .26) { x.beginPath(); x.moveTo(cx + Math.cos(a) * rr * .45, cy + Math.sin(a) * rr * .45); x.lineTo(cx + Math.cos(a) * rr * .95, cy + Math.sin(a) * rr * .95); x.stroke(); }
+        const g = x.createRadialGradient(w * .5, h * .86, 0, w * .5, h * .86, h * .17); g.addColorStop(0, 'rgba(255,250,230,1)'); g.addColorStop(.3, 'rgba(255,150,60,.85)'); g.addColorStop(1, 'rgba(120,60,255,0)');
+        x.fillStyle = g; x.beginPath(); x.arc(w * .5, h * .86, h * .17, 0, 7); x.fill();
       } else if (i === 15) {                                      // frost growth: B inside, ice crystals creeping in from the edges
         reveal(() => { x.rect(w * .18, h * .2, w * .64, h * .6); });
         x.save(); x.strokeStyle = 'rgba(225,242,255,.9)'; x.lineCap = 'round';
