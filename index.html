@@ -3934,7 +3934,7 @@ function runRippleRefraction(onDone) {
   }
 
   // Where the stone lands: lower-middle of the frame.
-  const [XS, ZS] = ground(RW * 0.5, RH * sl$('ripDrop', 78) / 100);
+  const [XS, ZS] = AIM.rippleRefraction ? ground(RW * AIM.rippleRefraction.x, RH * AIM.rippleRefraction.y) : ground(RW * 0.5, RH * sl$('ripDrop', 78) / 100);
 
   // ── Per-pixel ground geometry, built once per run ──────────────────────
   const N = RIP_RW2 * RIP_RH2;
@@ -4508,6 +4508,7 @@ void main(){
   gl_FragColor = vec4(mix(colA, lit, inside) * aOut, aOut);
 }`,
   ember: GL_PRELUDE + `
+uniform vec3 uCtr;
 float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.-2.*f);
   return mix(mix(h21(i), h21(i+vec2(1.,0.)), f.x), mix(h21(i+vec2(0.,1.)), h21(i+vec2(1.,1.)), f.x), f.y); }
 float fbm(vec2 p){ float a = .5, s = 0.; for (int i = 0; i < 4; i++) { s += a*vn(p); p = p*2.03 + vec2(17.3, 9.1); a *= .5; } return s; }
@@ -4516,7 +4517,9 @@ void main(){
   float p = uP, T = p * 4.;
   vec2 pc = vec2(uv.x * asp, uv.y);
   // how far along the burn this pixel is (0 where it starts, ~1 at the far side) with a ragged, paper-like edge
-  float g = uMode < .5 ? uv.y : (uMode < 1.5 ? 1. - uv.y : length((uv - .5) * vec2(asp, 1.)) / (.5 * length(vec2(asp, 1.))));
+  vec2 cc = uCtr.z > .5 ? uCtr.xy : vec2(.5); vec2 sa = vec2(asp, 1.);
+  float far = max(max(length(cc * sa), length((vec2(1., 0.) - cc) * sa)), max(length((vec2(0., 1.) - cc) * sa), length((vec2(1.) - cc) * sa)));
+  float g = uMode < .5 ? uv.y : (uMode < 1.5 ? 1. - uv.y : length((uv - cc) * sa) / far);
   float nlow = fbm(pc * 2.2 + vec2(3.1, 0.)), nmid = fbm(pc * 7. + 11.), nfine = vn(pc * 38.);
   float nfing = fbm(pc * vec2(5.5, 1.6) + vec2(8.7, 2.3));                                  // tall, narrow fingers: the fire runs ahead in places and lags in others
   float f = g + uDisp * (.20 * (nlow - .5) + .26 * (nfing - .5) + .06 * (nmid - .5) + .012 * (nfine - .5));
@@ -4810,7 +4813,7 @@ void main(){
 }`,
   photon: GL_PRELUDE + `
 #define ASP (uRes.x / uRes.y)
-uniform vec4 uCrv0, uCrv1, uCrv2, uCrv3; uniform float uSpan;
+uniform vec4 uCrv0, uCrv1, uCrv2, uCrv3; uniform float uSpan; uniform vec3 uAim;
 float crvAt(float k){ if (k < 8.) { if (k < 4.) return k < 1. ? uCrv0.x : k < 2. ? uCrv0.y : k < 3. ? uCrv0.z : uCrv0.w; return k < 5. ? uCrv1.x : k < 6. ? uCrv1.y : k < 7. ? uCrv1.z : uCrv1.w; }
   if (k < 12.) return k < 9. ? uCrv2.x : k < 10. ? uCrv2.y : k < 11. ? uCrv2.z : uCrv2.w; return k < 13. ? uCrv3.x : k < 14. ? uCrv3.y : k < 15. ? uCrv3.z : uCrv3.w; }
 float crv(float x){ float t = clamp(x, 0., 1.) * 15.; float i = floor(t); if (i > 14.) i = 14.; float f = t - i; float a = crvAt(i), b = crvAt(i + 1.); return mix(a, b, f * f * (3. - 2. * f) * .0 + f); }
@@ -4822,7 +4825,7 @@ void main(){
   float p = uP, T = p * 3.2;
   vec2 sc2 = vec2(asp, 1.);
   float md = uMode;
-  vec2 tg = md < .5 ? vec2(.5, .5) : (md < 1.5 ? vec2(.28, .66) : vec2(.72, .36));
+  vec2 tg = uAim.z > .5 ? uAim.xy : (md < .5 ? vec2(.5, .5) : (md < 1.5 ? vec2(.28, .66) : vec2(.72, .36)));
   float tHit = .36;
 
   // ── the torpedo flies out of the audience, away from us, into the picture ──
@@ -5048,7 +5051,7 @@ function ptLut() {
 function runPhoton(onDone) {
   runGLTransition({ key: 'photon', src: pt_srcC, dst: pt_dstC, rec: recCtx17, recCanvas: recC17, disp: ctx17, base: 3.2,
     params: () => ({ speed: glSl('ptSpeed', 100) / 100, str: glSl('ptRays', 100) / 100, disp: glSl('ptRag', 100) / 100, light: glSl('ptGlow', 100) / 100, mode: glMode('ptaim') }),
-    extra: (gl, U) => { const L = ptLut(); [0, 1, 2, 3].forEach(k => gl.uniform4f(U('uCrv' + k), L[k * 4], L[k * 4 + 1], L[k * 4 + 2], L[k * 4 + 3])); gl.uniform1f(U('uSpan'), glSl('ptSpan', 100) / 100); } }, onDone);
+    extra: (gl, U) => { const L = ptLut(); [0, 1, 2, 3].forEach(k => gl.uniform4f(U('uCrv' + k), L[k * 4], L[k * 4 + 1], L[k * 4 + 2], L[k * 4 + 3])); gl.uniform1f(U('uSpan'), glSl('ptSpan', 100) / 100); const a = AIM.photonTorpedo; gl.uniform3f(U('uAim'), a ? a.x : .5, a ? 1 - a.y : .5, a ? 1 : 0); } }, onDone);
 }
 function runFrost(onDone) {
   runGLTransition({ key: 'frost', src: frz_srcC, dst: frz_dstC, rec: recCtx16, recCanvas: recC16, disp: ctx16, base: 4.2,
@@ -5056,7 +5059,8 @@ function runFrost(onDone) {
 }
 function runEmber(onDone) {
   runGLTransition({ key: 'ember', src: emb_srcC, dst: emb_dstC, rec: recCtx15, recCanvas: recC15, disp: ctx15, base: 4.0,
-    params: () => ({ speed: glSl('embSpeed', 100) / 100, str: glSl('embHeat', 100) / 100, disp: glSl('embRag', 100) / 100, light: glSl('embGlow', 100) / 100, mode: glMode('emberdir') }) }, onDone);
+    params: () => ({ speed: glSl('embSpeed', 100) / 100, str: glSl('embHeat', 100) / 100, disp: glSl('embRag', 100) / 100, light: glSl('embGlow', 100) / 100, mode: glMode('emberdir') }),
+    extra: (gl, U) => { const a = AIM.emberBurn; gl.uniform3f(U('uCtr'), a ? a.x : .5, a ? 1 - a.y : .5, a ? 1 : 0); } }, onDone);
 }
 function runLiquidChrome(onDone) {
   runGLTransition({ key: glMode('chrmat') === 1 ? 'tallow' : 'chrome', src: chr_srcC, dst: chr_dstC, rec: recCtx13, recCanvas: recC13, disp: ctx13, base: 4.4,
@@ -5374,7 +5378,11 @@ function bhPlan(N) {
     pts.push(best);
     const f = N > 1 ? k / (N - 1) : 0, rad = [], nv = 22;
     for (let i = 0; i < nv; i++) { let r = .8 + .28 * R(); if (R() < .2) r += .3 + .3 * R(); rad.push(r); }       // torn, ragged rim with a few spikes
-    const cr = []; for (let i = 0, n = 4 + Math.floor(R() * 4); i < n; i++) cr.push([R() * 6.283, 1.3 + 1.8 * R()]);
+    const cr = [], zig = (L) => { const pt = [[0, 0]]; for (let d = 0; d < L;) { d += (8 + 7 * R()) * U; pt.push([d, (R() - .5) * 2 * (2.5 + 4 * R()) * U]); } return pt; };
+    for (let i = 0, n = 3 + Math.floor(R() * 3); i < n; i++) {                   // each crack is a fixed zig-zag; it grows by running further along that same path
+      const L = (75 + 110 * R()) * U * Math.max(sz, .5), pts = zig(L), bi = 2 + Math.floor(R() * 3), bl = L * (.3 + .25 * R());
+      cr.push({ a: R() * 6.283, L, pts, bi: Math.min(bi, pts.length - 1), ba: (R() < .5 ? -1 : 1) * (.45 + .5 * R()), bl, bp: zig(bl) });
+    }
     const ch = []; for (let i = 0; i < 9; i++) ch.push([R() * 6.283, 220 + 520 * R(), 7 + 11 * R(), (R() - .5) * 18]);
     shots.push({ x: best[0], y: best[1], t: .06 + .80 * (1 - Math.pow(1 - f, 1.5)), rb: (15 + 10 * R()) * U * sz, rad, a0: R() * 6.283, cr, ch, hand: k % 2, sx: R() - .5, sy: R() - .5 });
   }
@@ -5390,13 +5398,63 @@ function bhLayers() {
   if (BH_L.A) return BH_L;
   ['A', 'B', 'M', 'T'].forEach(k => BH_L[k] = mkc(RW, RH));
   BH_L.h = [1, 2, 3, 4].map(i => mkc(RW >> i, RH >> i));
-  BH_L.R = mkc(RW >> 1, RH >> 1);
+  BH_L.R = mkc(RW >> 1, RH >> 1); BH_L.R2 = mkc(RW >> 1, RH >> 1);
+  { const n = mkc(256, 256), x = n.getContext('2d'), d = x.createImageData(256, 256), r = bhRng(77);   // a tile of fine noise, used to dither the soft beams
+    for (let i = 0; i < 65536; i++) { d.data[i * 4] = d.data[i * 4 + 1] = d.data[i * 4 + 2] = 255; d.data[i * 4 + 3] = Math.floor(r() * 4); }
+    x.putImageData(d, 0, 0); BH_L.N = n; }
   return BH_L;
 }
 function bhRadius(s, t, Rc) {
   const tau = (t - s.t) * BH_DUR; if (tau < 0) return 0;
   const g = Math.pow(Math.min(1, Math.max(0, (t - s.t) / (BH_END - s.t))), 1.4);
   return s.rb * (1 - Math.exp(-tau * 55)) * (1 + .5 * Math.exp(-tau * 9)) + (Rc - s.rb) * g;
+}
+// God rays on the GPU in floating point: every pixel marches toward the light and adds up the holes it passes, with a per-pixel jitter and dither, so there are no stepped copies and no 8-bit banding.
+const BHG = { ok: null };
+function bhGL() {
+  if (BHG.ok === true) return BHG; if (BHG.ok === false) return null;
+  try {
+    const cv = mkc(RW >> 1, RH >> 1), gl = cv.getContext('webgl', { alpha: true, premultipliedAlpha: true, antialias: false, depth: false, preserveDrawingBuffer: true });
+    if (!gl) throw new Error('no webgl');
+    const sh = (t, src) => { const o = gl.createShader(t); gl.shaderSource(o, src); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(o)); return o; };
+    const pr = gl.createProgram();
+    gl.attachShader(pr, sh(gl.VERTEX_SHADER, 'attribute vec2 a; void main(){ gl_Position = vec4(a, 0., 1.); }'));
+    gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, `precision highp float;
+uniform sampler2D uM; uniform vec2 uRes, uL; uniform float uSeed;
+float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+void main(){
+  vec2 p = gl_FragCoord.xy / uRes; p.y = 1. - p.y;
+  float j = h(gl_FragCoord.xy + uSeed), acc = 0.;
+  for (int i = 0; i < 256; i++) {
+    float f = (float(i) + j) / 256., sc = 1. + f * 1.4;
+    acc += texture2D(uM, uL + (p - uL) / sc).a * exp(-5.2 * f);
+  }
+  float a = acc * .019 + (h(gl_FragCoord.xy * 1.7 + uSeed * 3.1) - .5) / 255.;
+  a = clamp(a, 0., 1.);
+  gl_FragColor = vec4(vec3(1., .894, .667) * a, a);
+}`));
+    gl.bindAttribLocation(pr, 0, 'a'); gl.linkProgram(pr);
+    if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error('link');
+    const vb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, vb); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+    const tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    cv.addEventListener('webglcontextlost', e => { e.preventDefault(); BHG.ok = null; });
+    Object.assign(BHG, { ok: true, cv, gl, pr, vb, tex, U: n => gl.getUniformLocation(pr, n) });
+    return BHG;
+  } catch (e) { BHG.ok = false; return null; }
+}
+function bhRaysGL(mask, lx, t) {
+  const g = bhGL(); if (!g) return null;
+  const gl = g.gl;
+  gl.useProgram(g.pr); gl.viewport(0, 0, g.cv.width, g.cv.height); gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, g.tex);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, mask);
+  gl.uniform1i(g.U('uM'), 0); gl.uniform2f(g.U('uRes'), g.cv.width, g.cv.height); gl.uniform2f(g.U('uL'), lx, -.35); gl.uniform1f(g.U('uSeed'), (t * 977 % 1000));
+  gl.bindBuffer(gl.ARRAY_BUFFER, g.vb); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  return g.cv;
 }
 function bhDraw(t, P) {
   const L = bhLayers(), U = RH / 1080, plan = bhPlan(P.n), sh = plan.shots, ts = t * BH_DUR;
@@ -5422,8 +5480,23 @@ function bhDraw(t, P) {
   ax.lineCap = 'round';
   if (sh.length <= 1500) sh.forEach((s, k) => {
     const r = rs[k]; if (r < .5) return;
-    ax.strokeStyle = 'rgba(10,6,4,.55)'; ax.lineWidth = 1.6 * U;
-    s.cr.forEach(c => { const a = s.a0 + c[0], r0 = r * .9, r1 = r * (1.05 + .35 * c[1]) + 14 * U * c[1]; ax.beginPath(); ax.moveTo(s.x + Math.cos(a) * r0, s.y + Math.sin(a) * r0); ax.lineTo(s.x + Math.cos(a + .06) * (r0 + r1) / 2, s.y + Math.sin(a + .06) * (r0 + r1) / 2); ax.lineTo(s.x + Math.cos(a - .03) * r1, s.y + Math.sin(a - .03) * r1); ax.stroke(); });
+    ax.strokeStyle = 'rgba(10,6,4,.5)'; ax.lineWidth = 1.3 * U;
+    const tau = (t - s.t) * BH_DUR, e = 1 - Math.exp(-tau * 1.7);
+    const run = (ox, oy, ang, pts, tip) => {                                      // walk the fixed zig-zag out to the crack's tip so far
+      const ca = Math.cos(ang), sa = Math.sin(ang); let px = ox, py = oy;
+      ax.beginPath(); ax.moveTo(ox, oy);
+      for (let j = 1; j < pts.length; j++) {
+        let d = pts[j][0], f = 1; if (d > tip) { f = (tip - pts[j - 1][0]) / (d - pts[j - 1][0]); if (f <= 0) break; d = pts[j - 1][0] + f * (d - pts[j - 1][0]); }
+        const off = pts[j - 1][1] + f * (pts[j][1] - pts[j - 1][1]);
+        px = ox + ca * d - sa * off; py = oy + sa * d + ca * off; ax.lineTo(px, py); if (f < 1) break;
+      }
+      ax.stroke(); return [px, py];
+    };
+    s.cr.forEach(c => {
+      const tip = e * (c.L + s.rb), a = s.a0 + c.a;
+      run(s.x, s.y, a, c.pts, tip);
+      const bp = c.pts[c.bi]; if (tip > bp[0]) { const ca = Math.cos(a), sa = Math.sin(a); run(s.x + ca * bp[0] - sa * bp[1], s.y + sa * bp[0] + ca * bp[1], a + c.ba, c.bp, tip - bp[0]); }
+    });
   });
   tx.globalCompositeOperation = 'source-over'; tx.clearRect(0, 0, RW, RH); soft(tx, 2);
   tx.globalCompositeOperation = 'source-in'; tx.fillStyle = 'rgba(14,6,2,.85)'; tx.fillRect(0, 0, RW, RH);
@@ -5461,12 +5534,23 @@ function bhDraw(t, P) {
   // 5 ─ god rays: each hole is smeared away from a light up behind the wall, and glows at its rim
   const env = Math.min(1, t / .18) * Math.min(1, Math.max(0, (1 - t) / .1)) * P.rays;
   if (env > .01) {
+    const gr = bhRaysGL(L.h[0], .5 + .12 * Math.sin(ts * 1.3), t);
     const rx = L.R.getContext('2d'), w2 = L.R.width, h2 = L.R.height, lx = w2 * (.5 + .12 * Math.sin(ts * 1.3)), ly = -h2 * .35;
+    if (!gr) {                                                                  // no WebGL: the 2D fallback below
     rx.globalCompositeOperation = 'source-over'; rx.setTransform(1, 0, 0, 1, 0, 0); rx.clearRect(0, 0, w2, h2);
-    rx.globalCompositeOperation = 'lighter';
-    for (let i = 0; i < 40; i++) { const sc = 1 + i * .032; rx.setTransform(sc, 0, 0, sc, lx * (1 - sc), ly * (1 - sc)); rx.globalAlpha = .06 * Math.pow(.95, i); rx.drawImage(L.h[0], 0, 0); }
-    rx.setTransform(1, 0, 0, 1, 0, 0); rx.globalAlpha = 1; rx.globalCompositeOperation = 'source-in'; rx.fillStyle = 'rgb(255,228,170)'; rx.fillRect(0, 0, w2, h2);
-    ctx.globalCompositeOperation = 'lighter'; ctx.imageSmoothingEnabled = true; ctx.globalAlpha = Math.min(1, .5 * env); ctx.drawImage(L.R, 0, 0, RW, RH);
+    const r2 = L.R2.getContext('2d');                                           // smear by doubling: each pass lays a stretched copy of everything so far over itself, so 7 passes give 128 fine steps and no visible bands
+    rx.globalCompositeOperation = 'source-over'; rx.globalAlpha = .05; rx.drawImage(L.h[0], 0, 0); rx.globalAlpha = 1;
+    for (let k = 0; k < 7; k++) {
+      r2.setTransform(1, 0, 0, 1, 0, 0); r2.globalCompositeOperation = 'copy'; r2.drawImage(L.R, 0, 0);
+      const sc = 1 + .011 * (1 << k);
+      rx.globalCompositeOperation = 'lighter'; rx.setTransform(sc, 0, 0, sc, lx * (1 - sc), ly * (1 - sc)); rx.globalAlpha = Math.pow(.96, 1 << k); rx.drawImage(L.R2, 0, 0);
+    }
+    rx.setTransform(1, 0, 0, 1, 0, 0); rx.globalAlpha = 1; rx.globalCompositeOperation = 'lighter';           // dither: a whisper of noise so the smooth falloff never has steps to show
+    { const w2 = L.R.width, h2 = L.R.height, ox = Math.floor(t * 9973) % 256, oy = Math.floor(t * 7919) % 256;
+      for (let yy = -oy; yy < h2; yy += 256) for (let xx = -ox; xx < w2; xx += 256) rx.drawImage(L.N, xx, yy); }
+    rx.globalCompositeOperation = 'source-in'; rx.fillStyle = 'rgb(255,228,170)'; rx.fillRect(0, 0, w2, h2);
+    }
+    ctx.globalCompositeOperation = 'lighter'; ctx.imageSmoothingEnabled = true; ctx.globalAlpha = Math.min(1, .5 * env); ctx.drawImage(gr || L.R, 0, 0, RW, RH);
     ctx.globalAlpha = Math.min(1, .2 * env); tx.globalCompositeOperation = 'source-over'; tx.clearRect(0, 0, RW, RH); soft(tx, 3); tx.globalCompositeOperation = 'source-in'; tx.fillStyle = 'rgb(255,190,110)'; tx.fillRect(0, 0, RW, RH);
     ctx.drawImage(L.T, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
   }
@@ -5566,6 +5650,116 @@ function runBulletHoles(onDone, only) {
   }
   requestAnimationFrame(frm);
 }
+
+// ── ALT+CLICK AIMING ─ choose where the photon torpedo lands, where the stone drops, where the burn starts; a three-ring gyroscope marks the spot ──
+const AIM = {};
+(function aimUI() {
+  const CARDS = { photonTorpedo: c17, rippleRefraction: c10, emberBurn: c15 };
+  const BTN = { photonTorpedo: 'btn17p', rippleRefraction: 'btn10p', emberBurn: 'btn15p' };
+  const NOTE = { photonTorpedo: 'where the torpedo lands', rippleRefraction: 'where the stone drops', emberBurn: 'where the burn starts (in the From the centre mode)' };
+  const COL = ['94,242,255', '190,130,255', '255,207,90'];
+  let altDown = false;
+  const ov = {}, hint = {}, pv = {};
+  const rot = (p, ax, a) => { const c = Math.cos(a), s = Math.sin(a); return ax === 0 ? [p[0], p[1] * c - p[2] * s, p[1] * s + p[2] * c] : ax === 1 ? [p[0] * c + p[2] * s, p[1], -p[0] * s + p[2] * c] : [p[0] * c - p[1] * s, p[0] * s + p[1] * c, p[2]]; };
+  const back = x => { const c1 = 1.70158, c3 = c1 + 1; x = Math.min(1, Math.max(0, x)); return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); };
+  function gyro(x, cx, cy, R, t, k, a, dpr, ds) {
+    ds = ds || 0;
+    const D = 4 * R, line = (w, col, al) => { x.lineWidth = w * dpr; x.strokeStyle = 'rgba(' + col + ',' + al + ')'; };
+    const rr = R * back(k), kk = Math.min(1, k * 1.6);
+    x.save(); x.lineCap = 'round'; x.globalCompositeOperation = 'lighter';
+    // ping as it lands
+    if (k < 1) { const q = k; x.beginPath(); x.arc(cx, cy, R * (.4 + 2.6 * q), 0, 7); line(2.2 * (1 - q) + .5, '255,255,255', .55 * (1 - q) * a); x.stroke(); }
+    // faint hairlines and a slowly turning tick dial
+    const hg = x.createLinearGradient(cx - R * 2.6, 0, cx + R * 2.6, 0); hg.addColorStop(0, 'rgba(150,240,255,0)'); hg.addColorStop(.5, 'rgba(150,240,255,' + .5 * a * kk + ')'); hg.addColorStop(1, 'rgba(150,240,255,0)');
+    x.strokeStyle = hg; x.lineWidth = dpr; x.beginPath(); x.moveTo(cx - R * 2.6, cy); x.lineTo(cx + R * 2.6, cy); x.stroke();
+    const vg = x.createLinearGradient(0, cy - R * 2.6, 0, cy + R * 2.6); vg.addColorStop(0, 'rgba(150,240,255,0)'); vg.addColorStop(.5, 'rgba(150,240,255,' + .5 * a * kk + ')'); vg.addColorStop(1, 'rgba(150,240,255,0)');
+    x.strokeStyle = vg; x.beginPath(); x.moveTo(cx, cy - R * 2.6); x.lineTo(cx, cy + R * 2.6); x.stroke();
+    line(1, '160,235,255', .45 * a * kk);
+    for (let n = 0; n < 36; n++) { const th = n / 36 * 6.2832 + t * .25, r0 = R * 1.32 * kk, r1 = r0 + R * (n % 3 ? .06 : .13); x.beginPath(); x.moveTo(cx + Math.cos(th) * r0, cy + Math.sin(th) * r0); x.lineTo(cx + Math.cos(th) * r1, cy + Math.sin(th) * r1); x.stroke(); }
+    // the three rings: each turns about its own axis while the whole gimbal precesses, so they orbit the point
+    const rings = [];
+    for (let i = 0; i < 3; i++) {
+      const Ri = rr * (1 - i * .17), pts = [];
+      for (let n = 0; n <= 90; n++) {
+        const th = n / 90 * 6.2832; let p = [Math.cos(th) * Ri, Math.sin(th) * Ri, 0];
+        if (i === 0) p = rot(rot(p, 0, t * 1.9), 1, .35);
+        else if (i === 1) p = rot(rot(p, 1, t * 1.35 + 1), 0, .5);
+        else p = rot(rot(rot(p, 0, 1.15), 2, t * 1.1 + 2), 1, t * .5);
+        p = rot(rot(p, 1, t * .42), 0, .5 + .18 * Math.sin(t * .6));
+        pts.push(p);
+      }
+      rings.push(pts);
+    }
+    const proj = p => { const f = D / (D - p[2]); return [cx + p[0] * f, cy + p[1] * f, f]; };
+    rings.forEach((pts, i) => {
+      const col = COL[i].split(',').map(v => Math.round(+v + (205 - v) * ds)).join(',');
+      for (let pass = 0; pass < 2; pass++) {
+        for (let n = 0; n < 90; n++) {
+          const A = proj(pts[n]), B = proj(pts[n + 1]), d = (pts[n][2] / D + .5);      // nearer = brighter and thicker
+          x.beginPath(); x.moveTo(A[0], A[1]); x.lineTo(B[0], B[1]);
+          if (pass === 0) line(11 * (.5 + d), col, .13 * a * kk * (.3 + d)); else line(1.8 + 2.6 * d, col, (.35 + .65 * d) * a * kk);
+          x.stroke();
+        }
+      }
+      const bead = proj(pts[Math.floor(((t * (.5 + i * .17) + i / 3) % 1) * 90)]), g = x.createRadialGradient(bead[0], bead[1], 0, bead[0], bead[1], R * .22 * bead[2]);
+      g.addColorStop(0, 'rgba(255,255,255,' + a + ')'); g.addColorStop(.35, 'rgba(' + col + ',' + .8 * a + ')'); g.addColorStop(1, 'rgba(' + col + ',0)'); x.fillStyle = g; x.beginPath(); x.arc(bead[0], bead[1], R * .22 * bead[2], 0, 7); x.fill();
+    });
+    // the selection point itself: a tight cross with a breathing core
+    const pu = .75 + .25 * Math.sin(t * 5), c0 = R * .14 * kk;
+    line(1.6, '255,255,255', .95 * a * kk);
+    [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(([dx, dy]) => { x.beginPath(); x.moveTo(cx + dx * R * .22 * kk, cy + dy * R * .22 * kk); x.lineTo(cx + dx * R * .5 * kk, cy + dy * R * .5 * kk); x.stroke(); });
+    const cg = x.createRadialGradient(cx, cy, 0, cx, cy, R * .38 * kk); cg.addColorStop(0, 'rgba(255,255,255,' + .95 * a + ')'); cg.addColorStop(.3, 'rgba(120,235,255,' + .5 * a * pu + ')'); cg.addColorStop(1, 'rgba(60,160,255,0)');
+    x.fillStyle = cg; x.beginPath(); x.arc(cx, cy, R * .38 * kk, 0, 7); x.fill();
+    x.fillStyle = 'rgba(255,255,255,' + a + ')'; x.beginPath(); x.arc(cx, cy, Math.max(.5, c0 * .45), 0, 7); x.fill();
+    x.restore();
+  }
+  function overlay(k) {
+    if (ov[k]) return ov[k];
+    const c = document.createElement('canvas'); c.style.cssText = 'position:fixed;pointer-events:none;z-index:61;display:none;';
+    document.body.appendChild(c); return (ov[k] = c);
+  }
+  function setHint(k) {
+    if (!hint[k]) return;
+    hint[k].textContent = AIM[k] ? 'Aimed by hand · Alt+click the marker to go back to the preset' : 'Alt+click the picture to choose ' + NOTE[k];
+  }
+  Object.keys(CARDS).forEach(k => {
+    const cv = CARDS[k], btn = document.getElementById(BTN[k]);
+    if (btn) { const row = btn.parentElement; row.insertAdjacentHTML('afterend', '<div class="aimHint" style="text-align:center;font-size:10px;color:var(--color-text-tertiary);margin-top:6px;"></div>'); hint[k] = row.nextElementSibling; setHint(k); }
+    const pos = e => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height, r]; };
+    cv.addEventListener('mousemove', e => { const [x, y] = pos(e); pv[k] = { x, y }; });
+    cv.addEventListener('mouseleave', () => { pv[k] = null; });
+    cv.addEventListener('click', e => {
+      if (!e.altKey) return;
+      e.preventDefault(); e.stopPropagation();
+      if (TRANSITIONS[k].running) return;
+      const [x, y, r] = pos(e), R = r.width * .062;
+      if (AIM[k] && Math.hypot((x - AIM[k].x) * r.width, (y - AIM[k].y) * r.height) < R * 1.4) delete AIM[k];
+      else AIM[k] = { x: Math.min(1, Math.max(0, x)), y: Math.min(1, Math.max(0, y)), t0: performance.now() };
+      setHint(k);
+    });
+  });
+  const cursor = () => Object.keys(CARDS).forEach(k => { CARDS[k].style.cursor = altDown ? 'crosshair' : ''; });
+  window.addEventListener('keydown', e => { if (e.key === 'Alt') { altDown = true; cursor(); } });
+  window.addEventListener('keyup', e => { if (e.key === 'Alt') { altDown = false; cursor(); } });
+  window.addEventListener('blur', () => { altDown = false; cursor(); });
+  const T0 = performance.now(), dpr = Math.min(2, window.devicePixelRatio || 1);
+  setInterval(() => {                                       // its own timer: the player's virtual clock must not freeze or cancel the marker
+    const now = performance.now(), t = (now - T0) / 1000;
+    Object.keys(CARDS).forEach(k => {
+      const cv = CARDS[k], o = overlay(k), show = AIM[k] || (altDown && pv[k]);
+      const sec = cv.closest('.tsec'), r = cv.getBoundingClientRect();
+      const ok = show && cv.offsetParent !== null && r.width > 20 && !TRANSITIONS[k].running && !(sec && sec.getAnimations && sec.getAnimations().length);
+      if (!ok) { if (o.style.display !== 'none') o.style.display = 'none'; return; }
+      const w = Math.round(r.width * dpr), h = Math.round(r.height * dpr);
+      if (o.width !== w || o.height !== h) { o.width = w; o.height = h; }
+      o.style.display = 'block'; o.style.left = r.left + 'px'; o.style.top = r.top + 'px'; o.style.width = r.width + 'px'; o.style.height = r.height + 'px';
+      const x = o.getContext('2d'); x.clearRect(0, 0, w, h);
+      const R = w * .062;
+      if (AIM[k]) gyro(x, AIM[k].x * w, AIM[k].y * h, R, t, Math.min(1, (now - AIM[k].t0) / 650), 1, dpr);
+      if (altDown && pv[k]) gyro(x, pv[k].x * w, pv[k].y * h, R * .5, t, 1, AIM[k] ? .28 : .36, dpr, .75);
+    });
+  }, 16);
+})();
 
 // ══════════════════════════════════════════════════════════════════════════
 // SECTION 6 · TRANSITIONS REGISTRY
