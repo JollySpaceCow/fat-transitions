@@ -203,6 +203,7 @@
     <span style="opacity:.35;">|</span>
     <button type="button" id="btnATransparent" title="Fill A with a fully transparent image instead of a photo" style="font-size:12px;background:none;border:none;cursor:pointer;color:var(--color-text-secondary);padding:0;">◱ Transparent</button>
   </div>
+  <button type="button" id="btnSwapAB" title="Swap A and B" aria-label="Swap A and B" style="align-self:center;width:34px;height:34px;border-radius:50%;border:.5px solid var(--color-border-tertiary);background:var(--color-bg-secondary);color:var(--color-text-secondary);cursor:pointer;font-size:16px;line-height:1;padding:0;transition:transform .35s ease;">⇄</button>
   <div style="display:flex;align-items:center;gap:8px;font-size:12px;padding:7px 16px;border-radius:20px;border:.5px solid var(--color-border-tertiary);background:var(--color-bg-secondary);">
     <input type="file" id="fB" accept="image/*" style="display:none">
     <label for="fB" id="lblB" style="cursor:pointer;color:var(--color-accent-primary);font-weight:500;">📁 B — Destination</label>
@@ -921,7 +922,9 @@ const SW = W / 312, SH = H / 218, SD = Math.hypot(W, H) / Math.hypot(312, 218);
 const SHW = 1280, SHH = 720;
 
 // Recording / working resolution for transitions 3 & 4
-const RW = 1920, RH = 1080;
+// 1080p by default; 4K when chosen with the switch at the top of the page (remembered, applied on reload) or with ?res=4k in the address.
+const RES_4K = (() => { try { const q = new URLSearchParams(location.search).get('res'); if (q) return q.toLowerCase() === '4k'; return localStorage.getItem('fat.res') === '4k'; } catch (e) { return false; } })();
+const RW = RES_4K ? 3840 : 1920, RH = RES_4K ? 2160 : 1080;
 
 // ── Helper: create an offscreen canvas ──────────────────────────────────
 function mkc(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
@@ -4846,7 +4849,7 @@ void main(){
   vec2 dirn = dv / max(rd, 1e-4);
   vec2 off = dirn * lens * .028 * uStr / sc2 * (fr > 0. ? -1. : 1.);       // the picture bends around the front, like a lens
 
-  float inB = 1. - ss(-.012, .012, fr);
+  float inB = (1. - ss(-.012, .012, fr)) * ss(tHit - .004, tHit + .008, p);      // nothing opens before the torpedo has landed
   vec4 a4 = vec4(0.), b4 = vec4(0.);
   { float ch = lens * .012 * uStr;
     vec4 aR = texture2D(uA, clamp(uv + off * 1.2 + dirn * ch / sc2, 0., 1.)), aG = texture2D(uA, clamp(uv + off, 0., 1.)), aB = texture2D(uA, clamp(uv + off * .8 - dirn * ch / sc2, 0., 1.));
@@ -5659,7 +5662,8 @@ const AIM = {};
   const NOTE = { photonTorpedo: 'where the torpedo lands', rippleRefraction: 'where the stone drops', emberBurn: 'where the burn starts (in the From the centre mode)' };
   const COL = ['94,242,255', '190,130,255', '255,207,90'];
   let altDown = false;
-  const ov = {}, hint = {}, pv = {};
+  const ov = {}, hint = {}, pv = {}, FALL = {};
+  const release = k => { const a = AIM[k]; if (!a) return; FALL[k] = { x: a.x, y: a.y, vx: (Math.random() - .5) * .12, vy: -.5, t0: performance.now() }; delete AIM[k]; };   // let go: it pops up a touch, then falls out of the frame
   const rot = (p, ax, a) => { const c = Math.cos(a), s = Math.sin(a); return ax === 0 ? [p[0], p[1] * c - p[2] * s, p[1] * s + p[2] * c] : ax === 1 ? [p[0] * c + p[2] * s, p[1], -p[0] * s + p[2] * c] : [p[0] * c - p[1] * s, p[0] * s + p[1] * c, p[2]]; };
   const back = x => { const c1 = 1.70158, c3 = c1 + 1; x = Math.min(1, Math.max(0, x)); return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); };
   function gyro(x, cx, cy, R, t, k, a, dpr, ds) {
@@ -5733,11 +5737,14 @@ const AIM = {};
       e.preventDefault(); e.stopPropagation();
       if (TRANSITIONS[k].running) return;
       const [x, y, r] = pos(e), R = r.width * .062;
-      if (AIM[k] && Math.hypot((x - AIM[k].x) * r.width, (y - AIM[k].y) * r.height) < R * 1.4) delete AIM[k];
+      if (AIM[k] && Math.hypot((x - AIM[k].x) * r.width, (y - AIM[k].y) * r.height) < R * 1.4) release(k);
       else AIM[k] = { x: Math.min(1, Math.max(0, x)), y: Math.min(1, Math.max(0, y)), t0: performance.now() };
       setHint(k);
     });
   });
+  // picking a preset position (or moving the drop slider) hands control back to the preset
+  [['photonTorpedo', '.ptaim', 'click'], ['emberBurn', '.emberdir', 'click'], ['rippleRefraction', '#ripDrop', 'input']].forEach(([k, sel, ev]) =>
+    document.querySelectorAll(sel).forEach(el => el.addEventListener(ev, () => { if (TRANSITIONS[k].running || !AIM[k]) return; release(k); setHint(k); })));
   const cursor = () => Object.keys(CARDS).forEach(k => { CARDS[k].style.cursor = altDown ? 'crosshair' : ''; });
   window.addEventListener('keydown', e => { if (e.key === 'Alt') { altDown = true; cursor(); } });
   window.addEventListener('keyup', e => { if (e.key === 'Alt') { altDown = false; cursor(); } });
@@ -5746,7 +5753,7 @@ const AIM = {};
   setInterval(() => {                                       // its own timer: the player's virtual clock must not freeze or cancel the marker
     const now = performance.now(), t = (now - T0) / 1000;
     Object.keys(CARDS).forEach(k => {
-      const cv = CARDS[k], o = overlay(k), show = AIM[k] || (altDown && pv[k]);
+      const cv = CARDS[k], o = overlay(k), show = AIM[k] || FALL[k] || (altDown && pv[k]);
       const sec = cv.closest('.tsec'), r = cv.getBoundingClientRect();
       const ok = show && cv.offsetParent !== null && r.width > 20 && !TRANSITIONS[k].running && !(sec && sec.getAnimations && sec.getAnimations().length);
       if (!ok) { if (o.style.display !== 'none') o.style.display = 'none'; return; }
@@ -5756,6 +5763,11 @@ const AIM = {};
       const x = o.getContext('2d'); x.clearRect(0, 0, w, h);
       const R = w * .062;
       if (AIM[k]) gyro(x, AIM[k].x * w, AIM[k].y * h, R, t, Math.min(1, (now - AIM[k].t0) / 650), 1, dpr);
+      const F = FALL[k];
+      if (F) {                                                  // gravity: the rings keep spinning (faster) while the marker drops away
+        const ft = (now - F.t0) / 1000, fy = F.y + F.vy * ft + .5 * 2.2 * ft * ft * (h / w) * 1.78, fx = F.x + F.vx * ft;
+        if (fy * h > h + R * 3) delete FALL[k]; else gyro(x, fx * w, fy * h, R, t * (1 + 2.5 * ft) + ft * 6, 1, Math.max(0, 1 - ft * .15), dpr);
+      }
       if (altDown && pv[k]) gyro(x, pv[k].x * w, pv[k].y * h, R * .5, t, 1, AIM[k] ? .28 : .36, dpr, .75);
     });
   }, 16);
@@ -5994,7 +6006,7 @@ async function recordCanvasProper(cfg) {
 
   const FPS    = 60;   // matches the cadence these transitions were tuned against
   const width  = cfg.recCanvas.width, height = cfg.recCanvas.height;
-  const codec  = 'vp09.00.41.08';   // VP9, profile 0, level 4.1 (safe for 1080p60), 8-bit
+  const codec  = height > 1440 ? 'vp09.00.51.08' : 'vp09.00.41.08';   // VP9, profile 0, 8-bit: level 5.1 for 4K60, level 4.1 (safe for 1080p60) otherwise
 
   // Quality mode, not fixed bitrate. bitrateMode: 'quantizer' below is what
   // makes this a constant-QUALITY encode — the same family as x264/x265's
@@ -6083,7 +6095,7 @@ async function recordCanvasProper(cfg) {
     // there, but fall back to a generous fixed bitrate on any browser that
     // can't actually do it rather than failing outright.
     encoderConfig.bitrateMode = 'constant';
-    encoderConfig.bitrate = 15_000_000;
+    encoderConfig.bitrate = height > 1440 ? 50_000_000 : 15_000_000;
     const constantWorks = await probeEncoderConfig(encoderConfig, {});
     if (!constantWorks) throw new Error('VP9 encoder config unsupported in this browser');
   }
@@ -6346,7 +6358,7 @@ function recordCanvasLegacy(cfg) {
   const fn   = cfg.recordFilename.replace(/\.(mp4|webm)$/i, '') + ext;
   let stream, rec, chunks = [], recStart = 0;
   try { stream = cfg.recCanvas.captureStream(60); } catch(e) { setStatus('⚠️ captureStream: ' + e.message); return; }
-  try { rec = new MediaRecorder(stream, {mimeType:mime, videoBitsPerSecond:15_000_000}); } catch(e) { setStatus('⚠️ Recorder init failed.'); return; }
+  try { rec = new MediaRecorder(stream, {mimeType:mime, videoBitsPerSecond:(RH > 1440 ? 50_000_000 : 15_000_000)}); } catch(e) { setStatus('⚠️ Recorder init failed.'); return; }
   rec.ondataavailable = e => { if (e.data && e.data.size > 0) chunks.push(e.data); };
   rec.onstop = async () => {
     const durationMs = Date.now() - recStart;
@@ -6860,6 +6872,126 @@ function setSlotTransparent(which) {
 }
 document.getElementById('btnATransparent').addEventListener('click', () => setSlotTransparent('A'));
 document.getElementById('btnBTransparent').addEventListener('click', () => setSlotTransparent('B'));
+// ── Swap A and B ─ the ⇄ button between the two pickers ──
+const AB_SRC = [milkC, trimC, bub_srcC, par_srcC, td_srcC, cone_srcC, peel_srcC, crumble_srcC, cube_srcC, rip_srcC, cau_srcC, orb_srcC, chr_srcC, psw_srcC, emb_srcC, frz_srcC, pt_srcC, bh_srcC];
+const AB_DST = [butC, talC, bub_dstC, par_dstC, td_dstC, cone_dstC, peel_dstC, crumble_dstC, cube_dstC, rip_dstC, cau_dstC, orb_dstC, chr_dstC, psw_dstC, emb_dstC, frz_dstC, pt_dstC, bh_dstC];
+function swapAB() {
+  if (Object.keys(TRANSITIONS).some(k => TRANSITIONS[k].running)) return;
+  const tmp = document.createElement('canvas');
+  AB_SRC.forEach((a, i) => {                                    // every A canvas trades pixels with its B twin
+    const b = AB_DST[i], ax = a.getContext('2d'), bx = b.getContext('2d');
+    tmp.width = a.width; tmp.height = a.height; tmp.getContext('2d').drawImage(a, 0, 0);
+    ax.clearRect(0, 0, a.width, a.height); ax.drawImage(b, 0, 0, a.width, a.height);
+    bx.clearRect(0, 0, b.width, b.height); bx.drawImage(tmp, 0, 0, b.width, b.height);
+  });
+  tmp.width = tmp.height = 1;
+  const la = document.getElementById('lblA'), lb = document.getElementById('lblB');
+  const A_DEF = '📁 A — Source', B_DEF = '📁 B — Destination', ACC = 'var(--color-accent-primary)';
+  const aDef = la.textContent === A_DEF, bDef = lb.textContent === B_DEF, sa = [la.textContent, la.style.color], sb = [lb.textContent, lb.style.color];
+  la.textContent = bDef ? A_DEF : sb[0]; la.style.color = bDef ? ACC : sb[1];       // each caption follows its picture
+  lb.textContent = aDef ? B_DEF : sa[0]; lb.style.color = aDef ? ACC : sa[1];
+  document.getElementById('fA').value = ''; document.getElementById('fB').value = '';
+  const t = aIsTransparent; aIsTransparent = bIsTransparent; bIsTransparent = t;
+  refreshAllIdle();
+}
+document.getElementById('btnSwapAB').addEventListener('click', e => {
+  const b = e.currentTarget; b.style.transform = 'rotate(' + (b._r = (b._r || 0) + 180) + 'deg)'; swapAB();
+});
+
+// ── Drag and drop ─ drop pictures anywhere on the page. While files are being dragged, big zones cover the whole window
+// (left half = A, right half = B), so you can let go over any part of the page, even with other windows in the way. ──
+(function dropZones() {
+  const css = document.createElement('style');
+  css.textContent = `#abDrop { position:fixed; inset:0; z-index:99999; display:none; padding:14px; gap:14px; background:rgba(8,10,14,.62); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); font-family:system-ui,sans-serif; }
+    #abDrop.on { display:flex; }
+    #abDrop .z { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; border:3px dashed rgba(255,255,255,.35); border-radius:26px; color:rgba(255,255,255,.8); transition:background .12s, border-color .12s, transform .12s; text-align:center; }
+    #abDrop .z b { font-size:clamp(22px,4vw,44px); letter-spacing:.02em; }
+    #abDrop .z span { font-size:clamp(12px,1.6vw,16px); opacity:.75; }
+    #abDrop .z i { font-style:normal; font-size:clamp(40px,7vw,84px); line-height:1; }
+    #abDrop .z.hot { border-style:solid; transform:scale(1.015); }
+    #abDrop .z[data-slot="A"].hot { background:rgba(255,170,60,.28); border-color:#ffb347; color:#fff; }
+    #abDrop .z[data-slot="B"].hot { background:rgba(70,190,255,.28); border-color:#5fd0ff; color:#fff; }
+    #abDrop .z[data-slot="AB"].hot { background:rgba(150,255,170,.25); border-color:#8dffa6; color:#fff; }
+    @media (max-aspect-ratio: 1/1) { #abDrop { flex-direction:column; } }`;
+  document.head.appendChild(css);
+  const root = document.createElement('div'); root.id = 'abDrop';
+  const zone = (slot, ico, title, sub) => '<div class="z" data-slot="' + slot + '"><i>' + ico + '</i><b>' + title + '</b><span>' + sub + '</span></div>';
+  const two = zone('A', '🅰', 'Drop for A — Source', 'the picture that goes away') + zone('B', '🅱', 'Drop for B — Destination', 'the picture that arrives');
+  const pair = zone('AB', '🔀', 'Drop both pictures', 'the first becomes A, the second becomes B');
+  document.body.appendChild(root);
+  let depth = 0, mode = '';
+  const hasFiles = e => e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
+  const show = e => {
+    const n = e.dataTransfer.items ? e.dataTransfer.items.length : 1, m = n >= 2 ? 'pair' : 'two';
+    if (mode !== m) { root.innerHTML = m === 'pair' ? pair : two; mode = m; }
+    root.classList.add('on');
+  };
+  const hide = () => { root.classList.remove('on'); depth = 0; mode = ''; root.querySelectorAll('.z.hot').forEach(z => z.classList.remove('hot')); };
+  const give = (slot, file) => {
+    if (!file || !/^image\//.test(file.type)) return false;
+    const inp = document.getElementById(slot === 'A' ? 'fA' : 'fB'), dt = new DataTransfer(); dt.items.add(file); inp.files = dt.files;
+    inp.dispatchEvent(new Event('change')); return true;
+  };
+  window.addEventListener('dragenter', e => { if (!hasFiles(e)) return; e.preventDefault(); depth++; show(e); });
+  window.addEventListener('dragover', e => {
+    if (!hasFiles(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; show(e);
+    const z = e.target.closest ? e.target.closest('#abDrop .z') : null;
+    root.querySelectorAll('.z').forEach(q => q.classList.toggle('hot', q === z));
+  });
+  window.addEventListener('dragleave', e => { if (!hasFiles(e)) return; depth = Math.max(0, depth - 1); if (depth === 0 || (e.clientX <= 0 && e.clientY <= 0) || e.relatedTarget === null) { if (e.relatedTarget === null) hide(); } });
+  window.addEventListener('drop', e => {
+    if (!hasFiles(e)) return; e.preventDefault();
+    const files = Array.from(e.dataTransfer.files).filter(f => /^image\//.test(f.type));
+    const z = e.target.closest ? e.target.closest('#abDrop .z') : null;
+    let slot = z ? z.dataset.slot : (e.clientX < innerWidth / 2 ? 'A' : 'B');
+    hide();
+    if (!files.length) return;
+    if (files.length >= 2 || slot === 'AB') { give('A', files[0]); give('B', files[1] || files[0]); }
+    else give(slot, files[0]);
+  });
+  window.addEventListener('dragend', hide); window.addEventListener('blur', hide);
+  window.addEventListener('keydown', e => { if (e.key === 'Escape') hide(); });
+})();
+// ── A 4K picture switches the page to 4K mode ─ drop or choose a 4K-ish picture and it offers (with a short countdown) to restart in 4K, carrying your pictures across ──
+(function auto4k() {
+  const FILES = { A: null, B: null }, DB = () => new Promise((ok, no) => { const r = indexedDB.open('fatTransitions', 1); r.onupgradeneeded = () => r.result.createObjectStore('kv'); r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error); });
+  const kv = async (mode, fn) => { const db = await DB(); return new Promise((ok, no) => { const tx = db.transaction('kv', mode), st = tx.objectStore('kv'), rq = fn(st); tx.oncomplete = () => { db.close(); ok(rq && rq.result); }; tx.onerror = () => { db.close(); no(tx.error); }; }); };
+  let offered = false;
+  function toast(msg, secs, onGo, onNo) {
+    const t = document.createElement('div');
+    t.style.cssText = 'position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:100000;display:flex;align-items:center;gap:14px;padding:12px 18px;border-radius:14px;background:rgba(20,22,28,.94);color:#fff;font:13px system-ui,sans-serif;box-shadow:0 8px 30px rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.18);max-width:min(560px,92vw);';
+    t.innerHTML = '<span></span><button type="button" style="font:inherit;padding:5px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.3);background:rgba(255,255,255,.1);color:#fff;cursor:pointer;">Stay at 1080p</button>';
+    document.body.appendChild(t);
+    let left = secs; const sp = t.firstChild, paint = () => { sp.textContent = msg + ' Switching to 4K in ' + left + ' s…'; }; paint();
+    const iv = setInterval(() => { left--; if (left <= 0) { clearInterval(iv); t.remove(); onGo(); } else paint(); }, 1000);
+    t.lastChild.addEventListener('click', () => { clearInterval(iv); t.remove(); onNo(); });
+  }
+  async function go() {
+    try { await kv('readwrite', st => st.put({ A: FILES.A, B: FILES.B, aT: aIsTransparent, bT: bIsTransparent }, 'pending')); } catch (e) {}
+    try { localStorage.setItem('fat.res', '4k'); } catch (e) {}
+    const u = new URL(location.href); u.searchParams.delete('res'); location.href = u.href;
+  }
+  ['A', 'B'].forEach(slot => document.getElementById(slot === 'A' ? 'fA' : 'fB').addEventListener('change', async function () {
+    const f = this.files[0]; if (!f) return; FILES[slot] = f;
+    if (RES_4K || offered || sessionStorage.getItem('noAuto4k')) return;
+    try {
+      const bm = await createImageBitmap(f), big = Math.max(bm.width, bm.height) >= 3000 || Math.min(bm.width, bm.height) >= 1700; bm.close();
+      if (!big || offered) return; offered = true;
+      if (Object.keys(TRANSITIONS).some(k => TRANSITIONS[k].running)) { offered = false; return; }
+      toast('That picture is 4K.', 5, go, () => { try { sessionStorage.setItem('noAuto4k', '1'); } catch (e) {} });
+    } catch (e) {}
+  }));
+  // keep the remembered files in step with transparent / swapped slots
+  const _st = setSlotTransparent; window.setSlotTransparent = function (w) { FILES[w] = null; return _st.apply(this, arguments); };
+  document.getElementById('btnSwapAB').addEventListener('click', () => { const t = FILES.A; FILES.A = FILES.B; FILES.B = t; });
+  // arrived here from a switch to 4K: put the pictures back
+  if (RES_4K) kv('readwrite', st => st.get('pending')).then(async p => {
+    if (!p) return; await kv('readwrite', st => st.delete('pending'));
+    const put = (slot, f) => { const inp = document.getElementById(slot === 'A' ? 'fA' : 'fB'), dt = new DataTransfer(); dt.items.add(f); inp.files = dt.files; inp.dispatchEvent(new Event('change')); };
+    if (p.A) put('A', p.A); else if (p.aT) _st('A');
+    if (p.B) put('B', p.B); else if (p.bT) _st('B');
+  }).catch(() => {});
+})();
 // Hover an A / B picker and press Backspace (or Delete) to clear that image, same as the Transparent button.
 (function () {
   let hov = null;
@@ -6909,13 +7041,25 @@ document.getElementById('alphaWarnClose').addEventListener('click', () => {
 
   const gal = document.createElement('div');
   gal.id = 'gallery';
-  gal.innerHTML = '<div id="galHead"><span>' + secs.length + ' transitions</span><button type="button" id="galAll">Show all on one page</button></div><div id="galGrid"></div>';
+  gal.innerHTML = '<div id="galHead"><span>' + secs.length + ' transitions</span><span id="resSw" style="display:flex;align-items:center;gap:6px;">Working &amp; recording resolution <button type="button" data-res="1080" title="Faster, lighter on memory">1080p</button><button type="button" data-res="4k" title="Real 4K frames: heavy on memory and slower to play">4K</button></span><button type="button" id="galAll">Show all on one page</button></div><div id="galGrid"></div>';
   const bar = document.createElement('div');
   bar.id = 'detailBar';
   bar.innerHTML = '<button type="button" id="dbBack">← All transitions</button><span id="dbTitle"></span><span id="dbNav"><button type="button" id="dbFull" title="Full screen (F)">⛶</button><button type="button" id="dbPrev" title="Previous (← or P)">‹</button><button type="button" id="dbNext" title="Next (→ or N)">›</button></span>';
   first.parentElement.insertBefore(gal, first);
   first.parentElement.insertBefore(bar, first);
   const grid = gal.querySelector('#galGrid');
+  gal.querySelectorAll('#resSw button').forEach(b => {
+    const on = (b.dataset.res === '4k') === RES_4K;
+    if (on) { b.style.borderColor = 'var(--color-text-primary)'; b.style.color = 'var(--color-text-primary)'; b.style.fontWeight = '600'; }
+    b.addEventListener('click', () => {
+      if (on || anyRunning()) return;
+      if (b.dataset.res === '4k' && !confirm('Switch to real 4K (3840×2160)?\n\nEvery transition then renders and records at 4K. That needs a lot of memory (several GB) and plays much slower than 1080p. The page reloads, and your own A/B pictures need loading again.')) return;
+      try { localStorage.setItem('fat.res', b.dataset.res === '4k' ? '4k' : '1080'); } catch (e) {}
+      const u = new URL(location.href); u.searchParams.delete('res'); location.href = u.href;
+    });
+  });
+  if (RES_4K) { const st = document.getElementById('status'); if (st) st.textContent = st.textContent.replace('Records 1080p', 'Records 4K'); }
+  if (RES_4K) document.querySelectorAll('[id^="btn"][id$="r"]').forEach(b => { b.textContent = b.textContent.replace('1080p', '4K'); });
 
   // Checkerboard under the thumbnails so a transparent A or B reads as transparent.
   const chk = document.createElement('canvas'); chk.width = chk.height = 24;
