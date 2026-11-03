@@ -6898,52 +6898,87 @@ document.getElementById('btnSwapAB').addEventListener('click', e => {
   const b = e.currentTarget; b.style.transform = 'rotate(' + (b._r = (b._r || 0) + 180) + 'deg)'; swapAB();
 });
 
-// ── Drag and drop ─ drop pictures anywhere on the page. While files are being dragged, big zones cover the whole window
-// (left half = A, right half = B), so you can let go over any part of the page, even with other windows in the way. ──
+// ── Drag and drop ─ drop pictures anywhere on the page. The drop zones appear right where your pointer enters the page and follow it,
+// sizing and arranging themselves around the pointer (side by side, stacked, or pushed away from an edge), so it never matters which
+// part of the browser window is showing from behind other windows. A page cannot see other windows, so the pointer is the guide. ──
 (function dropZones() {
   const css = document.createElement('style');
-  css.textContent = `#abDrop { position:fixed; inset:0; z-index:99999; display:none; padding:14px; gap:14px; background:rgba(8,10,14,.62); backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px); font-family:system-ui,sans-serif; }
-    #abDrop.on { display:flex; }
-    #abDrop .z { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; border:3px dashed rgba(255,255,255,.35); border-radius:26px; color:rgba(255,255,255,.8); transition:background .12s, border-color .12s, transform .12s; text-align:center; }
-    #abDrop .z b { font-size:clamp(22px,4vw,44px); letter-spacing:.02em; }
-    #abDrop .z span { font-size:clamp(12px,1.6vw,16px); opacity:.75; }
-    #abDrop .z i { font-style:normal; font-size:clamp(40px,7vw,84px); line-height:1; }
-    #abDrop .z.hot { border-style:solid; transform:scale(1.015); }
-    #abDrop .z[data-slot="A"].hot { background:rgba(255,170,60,.28); border-color:#ffb347; color:#fff; }
-    #abDrop .z[data-slot="B"].hot { background:rgba(70,190,255,.28); border-color:#5fd0ff; color:#fff; }
-    #abDrop .z[data-slot="AB"].hot { background:rgba(150,255,170,.25); border-color:#8dffa6; color:#fff; }
-    @media (max-aspect-ratio: 1/1) { #abDrop { flex-direction:column; } }`;
+  css.textContent = `#abDrop { position:fixed; inset:0; z-index:99999; display:none; background:rgba(8,10,14,.45); font-family:system-ui,sans-serif; }
+    #abDrop.on { display:block; }
+    #abDrop .z { position:fixed; left:0; top:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; border:3px dashed rgba(255,255,255,.5); border-radius:22px; background:rgba(14,18,26,.82); color:rgba(255,255,255,.85); text-align:center; box-shadow:0 10px 40px rgba(0,0,0,.45); transition:transform .14s cubic-bezier(.2,.8,.3,1), width .14s, height .14s, background .1s, border-color .1s; will-change:transform; overflow:hidden; }
+    #abDrop .z i { font-style:normal; font-weight:700; line-height:1; }
+    #abDrop .z b { font-weight:600; letter-spacing:.02em; }
+    #abDrop .z span { opacity:.7; }
+    #abDrop .z.hot { border-style:solid; color:#fff; }
+    #abDrop .z[data-slot="A"].hot { background:rgba(255,150,40,.55); border-color:#ffb347; }
+    #abDrop .z[data-slot="B"].hot { background:rgba(40,170,255,.55); border-color:#5fd0ff; }
+    #abDrop .z[data-slot="AB"].hot { background:rgba(70,220,120,.5); border-color:#8dffa6; }`;
   document.head.appendChild(css);
-  const root = document.createElement('div'); root.id = 'abDrop';
-  const zone = (slot, ico, title, sub) => '<div class="z" data-slot="' + slot + '"><i>' + ico + '</i><b>' + title + '</b><span>' + sub + '</span></div>';
-  const two = zone('A', '🅰', 'Drop for A — Source', 'the picture that goes away') + zone('B', '🅱', 'Drop for B — Destination', 'the picture that arrives');
-  const pair = zone('AB', '🔀', 'Drop both pictures', 'the first becomes A, the second becomes B');
-  document.body.appendChild(root);
-  let depth = 0, mode = '';
+  const root = document.createElement('div'); root.id = 'abDrop'; document.body.appendChild(root);
+  const LABEL = { A: ['A', 'Source', 'goes away'], B: ['B', 'Destination', 'arrives'], AB: ['A + B', 'Both pictures', '1st = A, 2nd = B'] };
+  let mode = '', cx = innerWidth / 2, cy = innerHeight / 2, zones = [];
   const hasFiles = e => e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
+  function build(m) {
+    root.innerHTML = ''; zones = [];
+    (m === 'pair' ? ['AB'] : ['A', 'B']).forEach(slot => {
+      const z = document.createElement('div'); z.className = 'z'; z.dataset.slot = slot;
+      z.innerHTML = '<i>' + LABEL[slot][0] + '</i><b>' + LABEL[slot][1] + '</b><span>' + LABEL[slot][2] + '</span>';
+      root.appendChild(z); zones.push(z);
+    });
+    mode = m;
+  }
+  function layout() {                                                     // size, shape and arrangement from the space around the pointer
+    const vw = innerWidth, vh = innerHeight, M = 10, G = 14, n = zones.length;
+    let w = Math.max(120, Math.min(300, Math.min(vw, vh) * .3)), h = w * .72;
+    const rects = [];
+    if (n === 1) {
+      w *= 1.25; const x = Math.min(vw - w - M, Math.max(M, cx - w / 2)), y = Math.min(vh - h - M, Math.max(M, cy - h / 2 - h * .75));
+      rects.push([x, y, w, h]);
+    } else {
+      const pairW = 2 * w + G, pairH = 2 * h + G, roomL = cx - M, roomR = vw - cx - M, roomT = cy - M, roomB = vh - cy - M;
+      if (roomL >= pairW / 2 && roomR >= pairW / 2) {                     // both sides free: A on the left, B on the right, the pointer between them
+        const y = Math.min(vh - h - M, Math.max(M, cy - h - 28));
+        rects.push([cx - G / 2 - w, y, w, h], [cx + G / 2, y, w, h]);
+      } else if (roomT >= pairH / 2 && roomB >= pairH / 2 || vw < pairW + 2 * M) {   // near a side edge: stack them
+        const x = Math.min(vw - w - M, Math.max(M, cx + (roomL < roomR ? 40 : -40 - w)));
+        let y = Math.min(vh - pairH - M, Math.max(M, cy - pairH / 2));
+        rects.push([x, y, w, h], [x, y + h + G, w, h]);
+      } else {                                                            // a corner: shrink and tuck them into the roomier side
+        const ww = Math.max(110, Math.min(w, (Math.max(roomL, roomR) - G) / 2)), hh = ww * .72, left = roomL > roomR;
+        const x0 = left ? Math.max(M, cx - 2 * ww - G - 30) : Math.min(vw - 2 * ww - G - M, cx + 30), y = Math.min(vh - hh - M, Math.max(M, cy - hh / 2));
+        rects.push([x0, y, ww, hh], [x0 + ww + G, y, ww, hh]); w = ww; h = hh;
+      }
+    }
+    zones.forEach((z, i) => {
+      const r = rects[i], fs = Math.max(11, r[2] / 18);
+      z.style.width = r[2] + 'px'; z.style.height = r[3] + 'px'; z.style.transform = 'translate(' + r[0] + 'px,' + r[1] + 'px)';
+      z.firstChild.style.fontSize = (r[2] / 3.2) + 'px'; z.children[1].style.fontSize = (fs * 1.2) + 'px'; z.children[2].style.fontSize = fs + 'px';
+    });
+  }
   const show = e => {
-    const n = e.dataTransfer.items ? e.dataTransfer.items.length : 1, m = n >= 2 ? 'pair' : 'two';
-    if (mode !== m) { root.innerHTML = m === 'pair' ? pair : two; mode = m; }
-    root.classList.add('on');
+    const nf = e.dataTransfer.items ? e.dataTransfer.items.length : 1, m = nf >= 2 ? 'pair' : 'two';
+    if (mode !== m) build(m);
+    if (e.clientX || e.clientY) { cx = e.clientX; cy = e.clientY; }
+    root.classList.add('on'); layout();
   };
-  const hide = () => { root.classList.remove('on'); depth = 0; mode = ''; root.querySelectorAll('.z.hot').forEach(z => z.classList.remove('hot')); };
+  const hide = () => { root.classList.remove('on'); mode = ''; };
   const give = (slot, file) => {
     if (!file || !/^image\//.test(file.type)) return false;
     const inp = document.getElementById(slot === 'A' ? 'fA' : 'fB'), dt = new DataTransfer(); dt.items.add(file); inp.files = dt.files;
     inp.dispatchEvent(new Event('change')); return true;
   };
-  window.addEventListener('dragenter', e => { if (!hasFiles(e)) return; e.preventDefault(); depth++; show(e); });
+  const nearest = e => { let best = null, bd = 1e9; zones.forEach(z => { const r = z.getBoundingClientRect(), d = Math.hypot(e.clientX - (r.left + r.width / 2), e.clientY - (r.top + r.height / 2)); if (d < bd) { bd = d; best = z; } }); return best; };
+  window.addEventListener('dragenter', e => { if (!hasFiles(e)) return; e.preventDefault(); show(e); });
   window.addEventListener('dragover', e => {
     if (!hasFiles(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; show(e);
-    const z = e.target.closest ? e.target.closest('#abDrop .z') : null;
-    root.querySelectorAll('.z').forEach(q => q.classList.toggle('hot', q === z));
+    const hit = e.target.closest ? e.target.closest('#abDrop .z') : null, z = hit || nearest(e);
+    zones.forEach(q => q.classList.toggle('hot', q === z));
   });
-  window.addEventListener('dragleave', e => { if (!hasFiles(e)) return; depth = Math.max(0, depth - 1); if (depth === 0 || (e.clientX <= 0 && e.clientY <= 0) || e.relatedTarget === null) { if (e.relatedTarget === null) hide(); } });
+  window.addEventListener('dragleave', e => { if (hasFiles(e) && e.relatedTarget === null) hide(); });
   window.addEventListener('drop', e => {
     if (!hasFiles(e)) return; e.preventDefault();
     const files = Array.from(e.dataTransfer.files).filter(f => /^image\//.test(f.type));
-    const z = e.target.closest ? e.target.closest('#abDrop .z') : null;
-    let slot = z ? z.dataset.slot : (e.clientX < innerWidth / 2 ? 'A' : 'B');
+    const z = (e.target.closest ? e.target.closest('#abDrop .z') : null) || nearest(e), slot = z ? z.dataset.slot : 'A';
     hide();
     if (!files.length) return;
     if (files.length >= 2 || slot === 'AB') { give('A', files[0]); give('B', files[1] || files[0]); }
@@ -6952,6 +6987,7 @@ document.getElementById('btnSwapAB').addEventListener('click', e => {
   window.addEventListener('dragend', hide); window.addEventListener('blur', hide);
   window.addEventListener('keydown', e => { if (e.key === 'Escape') hide(); });
 })();
+
 // ── A 4K picture switches the page to 4K mode ─ drop or choose a 4K-ish picture and it offers (with a short countdown) to restart in 4K, carrying your pictures across ──
 (function auto4k() {
   const FILES = { A: null, B: null }, DB = () => new Promise((ok, no) => { const r = indexedDB.open('fatTransitions', 1); r.onupgradeneeded = () => r.result.createObjectStore('kv'); r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error); });
@@ -6967,7 +7003,15 @@ document.getElementById('btnSwapAB').addEventListener('click', e => {
     t.lastChild.addEventListener('click', () => { clearInterval(iv); t.remove(); onNo(); });
   }
   async function go() {
-    try { await kv('readwrite', st => st.put({ A: FILES.A, B: FILES.B, aT: aIsTransparent, bT: bIsTransparent }, 'pending')); } catch (e) {}
+    let saved = false;
+    try { await kv('readwrite', st => st.put({ A: FILES.A, B: FILES.B, aT: aIsTransparent, bT: bIsTransparent }, 'pending')); saved = true; } catch (e) {}
+    if (!saved) {                                                       // no IndexedDB (private window, strict settings): carry the pictures in window.name, which survives a reload of the same tab
+      try {
+        const enc = f => new Promise(ok => { if (!f) return ok(null); const r = new FileReader(); r.onload = () => ok({ n: f.name, t: f.type, d: r.result }); r.onerror = () => ok(null); r.readAsDataURL(f); });
+        window.name = 'FATPENDING:' + JSON.stringify({ A: await enc(FILES.A), B: await enc(FILES.B), aT: aIsTransparent, bT: bIsTransparent });
+      } catch (e) {}
+    }
+    try { sessionStorage.setItem('fat.pend', '1'); } catch (e) {}
     try { localStorage.setItem('fat.res', '4k'); } catch (e) {}
     const u = new URL(location.href); u.searchParams.delete('res'); location.href = u.href;
   }
@@ -6985,12 +7029,27 @@ document.getElementById('btnSwapAB').addEventListener('click', e => {
   const _st = setSlotTransparent; window.setSlotTransparent = function (w) { FILES[w] = null; return _st.apply(this, arguments); };
   document.getElementById('btnSwapAB').addEventListener('click', () => { const t = FILES.A; FILES.A = FILES.B; FILES.B = t; });
   // arrived here from a switch to 4K: put the pictures back
-  if (RES_4K) kv('readwrite', st => st.get('pending')).then(async p => {
-    if (!p) return; await kv('readwrite', st => st.delete('pending'));
+  if (RES_4K) (async () => {
+    let want = false; try { want = sessionStorage.getItem('fat.pend') === '1'; sessionStorage.removeItem('fat.pend'); } catch (e) {}
+    let p = null;
+    try { p = await kv('readwrite', st => st.get('pending')); if (p) await kv('readwrite', st => st.delete('pending')); } catch (e) {}
+    if (!p && /^FATPENDING:/.test(window.name)) {
+      try {
+        const q = JSON.parse(window.name.slice(11)); window.name = '';
+        const dec = async o => o ? new File([await (await fetch(o.d)).blob()], o.n, { type: o.t }) : null;
+        p = { A: await dec(q.A), B: await dec(q.B), aT: q.aT, bT: q.bT };
+      } catch (e) {}
+    }
+    if (!p) { if (want) toast2('Your pictures could not be carried over to 4K mode. Drop them in again.'); return; }
     const put = (slot, f) => { const inp = document.getElementById(slot === 'A' ? 'fA' : 'fB'), dt = new DataTransfer(); dt.items.add(f); inp.files = dt.files; inp.dispatchEvent(new Event('change')); };
     if (p.A) put('A', p.A); else if (p.aT) _st('A');
     if (p.B) put('B', p.B); else if (p.bT) _st('B');
-  }).catch(() => {});
+  })();
+  function toast2(msg) {
+    const t = document.createElement('div'); t.textContent = msg;
+    t.style.cssText = 'position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:100000;padding:12px 18px;border-radius:14px;background:rgba(20,22,28,.94);color:#fff;font:13px system-ui,sans-serif;border:1px solid rgba(255,255,255,.18);';
+    document.body.appendChild(t); setTimeout(() => t.remove(), 7000);
+  }
 })();
 // Hover an A / B picker and press Backspace (or Delete) to clear that image, same as the Transparent button.
 (function () {
