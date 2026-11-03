@@ -769,7 +769,7 @@
   // learns its length from the last run that finished on its own, remembered per slider / picker setting
   // (and kept between visits), so the total is known even while stopped.
   const LS_KEY = 'transitionTotals.v1', learned = {};
-  try { Object.assign(learned, JSON.parse(localStorage.getItem(LS_KEY) || '{}')); } catch (e) {}
+  try { Object.assign(learned, JSON.parse(localStorage.getItem(LS_KEY) || '{}')); } catch (e) { quiet(e, 'could not read saved timings'); }
   const sv = (id, d) => { const e = document.getElementById(id); return e ? parseFloat(e.value) : d; };
   const FIXED = {
     glassOrb:     () => 4.4 / (sv('orbSpeed', 100) / 100),
@@ -795,7 +795,7 @@
   function learn() {
     if (!curKey || FIXED[curKey]) return;
     const n = Math.round(ev / STEP);
-    if (n > 5) { learned[curSig] = n; try { localStorage.setItem(LS_KEY, JSON.stringify(learned)); } catch (e) {} }
+    if (n > 5) { learned[curSig] = n; try { localStorage.setItem(LS_KEY, JSON.stringify(learned)); } catch (e) { quiet(e, 'could not save timings'); } }
   }
   const openCardKey = () => {
     if (typeof TRANSITIONS === 'undefined') return null;
@@ -809,9 +809,9 @@
   function cancel() {
     if (recMode || !running()) return false;
     pending = []; paused = false; stepReq = 0; curKey = null; wasRun = false; ev = 0;
-    PLAYER.hooks.splice(0).forEach(f => { try { f(); } catch (e) {} });
+    PLAYER.hooks.splice(0).forEach(f => { try { f(); } catch (e) { quiet(e, 'cleanup hook'); } });
     Object.keys(TRANSITIONS).forEach(k => { const c = TRANSITIONS[k]; if (c.running) { c.running = false; setBtns([c.playBtnId, c.recBtnId], false); } });
-    try { refreshAllIdle(); } catch (e) {}
+    try { refreshAllIdle(); } catch (e) { reportProblem('Could not repaint the preview after stopping: ' + e.message, 'warn'); }
     setStatus('⏹ Stopped');
     refresh();
     return true;
@@ -1077,6 +1077,72 @@ const c18 = document.getElementById('c18'), ctx18 = c18.getContext('2d');
 // ══════════════════════════════════════════════════════════════════════════
 
 function setStatus(m) { document.getElementById('status').textContent = m; }
+
+// ══════════════════════════════════════════════════════════════════════════
+// PROBLEM REPORTING — nothing is allowed to fail silently.
+//   reportProblem(msg, 'error')  → full-screen sticky banner + falling rocks (something is broken / output is wrong)
+//   reportProblem(msg, 'warn')   → a toast fixed to the top-right of the window (something didn't work but the page carries on)
+//   quiet(err, what)             → for harmless, expected failures (e.g. cleaning up a GPU texture that's already gone): console only,
+//                                  but still counted in the ⚠ pill so you can see it happened.
+// Every report is kept in PROBLEMS, shown by the ⚠ pill in the bottom-right corner (click it for the list), and printed to the console.
+// Uncaught errors and unhandled promise rejections anywhere on the page are caught at the bottom of this block and reported as errors.
+// ══════════════════════════════════════════════════════════════════════════
+const PROBLEMS = [];
+let _lastProblem = '', _lastProblemAt = 0;
+function updateProblemPill() {
+  let pill = document.getElementById('problemPill');
+  if (!PROBLEMS.length) { if (pill) pill.remove(); return; }
+  if (!pill) {
+    pill = document.createElement('button'); pill.id = 'problemPill';
+    pill.style.cssText = 'position:fixed;right:14px;bottom:14px;z-index:99997;padding:7px 12px;border-radius:999px;border:2px solid #ffb300;background:rgba(10,10,10,.92);color:#ffd77a;font:700 13px system-ui,sans-serif;cursor:pointer;box-shadow:0 4px 18px rgba(0,0,0,.5);';
+    pill.addEventListener('click', () => {
+      const box = document.createElement('div');
+      box.style.cssText = 'position:fixed;inset:0;z-index:100001;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;font-family:system-ui,sans-serif;';
+      const card = document.createElement('div');
+      card.style.cssText = 'max-width:760px;max-height:80vh;overflow:auto;background:#141414;color:#eee;border:2px solid #ffb300;border-radius:14px;padding:18px 22px;font-size:13px;line-height:1.5;';
+      card.innerHTML = '<div style="font-size:18px;font-weight:800;color:#ffb300;margin-bottom:10px;">⚠ Problems this session (' + PROBLEMS.length + ')</div>' +
+        PROBLEMS.map(q => '<div style="padding:6px 0;border-top:1px solid #333;"><b style="color:' + (q.level === 'error' ? '#ff6b5e' : q.level === 'warn' ? '#ffb300' : '#9aa') + ';">' + q.level.toUpperCase() + '</b> <span style="opacity:.6">' + q.time + '</span><br>' + String(q.msg).replace(/</g, '&lt;') + '</div>').join('') +
+        '<div style="margin-top:12px;text-align:right;"><button id="problemClose" style="padding:6px 14px;border-radius:8px;border:2px solid #fff;background:#ffb300;color:#000;font-weight:700;cursor:pointer;">Close</button></div>';
+      box.appendChild(card); document.body.appendChild(box);
+      box.addEventListener('click', e => { if (e.target === box || e.target.id === 'problemClose') box.remove(); });
+    });
+    document.body.appendChild(pill);
+  }
+  pill.textContent = '⚠ ' + PROBLEMS.length + ' problem' + (PROBLEMS.length === 1 ? '' : 's');
+}
+function showToastFixed(msg, level) {
+  const t = document.createElement('div');
+  t.textContent = (level === 'warn' ? '⚠️ ' : '') + msg;
+  t.style.cssText = 'position:fixed;top:14px;right:14px;z-index:100000;max-width:min(460px,calc(100vw - 28px));padding:12px 16px;border-radius:12px;background:rgba(24,20,10,.96);color:#ffe6a8;font:13px/1.45 system-ui,sans-serif;border:2px solid #ffb300;box-shadow:0 8px 30px rgba(0,0,0,.55);';
+  document.body.appendChild(t); setTimeout(() => t.remove(), 9000);
+}
+function reportProblem(msg, level) {
+  level = level || 'warn'; msg = String(msg);
+  const now = Date.now();
+  console[level === 'error' ? 'error' : 'warn']('[problem]', msg);
+  PROBLEMS.push({ level, msg, time: new Date().toLocaleTimeString('en-AU', { hour12: false }) });
+  if (PROBLEMS.length > 200) PROBLEMS.shift();
+  if (document.body) updateProblemPill();
+  if (msg === _lastProblem && now - _lastProblemAt < 4000) { _lastProblemAt = now; return; }   // don't re-spam the same thing
+  _lastProblem = msg; _lastProblemAt = now;
+  try { setStatus('⚠️ ' + msg); } catch (e) {}
+  if (!document.body) return;
+  if (level === 'error') showAlphaWarning({ sticky: true, icons: ['🪨', '⚠️', '💥'], count: 70, marquee: '🪨 ', title: '🪨 SOMETHING WENT WRONG 🪨', text: msg });
+  else showToastFixed(msg, level);
+}
+function quiet(err, what) {
+  const m = (what || 'expected failure') + (err && err.message ? ': ' + err.message : '');
+  console.warn('[quiet]', m);
+  PROBLEMS.push({ level: 'quiet', msg: m, time: new Date().toLocaleTimeString('en-AU', { hour12: false }) });
+  if (PROBLEMS.length > 200) PROBLEMS.shift();
+  if (document.body) updateProblemPill();
+}
+window.addEventListener('error', e => {
+  if (/ResizeObserver loop/.test(e.message || '')) return;
+  if (e.target && e.target !== window) { reportProblem('A resource failed to load: ' + (e.target.src || e.target.href || e.target.tagName), 'warn'); return; }
+  reportProblem('Uncaught error: ' + (e.message || 'unknown') + (e.lineno ? ' (line ' + e.lineno + ')' : ''), 'error');
+}, true);
+window.addEventListener('unhandledrejection', e => reportProblem('Unhandled error: ' + ((e.reason && e.reason.message) || e.reason || 'unknown'), 'error'));
 
 // The quiet one-line status text under the canvases is easy to miss if
 // you've scrolled down — which is exactly what happened: the alpha-fallback
@@ -4931,12 +4997,12 @@ function glBridge() {
 function glProgram(key) {
   if (GLB.progs[key]) return GLB.progs[key];
   const gl = GLB.gl;
-  const sh = (t, src) => { const o = gl.createShader(t); gl.shaderSource(o, src); gl.compileShader(o); return gl.getShaderParameter(o, gl.COMPILE_STATUS) ? o : (setStatus('Shader error (' + key + '): ' + (gl.getShaderInfoLog(o) || '').slice(0, 140)), null); };
+  const sh = (t, src) => { const o = gl.createShader(t); gl.shaderSource(o, src); gl.compileShader(o); return gl.getShaderParameter(o, gl.COMPILE_STATUS) ? o : (reportProblem('Shader error (' + key + '): ' + (gl.getShaderInfoLog(o) || '').slice(0, 140), 'error'), null); };
   const vs = sh(gl.VERTEX_SHADER, 'attribute vec2 a; void main(){ gl_Position = vec4(a, 0., 1.); }');
   const fs = sh(gl.FRAGMENT_SHADER, GL_FS[key]);
   if (!vs || !fs) return null;
   const pr = gl.createProgram(); gl.attachShader(pr, vs); gl.attachShader(pr, fs); gl.bindAttribLocation(pr, 0, 'a'); gl.linkProgram(pr);
-  if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) { setStatus('Shader link error (' + key + ')'); return null; }
+  if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) { reportProblem('Shader link error (' + key + ')', 'error'); return null; }
   return (GLB.progs[key] = pr);
 }
 function glTex(gl, unit, canvas) {
@@ -4950,14 +5016,14 @@ function glTex(gl, unit, canvas) {
 function runGLTransition(cfg, onDone) {
   const g = glBridge(), prog = g && glProgram(cfg.key);
   if (!prog) {
-    if (!g) setStatus('This transition needs WebGL, which is not available in this browser.');
+    if (!g) reportProblem('This transition needs WebGL, which is not available in this browser.', 'error');
     if (onDone) onDone(() => {});
     return;
   }
   const gl = g.gl;
   gl.useProgram(prog);
   const texA = glTex(gl, 0, cfg.src), texB = glTex(gl, 1, cfg.dst);
-  PLAYER.hooks.length = 0; PLAYER.hooks.push(() => { try { gl.deleteTexture(texA); gl.deleteTexture(texB); } catch (e) {} });
+  PLAYER.hooks.length = 0; PLAYER.hooks.push(() => { try { gl.deleteTexture(texA); gl.deleteTexture(texB); } catch (e) { quiet(e, 'texture cleanup'); } });
   const U = n => gl.getUniformLocation(prog, n);
   const P = cfg.params(), DURATION = cfg.base / P.speed;
   gl.uniform1i(U('uA'), 0); gl.uniform1i(U('uB'), 1); gl.uniform2f(U('uRes'), RW, RH);
@@ -4978,7 +5044,7 @@ function runGLTransition(cfg, onDone) {
     if (el >= DURATION) {
       cfg.rec.clearRect(0, 0, RW, RH); cfg.rec.drawImage(cfg.dst, 0, 0);
       cfg.disp.clearRect(0, 0, W, H); cfg.disp.drawImage(cfg.recCanvas, 0, 0, W, H);
-      try { gl.deleteTexture(texA); gl.deleteTexture(texB); } catch (e) {}
+      try { gl.deleteTexture(texA); gl.deleteTexture(texB); } catch (e) { quiet(e, 'texture cleanup'); }
       const reset = () => {
         cfg.rec.clearRect(0, 0, RW, RH); cfg.rec.drawImage(cfg.src, 0, 0);
         cfg.disp.clearRect(0, 0, W, H); cfg.disp.drawImage(cfg.recCanvas, 0, 0, W, H);
@@ -5328,16 +5394,16 @@ function psContext() {
       const x = gl.getExtension('WEBGL_debug_renderer_info'), vh = gl.getShaderPrecisionFormat(gl.VERTEX_SHADER, gl.HIGH_FLOAT), fh = gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.HIGH_FLOAT);
       PSG.info = 'GPU: ' + (x ? gl.getParameter(x.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)) + ' · depth ' + gl.getParameter(gl.DEPTH_BITS) + '-bit · msaa ' + gl.getParameter(gl.SAMPLES) + ' · highp vs ' + (vh ? vh.precision : 0) + ' fs ' + (fh ? fh.precision : 0) + ' · canvas ' + cv.width + '×' + cv.height + ' asp ' + (RW / RH).toFixed(3);
       const el = document.getElementById('pswInfo'); if (el) el.textContent = PSG.info;
-    } catch (e) {}
+    } catch (e) { quiet(e, 'GPU info unavailable'); }
     return PSG;
-  } catch (e) { PSG.ok = false; setStatus('Paper Swirl needs WebGL: ' + (e.message || e).slice(0, 120)); return null; }
+  } catch (e) { PSG.ok = false; reportProblem('Paper Swirl needs WebGL: ' + String(e.message || e).slice(0, 120), 'error'); return null; }
 }
 function runPaperSwirl(onDone) {
   const g = psContext();
   if (!g) { if (onDone) onDone(() => {}); return; }
   const gl = g.gl, src = psw_srcC, dst = psw_dstC, rec = recCtx14, recCanvas = recC14, disp = ctx14;
   const texA = glTex(gl, 0, src), texB = glTex(gl, 1, dst);
-  PLAYER.hooks.length = 0; PLAYER.hooks.push(() => { try { gl.deleteTexture(texA); gl.deleteTexture(texB); } catch (e) {} });
+  PLAYER.hooks.length = 0; PLAYER.hooks.push(() => { try { gl.deleteTexture(texA); gl.deleteTexture(texB); } catch (e) { quiet(e, 'texture cleanup'); } });
   const pstyle = glMode('pswstyle'), DURATION = (pstyle === 2 ? 2.5 : 2.3) / (glSl('pswSpeed', 100) / 100), tw = 2.2 * glSl('pswTwist', 100) / 100, mode = glMode('pswflow'), inv = mode === 1, rot = mode === 2 ? -Math.PI / 2 : mode === 3 ? Math.PI / 2 : 0;
   function drawFrame(el) {
     psDraw(g.R, Math.min(1, Math.max(0, el / DURATION)), texA, texB, tw, inv, rot, pstyle);
@@ -5351,7 +5417,7 @@ function runPaperSwirl(onDone) {
     if (el >= DURATION) {
       rec.clearRect(0, 0, RW, RH); rec.drawImage(dst, 0, 0);
       disp.clearRect(0, 0, W, H); disp.drawImage(recCanvas, 0, 0, W, H);
-      try { gl.deleteTexture(texA); gl.deleteTexture(texB); } catch (e) {}
+      try { gl.deleteTexture(texA); gl.deleteTexture(texB); } catch (e) { quiet(e, 'texture cleanup'); }
       const reset = () => { rec.clearRect(0, 0, RW, RH); rec.drawImage(src, 0, 0); disp.clearRect(0, 0, W, H); disp.drawImage(recCanvas, 0, 0, W, H); };
       onDone ? onDone(reset) : setTimeout(reset, 1600);
       return;
@@ -6086,7 +6152,7 @@ async function recordCanvasProper(cfg) {
         frame.close();
         enc.flush()
           .then(() => { clearTimeout(safety); enc.close(); finish(!sawError && gotChunk); })
-          .catch(() => { clearTimeout(safety); try { enc.close(); } catch (e2) {} finish(false); });
+          .catch(() => { clearTimeout(safety); try { enc.close(); } catch (e2) { quiet(e2, 'probe encoder close'); } finish(false); });
       } catch (e) {
         clearTimeout(safety); finish(false);
       }
@@ -6359,19 +6425,19 @@ async function recordCanvasProper(cfg) {
  * Chrome's MediaRecorder frequently omitting a correct WebM Duration.
  */
 function recordCanvasLegacy(cfg) {
-  if (!window.MediaRecorder) { setStatus('⚠️ MediaRecorder not supported — use Chrome or Edge.'); return; }
+  if (!window.MediaRecorder) { reportProblem('MediaRecorder is not supported — use Chrome or Edge. Nothing was recorded.', 'error'); return; }
   if (aIsTransparent || bIsTransparent) {
     // captureStream()+MediaRecorder composites onto an opaque background —
     // there's no alpha-preserving path here, unlike recordCanvasProper.
-    setStatus('ℹ️ Note: this fallback recorder can\u2019t preserve transparency — background will be solid.');
+    reportProblem('This fallback recorder can\u2019t preserve transparency — the background will be solid.', 'warn');
   }
   const candidates = ['video/mp4;codecs=avc1.640028','video/mp4;codecs=avc1.4D4028','video/mp4;codecs=avc1','video/mp4','video/webm;codecs=vp8','video/webm'];
   const mime = candidates.find(m => MediaRecorder.isTypeSupported(m)) || 'video/webm';
   const ext  = mime.startsWith('video/mp4') ? '.mp4' : '.webm';
   const fn   = cfg.recordFilename.replace(/\.(mp4|webm)$/i, '') + ext;
   let stream, rec, chunks = [], recStart = 0;
-  try { stream = cfg.recCanvas.captureStream(60); } catch(e) { setStatus('⚠️ captureStream: ' + e.message); return; }
-  try { rec = new MediaRecorder(stream, {mimeType:mime, videoBitsPerSecond:(RH > 1440 ? 50_000_000 : 15_000_000)}); } catch(e) { setStatus('⚠️ Recorder init failed.'); return; }
+  try { stream = cfg.recCanvas.captureStream(60); } catch(e) { reportProblem('captureStream failed: ' + e.message + '. Nothing was recorded.', 'error'); return; }
+  try { rec = new MediaRecorder(stream, {mimeType:mime, videoBitsPerSecond:(RH > 1440 ? 50_000_000 : 15_000_000)}); } catch(e) { reportProblem('The recorder could not start (' + (e.message || e) + '). Nothing was recorded.', 'error'); return; }
   rec.ondataavailable = e => { if (e.data && e.data.size > 0) chunks.push(e.data); };
   rec.onstop = async () => {
     const durationMs = Date.now() - recStart;
@@ -6712,45 +6778,44 @@ Object.keys(TRANSITIONS).forEach(registerTransition);
 // Draw initial scenes, hook up file inputs.
 // ══════════════════════════════════════════════════════════════════════════
 
+// ══════════════════════════════════════════════════════════════════════════
+// SCENE REGISTRY — the ONE place that lists every transition's canvases.
+// Each row ties a transition to its A canvas (src), its B canvas (dst), and
+// the pair that shows it on the page: the full-size record canvas (rec,recCtx)
+// and the on-page canvas (ctx). Everything that has to touch "every
+// transition" — painting the defaults, loading a picture into A or B, making
+// a slot transparent, swapping A and B, repainting idle previews — loops over
+// this table. To add a transition: create its canvases, add ONE row here.
+// ══════════════════════════════════════════════════════════════════════════
+const SCENES = [
+  { key: 'bubbles',          src: bub_srcC,    dst: bub_dstC,    rec: recC3,  recCtx: recCtx3,  ctx: ctx3  },
+  { key: 'particles',        src: par_srcC,    dst: par_dstC,    rec: recC4,  recCtx: recCtx4,  ctx: ctx4  },
+  { key: 'tileDrop',         src: td_srcC,     dst: td_dstC,     rec: recC5,  recCtx: recCtx5,  ctx: ctx5  },
+  { key: 'coneRefraction',   src: cone_srcC,   dst: cone_dstC,   rec: recC6,  recCtx: recCtx6,  ctx: ctx6  },
+  { key: 'pagePeel',         src: peel_srcC,   dst: peel_dstC,   rec: recC7,  recCtx: recCtx7,  ctx: ctx7  },
+  { key: 'crumble',          src: crumble_srcC,dst: crumble_dstC,rec: recC8,  recCtx: recCtx8,  ctx: ctx8  },
+  { key: 'cubeAssembly',     src: cube_srcC,   dst: cube_dstC,   rec: recC9,  recCtx: recCtx9,  ctx: ctx9  },
+  { key: 'rippleRefraction', src: rip_srcC,    dst: rip_dstC,    rec: recC10, recCtx: recCtx10, ctx: ctx10 },
+  { key: 'caustics',         src: cau_srcC,    dst: cau_dstC,    rec: recC11, recCtx: recCtx11, ctx: ctx11 },
+  { key: 'glassOrb',         src: orb_srcC,    dst: orb_dstC,    rec: recC12, recCtx: recCtx12, ctx: ctx12 },
+  { key: 'liquidChrome',     src: chr_srcC,    dst: chr_dstC,    rec: recC13, recCtx: recCtx13, ctx: ctx13 },
+  { key: 'paperSwirl',       src: psw_srcC,    dst: psw_dstC,    rec: recC14, recCtx: recCtx14, ctx: ctx14 },
+  { key: 'emberBurn',        src: emb_srcC,    dst: emb_dstC,    rec: recC15, recCtx: recCtx15, ctx: ctx15 },
+  { key: 'frostGrow',        src: frz_srcC,    dst: frz_dstC,    rec: recC16, recCtx: recCtx16, ctx: ctx16 },
+  { key: 'photonTorpedo',    src: pt_srcC,     dst: pt_dstC,     rec: recC17, recCtx: recCtx17, ctx: ctx17 },
+  { key: 'bulletHoles',      src: bh_srcC,     dst: bh_dstC,     rec: recC18, recCtx: recCtx18, ctx: ctx18, resetT: true },
+];
+// Splash and Solidify keep their own screen-size (W×H) scenes: milk→butter and trimmings→tallow.
+const SCREEN_SRC = [milkC, trimC], SCREEN_DST = [butC, talC];
+const ALL_SRC = SCREEN_SRC.concat(SCENES.map(c => c.src));
+const ALL_DST = SCREEN_DST.concat(SCENES.map(c => c.dst));
+
 // ── Paint default scenes ─────────────────────────────────────────────────
-// Transitions 1 & 2 keep their bespoke scenes (milk/butter, trimmings/tallow).
-// Transitions 3, 4, 5 use the global A/B defaults.
 drawMilk     (milkC.getContext('2d'), W, H);
 drawButter   (butC.getContext('2d'),  W, H);
 drawTrimmings(trimC.getContext('2d'), W, H);
 drawTallow   (talC.getContext('2d'),  W, H);
-drawDefaultA (bub_srcC.getContext('2d'), RW, RH);
-drawDefaultB (bub_dstC.getContext('2d'), RW, RH);
-drawDefaultA (par_srcC.getContext('2d'), RW, RH);
-drawDefaultB (par_dstC.getContext('2d'), RW, RH);
-drawDefaultA (td_srcC.getContext('2d'),  RW, RH);
-drawDefaultB (td_dstC.getContext('2d'),  RW, RH);
-drawDefaultA (cone_srcC.getContext('2d'), RW, RH);
-drawDefaultB (cone_dstC.getContext('2d'), RW, RH);
-drawDefaultA (peel_srcC.getContext('2d'), RW, RH);
-drawDefaultB (peel_dstC.getContext('2d'), RW, RH);
-drawDefaultA (crumble_srcC.getContext('2d'), RW, RH);
-drawDefaultB (crumble_dstC.getContext('2d'), RW, RH);
-drawDefaultA (cube_srcC.getContext('2d'), RW, RH);
-drawDefaultB (cube_dstC.getContext('2d'), RW, RH);
-drawDefaultA (rip_srcC.getContext('2d'), RW, RH);
-drawDefaultB (rip_dstC.getContext('2d'), RW, RH);
-drawDefaultA (cau_srcC.getContext('2d'), RW, RH);
-drawDefaultB (cau_dstC.getContext('2d'), RW, RH);
-drawDefaultA (orb_srcC.getContext('2d'), RW, RH);
-drawDefaultB (orb_dstC.getContext('2d'), RW, RH);
-drawDefaultA (chr_srcC.getContext('2d'), RW, RH);
-drawDefaultB (chr_dstC.getContext('2d'), RW, RH);
-drawDefaultA (psw_srcC.getContext('2d'), RW, RH);
-drawDefaultB (psw_dstC.getContext('2d'), RW, RH);
-drawDefaultA (emb_srcC.getContext('2d'), RW, RH);
-drawDefaultB (emb_dstC.getContext('2d'), RW, RH);
-drawDefaultA (frz_srcC.getContext('2d'), RW, RH);
-drawDefaultB (frz_dstC.getContext('2d'), RW, RH);
-drawDefaultA (pt_srcC.getContext('2d'), RW, RH);
-drawDefaultB (pt_dstC.getContext('2d'), RW, RH);
-drawDefaultA (bh_srcC.getContext('2d'), RW, RH);
-drawDefaultB (bh_dstC.getContext('2d'), RW, RH);
+SCENES.forEach(c => { drawDefaultA(c.src.getContext('2d'), RW, RH); drawDefaultB(c.dst.getContext('2d'), RW, RH); });
 
 // Page peel's fixed "back of paper" texture — plain and unrelated to A/B,
 // same reasoning as real paper: the back looks the same regardless of
@@ -6765,29 +6830,14 @@ drawDefaultB (bh_dstC.getContext('2d'), RW, RH);
 })();
 
 // ── Render initial frames to display canvases ────────────────────────────
+// (refreshAllIdle() below does the same job and is called again on every load.)
 ctx1.drawImage(milkC, 0, 0); recCtx1.drawImage(milkC, 0, 0, RW, RH);
 ctx2.drawImage(trimC, 0, 0); recCtx2.drawImage(trimC, 0, 0, RW, RH);
-recCtx3.drawImage(bub_srcC, 0, 0); ctx3.drawImage(recC3, 0, 0, W, H);
-recCtx4.drawImage(par_srcC, 0, 0); ctx4.drawImage(recC4, 0, 0, W, H);
-recCtx5.drawImage(td_srcC,  0, 0); ctx5.drawImage(recC5, 0, 0, W, H);
-recCtx6.drawImage(cone_srcC, 0, 0); ctx6.drawImage(recC6, 0, 0, W, H);
-recCtx7.drawImage(peel_srcC, 0, 0); ctx7.drawImage(recC7, 0, 0, W, H);
-recCtx8.drawImage(crumble_srcC, 0, 0); ctx8.drawImage(recC8, 0, 0, W, H);
-recCtx9.drawImage(cube_srcC, 0, 0); ctx9.drawImage(recC9, 0, 0, W, H);
-recCtx10.drawImage(rip_srcC, 0, 0); ctx10.drawImage(recC10, 0, 0, W, H);
-recCtx11.drawImage(cau_srcC, 0, 0); ctx11.drawImage(recC11, 0, 0, W, H);
-recCtx12.drawImage(orb_srcC, 0, 0); ctx12.drawImage(recC12, 0, 0, W, H);
-recCtx13.drawImage(chr_srcC, 0, 0); ctx13.drawImage(recC13, 0, 0, W, H);
-recCtx14.drawImage(psw_srcC, 0, 0); ctx14.drawImage(recC14, 0, 0, W, H);
-recCtx15.drawImage(emb_srcC, 0, 0); ctx15.drawImage(recC15, 0, 0, W, H);
-recCtx16.drawImage(frz_srcC, 0, 0); ctx16.drawImage(recC16, 0, 0, W, H);
-recCtx17.drawImage(pt_srcC, 0, 0); ctx17.drawImage(recC17, 0, 0, W, H);
-recCtx18.drawImage(bh_srcC, 0, 0); ctx18.drawImage(recC18, 0, 0, W, H);
+SCENES.forEach(c => { c.recCtx.drawImage(c.src, 0, 0); c.ctx.drawImage(c.rec, 0, 0, W, H); });
 
 // ── File inputs — A = source (all transitions), B = destination (all transitions) ──
 //
-// Source canvases:  milkC, trimC (4K),  bub_srcC, par_srcC, td_srcC, cone_srcC, peel_srcC, crumble_srcC, cube_srcC, rip_srcC (1080p)
-// Dest canvases:   butC,  talC  (4K),  bub_dstC, par_dstC, td_dstC, cone_dstC, peel_dstC, crumble_dstC, cube_dstC, rip_dstC (1080p)
+// Every transition's canvases are listed once, in the SCENES table above (plus milk/trim/butter/tallow at screen size).
 //
 // On load: image is drawn cover-cropped into every canvas of the correct size,
 // then all idle display canvases are refreshed.
@@ -6795,22 +6845,12 @@ recCtx18.drawImage(bh_srcC, 0, 0); ctx18.drawImage(recC18, 0, 0, W, H);
 function refreshAllIdle() {
   if (!TRANSITIONS.splash.running)   { ctx1.clearRect(0,0,W,H); ctx1.drawImage(milkC, 0,0); recCtx1.clearRect(0,0,RW,RH); recCtx1.drawImage(milkC, 0,0,RW,RH); }
   if (!TRANSITIONS.solidify.running) { ctx2.clearRect(0,0,W,H); ctx2.drawImage(trimC, 0,0); recCtx2.clearRect(0,0,RW,RH); recCtx2.drawImage(trimC, 0,0,RW,RH); }
-  if (!TRANSITIONS.bubbles.running)  { recCtx3.clearRect(0,0,RW,RH); recCtx3.drawImage(bub_srcC,0,0); ctx3.clearRect(0,0,W,H); ctx3.drawImage(recC3,0,0,W,H); }
-  if (!TRANSITIONS.particles.running){ recCtx4.clearRect(0,0,RW,RH); recCtx4.drawImage(par_srcC,0,0); ctx4.clearRect(0,0,W,H); ctx4.drawImage(recC4,0,0,W,H); }
-  if (!TRANSITIONS.tileDrop.running) { recCtx5.clearRect(0,0,RW,RH); recCtx5.drawImage(td_srcC, 0,0); ctx5.clearRect(0,0,W,H); ctx5.drawImage(recC5,0,0,W,H); }
-  if (!TRANSITIONS.coneRefraction.running) { recCtx6.clearRect(0,0,RW,RH); recCtx6.drawImage(cone_srcC, 0,0); ctx6.clearRect(0,0,W,H); ctx6.drawImage(recC6,0,0,W,H); }
-  if (!TRANSITIONS.pagePeel.running) { recCtx7.clearRect(0,0,RW,RH); recCtx7.drawImage(peel_srcC, 0,0); ctx7.clearRect(0,0,W,H); ctx7.drawImage(recC7,0,0,W,H); }
-  if (!TRANSITIONS.crumble.running)  { recCtx8.clearRect(0,0,RW,RH); recCtx8.drawImage(crumble_srcC, 0,0); ctx8.clearRect(0,0,W,H); ctx8.drawImage(recC8,0,0,W,H); }
-  if (!TRANSITIONS.cubeAssembly.running) { recCtx9.clearRect(0,0,RW,RH); recCtx9.drawImage(cube_srcC, 0,0); ctx9.clearRect(0,0,W,H); ctx9.drawImage(recC9,0,0,W,H); }
-  if (!TRANSITIONS.rippleRefraction.running) { recCtx10.clearRect(0,0,RW,RH); recCtx10.drawImage(rip_srcC, 0,0); ctx10.clearRect(0,0,W,H); ctx10.drawImage(recC10,0,0,W,H); }
-  if (!TRANSITIONS.caustics.running) { recCtx11.clearRect(0,0,RW,RH); recCtx11.drawImage(cau_srcC, 0,0); ctx11.clearRect(0,0,W,H); ctx11.drawImage(recC11,0,0,W,H); }
-  if (!TRANSITIONS.glassOrb.running) { recCtx12.clearRect(0,0,RW,RH); recCtx12.drawImage(orb_srcC, 0,0); ctx12.clearRect(0,0,W,H); ctx12.drawImage(recC12,0,0,W,H); }
-  if (!TRANSITIONS.liquidChrome.running) { recCtx13.clearRect(0,0,RW,RH); recCtx13.drawImage(chr_srcC, 0,0); ctx13.clearRect(0,0,W,H); ctx13.drawImage(recC13,0,0,W,H); }
-  if (!TRANSITIONS.bulletHoles.running) { recCtx18.setTransform(1,0,0,1,0,0); recCtx18.clearRect(0,0,RW,RH); recCtx18.drawImage(bh_srcC, 0,0); ctx18.clearRect(0,0,W,H); ctx18.drawImage(recC18,0,0,W,H); }
-  if (!TRANSITIONS.photonTorpedo.running) { recCtx17.clearRect(0,0,RW,RH); recCtx17.drawImage(pt_srcC, 0,0); ctx17.clearRect(0,0,W,H); ctx17.drawImage(recC17,0,0,W,H); }
-  if (!TRANSITIONS.frostGrow.running) { recCtx16.clearRect(0,0,RW,RH); recCtx16.drawImage(frz_srcC, 0,0); ctx16.clearRect(0,0,W,H); ctx16.drawImage(recC16,0,0,W,H); }
-  if (!TRANSITIONS.emberBurn.running) { recCtx15.clearRect(0,0,RW,RH); recCtx15.drawImage(emb_srcC, 0,0); ctx15.clearRect(0,0,W,H); ctx15.drawImage(recC15,0,0,W,H); }
-  if (!TRANSITIONS.paperSwirl.running) { recCtx14.clearRect(0,0,RW,RH); recCtx14.drawImage(psw_srcC, 0,0); ctx14.clearRect(0,0,W,H); ctx14.drawImage(recC14,0,0,W,H); }
+  SCENES.forEach(c => {
+    if (TRANSITIONS[c.key].running) return;
+    if (c.resetT) c.recCtx.setTransform(1,0,0,1,0,0);
+    c.recCtx.clearRect(0,0,RW,RH); c.recCtx.drawImage(c.src, 0,0);
+    c.ctx.clearRect(0,0,W,H); c.ctx.drawImage(c.rec, 0,0,W,H);
+  });
 }
 
 document.getElementById('fA').addEventListener('change', function() {
@@ -6818,7 +6858,7 @@ document.getElementById('fA').addEventListener('change', function() {
   loadFromFile(this.files[0], img => {
     // Paint into all source canvases at their respective resolutions
     [milkC, trimC].forEach(c => drawCover(c.getContext('2d'), img, W,  H));
-    [bub_srcC, par_srcC, td_srcC, cone_srcC, peel_srcC, crumble_srcC, cube_srcC, rip_srcC, cau_srcC, orb_srcC, chr_srcC, psw_srcC, emb_srcC, frz_srcC, pt_srcC, bh_srcC].forEach(c => drawCover(c.getContext('2d'), img, RW, RH));
+    SCENES.map(c => c.src).forEach(c => drawCover(c.getContext('2d'), img, RW, RH));
     refreshAllIdle();
     setLbl('lblA', this.files[0].name);
     aIsTransparent = false;
@@ -6830,7 +6870,7 @@ document.getElementById('fB').addEventListener('change', function() {
   loadFromFile(this.files[0], img => {
     // Paint into all destination canvases at their respective resolutions
     [butC, talC].forEach(c => drawCover(c.getContext('2d'), img, W,  H));
-    [bub_dstC, par_dstC, td_dstC, cone_dstC, peel_dstC, crumble_dstC, cube_dstC, rip_dstC, cau_dstC, orb_dstC, chr_dstC, psw_dstC, emb_dstC, frz_dstC, pt_dstC, bh_dstC].forEach(c => drawCover(c.getContext('2d'), img, RW, RH));
+    SCENES.map(c => c.dst).forEach(c => drawCover(c.getContext('2d'), img, RW, RH));
     setLbl('lblB', this.files[0].name);
     bIsTransparent = false;
   });
@@ -6867,10 +6907,12 @@ document.getElementById('fB').addEventListener('change', function() {
 //     black. Worth a quick test import before relying on it.
 let aIsTransparent = false, bIsTransparent = false;
 
+const SLOT_HOOKS = { transparent: [] };   // other features (e.g. the auto-4K carry-over) register callbacks here instead of wrapping the function
 function setSlotTransparent(which) {
+  SLOT_HOOKS.transparent.forEach(fn => fn(which));
   if (which === 'A') {
     [milkC, trimC].forEach(c => c.getContext('2d').clearRect(0, 0, c.width, c.height));
-    [bub_srcC, par_srcC, td_srcC, cone_srcC, peel_srcC, crumble_srcC, cube_srcC, rip_srcC, cau_srcC, orb_srcC, chr_srcC, psw_srcC, emb_srcC, frz_srcC, pt_srcC, bh_srcC].forEach(c => c.getContext('2d').clearRect(0, 0, RW, RH));
+    SCENES.map(c => c.src).forEach(c => c.getContext('2d').clearRect(0, 0, RW, RH));
     refreshAllIdle();
     document.getElementById('fA').value = '';
     const el = document.getElementById('lblA');
@@ -6878,7 +6920,7 @@ function setSlotTransparent(which) {
     aIsTransparent = true;
   } else {
     [butC, talC].forEach(c => c.getContext('2d').clearRect(0, 0, c.width, c.height));
-    [bub_dstC, par_dstC, td_dstC, cone_dstC, peel_dstC, crumble_dstC, cube_dstC, rip_dstC, cau_dstC, orb_dstC, chr_dstC, psw_dstC, emb_dstC, frz_dstC, pt_dstC, bh_dstC].forEach(c => c.getContext('2d').clearRect(0, 0, RW, RH));
+    SCENES.map(c => c.dst).forEach(c => c.getContext('2d').clearRect(0, 0, RW, RH));
     document.getElementById('fB').value = '';
     const el = document.getElementById('lblB');
     el.textContent = '◱ Transparent'; el.style.color = '#4a9e5c';
@@ -6888,8 +6930,8 @@ function setSlotTransparent(which) {
 document.getElementById('btnATransparent').addEventListener('click', () => setSlotTransparent('A'));
 document.getElementById('btnBTransparent').addEventListener('click', () => setSlotTransparent('B'));
 // ── Swap A and B ─ the ⇄ button between the two pickers ──
-const AB_SRC = [milkC, trimC, bub_srcC, par_srcC, td_srcC, cone_srcC, peel_srcC, crumble_srcC, cube_srcC, rip_srcC, cau_srcC, orb_srcC, chr_srcC, psw_srcC, emb_srcC, frz_srcC, pt_srcC, bh_srcC];
-const AB_DST = [butC, talC, bub_dstC, par_dstC, td_dstC, cone_dstC, peel_dstC, crumble_dstC, cube_dstC, rip_dstC, cau_dstC, orb_dstC, chr_dstC, psw_dstC, emb_dstC, frz_dstC, pt_dstC, bh_dstC];
+const AB_SRC = ALL_SRC;
+const AB_DST = ALL_DST;
 function swapAB() {
   if (Object.keys(TRANSITIONS).some(k => TRANSITIONS[k].running)) return;
   const tmp = document.createElement('canvas');
@@ -7019,15 +7061,15 @@ document.getElementById('btnSwapAB').addEventListener('click', e => {
   }
   async function go() {
     let saved = false;
-    try { await kv('readwrite', st => st.put({ A: FILES.A, B: FILES.B, aT: aIsTransparent, bT: bIsTransparent }, 'pending')); saved = true; } catch (e) {}
+    try { await kv('readwrite', st => st.put({ A: FILES.A, B: FILES.B, aT: aIsTransparent, bT: bIsTransparent }, 'pending')); saved = true; } catch (e) { quiet(e, 'IndexedDB unavailable, trying window.name'); }
     if (!saved) {                                                       // no IndexedDB (private window, strict settings): carry the pictures in window.name, which survives a reload of the same tab
       try {
         const enc = f => new Promise(ok => { if (!f) return ok(null); const r = new FileReader(); r.onload = () => ok({ n: f.name, t: f.type, d: r.result }); r.onerror = () => ok(null); r.readAsDataURL(f); });
         window.name = 'FATPENDING:' + JSON.stringify({ A: await enc(FILES.A), B: await enc(FILES.B), aT: aIsTransparent, bT: bIsTransparent });
-      } catch (e) {}
+      } catch (e) { reportProblem('Could not carry your pictures over to 4K mode: ' + (e.message || e), 'warn'); }
     }
-    try { sessionStorage.setItem('fat.pend', '1'); } catch (e) {}
-    try { localStorage.setItem('fat.res', '4k'); } catch (e) {}
+    try { sessionStorage.setItem('fat.pend', '1'); } catch (e) { quiet(e, 'sessionStorage blocked'); }
+    try { localStorage.setItem('fat.res', '4k'); } catch (e) { reportProblem('Your browser blocked saving the 4K setting, so the page may reload at 1080p: ' + e.message, 'warn'); }
     const u = new URL(location.href); u.searchParams.delete('res'); location.href = u.href;
   }
   ['A', 'B'].forEach(slot => document.getElementById(slot === 'A' ? 'fA' : 'fB').addEventListener('change', async function () {
@@ -7037,28 +7079,28 @@ document.getElementById('btnSwapAB').addEventListener('click', e => {
       const bm = await createImageBitmap(f), big = Math.max(bm.width, bm.height) >= 3000 || Math.min(bm.width, bm.height) >= 1700; bm.close();
       if (!big || offered) return; offered = true;
       if (Object.keys(TRANSITIONS).some(k => TRANSITIONS[k].running)) { offered = false; return; }
-      toast('That picture is 4K.', 5, go, () => { try { sessionStorage.setItem('noAuto4k', '1'); } catch (e) {} });
-    } catch (e) {}
+      toast('That picture is 4K.', 5, go, () => { try { sessionStorage.setItem('noAuto4k', '1'); } catch (e) { quiet(e, 'sessionStorage blocked'); } });
+    } catch (e) { quiet(e, 'could not check the picture size for auto-4K'); }
   }));
   // keep the remembered files in step with transparent / swapped slots
-  const _st = setSlotTransparent; window.setSlotTransparent = function (w) { FILES[w] = null; return _st.apply(this, arguments); };
+  SLOT_HOOKS.transparent.push(w => { FILES[w] = null; });
   document.getElementById('btnSwapAB').addEventListener('click', () => { const t = FILES.A; FILES.A = FILES.B; FILES.B = t; });
   // arrived here from a switch to 4K: put the pictures back
   if (RES_4K) (async () => {
-    let want = false; try { want = sessionStorage.getItem('fat.pend') === '1'; sessionStorage.removeItem('fat.pend'); } catch (e) {}
+    let want = false; try { want = sessionStorage.getItem('fat.pend') === '1'; sessionStorage.removeItem('fat.pend'); } catch (e) { quiet(e, 'sessionStorage blocked'); }
     let p = null;
-    try { p = await kv('readwrite', st => st.get('pending')); if (p) await kv('readwrite', st => st.delete('pending')); } catch (e) {}
+    try { p = await kv('readwrite', st => st.get('pending')); if (p) await kv('readwrite', st => st.delete('pending')); } catch (e) { quiet(e, 'IndexedDB read failed'); }
     if (!p && /^FATPENDING:/.test(window.name)) {
       try {
         const q = JSON.parse(window.name.slice(11)); window.name = '';
         const dec = async o => o ? new File([await (await fetch(o.d)).blob()], o.n, { type: o.t }) : null;
         p = { A: await dec(q.A), B: await dec(q.B), aT: q.aT, bT: q.bT };
-      } catch (e) {}
+      } catch (e) { quiet(e, 'window.name carry-over unreadable'); }
     }
     if (!p) { if (want) toast2('Your pictures could not be carried over to 4K mode. Drop them in again.'); return; }
     const put = (slot, f) => { const inp = document.getElementById(slot === 'A' ? 'fA' : 'fB'), dt = new DataTransfer(); dt.items.add(f); inp.files = dt.files; inp.dispatchEvent(new Event('change')); };
-    if (p.A) put('A', p.A); else if (p.aT) _st('A');
-    if (p.B) put('B', p.B); else if (p.bT) _st('B');
+    if (p.A) put('A', p.A); else if (p.aT) setSlotTransparent('A');
+    if (p.B) put('B', p.B); else if (p.bT) setSlotTransparent('B');
   })();
   function toast2(msg) {
     const t = document.createElement('div'); t.textContent = msg;
@@ -7128,7 +7170,7 @@ document.getElementById('alphaWarnClose').addEventListener('click', () => {
     b.addEventListener('click', () => {
       if (on || anyRunning()) return;
       if (b.dataset.res === '4k' && !confirm('Switch to real 4K (3840×2160)?\n\nEvery transition then renders and records at 4K. That needs a lot of memory (several GB) and plays much slower than 1080p. The page reloads, and your own A/B pictures need loading again.')) return;
-      try { localStorage.setItem('fat.res', b.dataset.res === '4k' ? '4k' : '1080'); } catch (e) {}
+      try { localStorage.setItem('fat.res', b.dataset.res === '4k' ? '4k' : '1080'); } catch (e) { reportProblem('Your browser blocked saving the resolution choice, so the switch may not stick: ' + e.message, 'warn'); }
       const u = new URL(location.href); u.searchParams.delete('res'); location.href = u.href;
     });
   });
@@ -7306,24 +7348,24 @@ document.getElementById('alphaWarnClose').addEventListener('click', () => {
   
   function go(v, fromPop) {                                      // v: 'grid' | 'all' | slug
     if (anyRunning()) {
-      if (PLAYER.recording()) { setStatus('Wait for the current Record to finish before switching transitions.'); return false; }
+      if (PLAYER.recording()) { reportProblem('Wait for the current Record to finish before switching transitions.', 'warn'); return false; }
       PLAYER.cancel();                                           // playing: just stop it and move on
     }
     if (flipping) {
       if (flipState && !flipState.closing && !flipState.aborted && v === 'grid') {      // Esc / click-out before it has finished opening: turn straight round from wherever it got to
-        flipState.aborted = true; flipState.all.forEach(x => { try { x.reverse(); } catch (e) {} });
-        if (!fromPop) { try { history.pushState(null, '', location.pathname + location.search); } catch (e) {} }
+        flipState.aborted = true; flipState.all.forEach(x => { try { x.reverse(); } catch (e) { quiet(e, 'animation reverse'); } });
+        if (!fromPop) { try { history.pushState(null, '', location.pathname + location.search); } catch (e) { quiet(e, 'history.pushState'); } }
         return true;
       }
       return false;
     }
     const leaving = secs.find(q => q.slug === view);
     if (v === 'grid' && leaving && !fromPop && flipRun(cards[leaving.i], leaving.sec, true, () => show('grid'))) {
-      try { history.pushState(null, '', location.pathname + location.search); } catch (e) {}
+      try { history.pushState(null, '', location.pathname + location.search); } catch (e) { quiet(e, 'history.pushState'); }
       return true;                                               // the view flips back into its thumbnail, then the grid takes over
     }
     show(v);                                                     // never depends on the address bar
-    if (!fromPop) { try { history.pushState(null, '', v === 'grid' ? location.pathname + location.search : '#' + v); } catch (e) {} }
+    if (!fromPop) { try { history.pushState(null, '', v === 'grid' ? location.pathname + location.search : '#' + v); } catch (e) { quiet(e, 'history.pushState'); } }
     return true;
   }
   const fromHash = () => {
@@ -7374,7 +7416,7 @@ document.getElementById('alphaWarnClose').addEventListener('click', () => {
       if (bd && bd.animate) all.push(bd.animate([{ opacity: 0 }, { opacity: 1 }], { duration: DUR * .8, easing: 'ease-out', direction: dir, fill: 'both' }));
       if (bb && bb.animate) all.push(bb.animate([{ opacity: 0 }, { opacity: 0, offset: .7 }, { opacity: 1 }], { duration: DUR, direction: dir, fill: 'both' }));
       const st = flipState = { all, closing: reverse, aborted: false };
-      const cleanup = () => { all.forEach(x => { try { x.cancel(); } catch (e) {} }); front.remove(); sec.style.backfaceVisibility = ''; if (flipState === st) { flipState = null; flipping = false; } };
+      const cleanup = () => { all.forEach(x => { try { x.cancel(); } catch (e) { quiet(e, 'animation cancel'); } }); front.remove(); sec.style.backfaceVisibility = ''; if (flipState === st) { flipState = null; flipping = false; } };
       flipping = true;
       a2.onfinish = () => { cleanup(); if (reverse || st.aborted) { if (onEnd) onEnd(); } };
       a2.oncancel = () => { if (flipState === st) cleanup(); };
@@ -7421,7 +7463,7 @@ document.getElementById('alphaWarnClose').addEventListener('click', () => {
     let h = cards.findIndex(c => c.matches(':hover')); if (h < 0) h = cards.indexOf(document.activeElement);
     if (h < 0) return;
     e.preventDefault(); e.stopImmediatePropagation();               // before the player's own Space handler
-    if (PLAYER.recording()) { setStatus('Wait for the current Record to finish first.'); return; }
+    if (PLAYER.recording()) { reportProblem('Wait for the current Record to finish first.', 'warn'); return; }
     const was = prev; stopPrev();
     if (anyRunning()) PLAYER.cancel();                              // only one at a time
     if (was === h) return;                                          // Space again on the same card = stop it
