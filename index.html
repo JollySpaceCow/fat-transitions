@@ -780,6 +780,7 @@
     bulletHoles:  () => 5.0 / (sv('bhSpeed', 100) / 100),
     paperSwirl:   () => (document.querySelector('.pswstyle.pswstyle-active[data-mode="2"]') ? 2.5 : 2.3) / (sv('pswSpeed', 100) / 100),
     caustics:     () => 4.2 / (sv('cauSpeed', 100) / 100),
+    pxfDistort:   () => (PXMODES.find(x => x.id === glMode('pxmode')) || PXMODES[0]).base / (sv('px0Speed', 100) / 100),
   };
   const cardOf = k => { const b = document.getElementById(TRANSITIONS[k].playBtnId); return b && (b.closest('.tsec') || b.parentElement.parentElement); };
   function sigOf(k) {
@@ -1139,6 +1140,7 @@ function quiet(err, what) {
 }
 window.addEventListener('error', e => {
   if (/ResizeObserver loop/.test(e.message || '')) return;
+  if (e.target && e.target !== window && e.target.tagName === 'LINK') { quiet(null, 'icon or stylesheet link failed to load: ' + (e.target.href || '')); return; }
   if (e.target && e.target !== window) { reportProblem('A resource failed to load: ' + (e.target.src || e.target.href || e.target.tagName), 'warn'); return; }
   reportProblem('Uncaught error: ' + (e.message || 'unknown') + (e.lineno ? ' (line ' + e.lineno + ')' : ''), 'error');
 }, true);
@@ -5844,6 +5846,243 @@ const AIM = {};
 })();
 
 // ══════════════════════════════════════════════════════════════════════════
+// PXF TRANSITIONS · four transitions built on the PxF_Distort idea (Pixelfudger, © Xavier Bourque, pixelfudger.com).
+// PxF_Distort fakes glass refraction by taking an "edge-detected" deformation map: it differences a lens channel by 1px in x and y, blurs
+// that slope, and uses it to push pixels sideways. Here the lens channel is an automatic key made from picture A itself (luma, saturation
+// or distance from a colour) that sweeps across the frame, so no hand-made alpha is needed. Every edge of the sweeping key refracts.
+//   0 Luma melt      — bright regions flip to B first; every contour of A becomes a glass edge.
+//   1 Glass drops    — the same sweep on a blurred, wobbling key: soft blobs that swell like drops of glass.
+//   2 Edge smear     — the "inflate" use: A's colours are dragged outward over B as its key retreats.
+//   3 Subject portal — the key finds the colourful subject; B opens through it, then the hole spreads over the frame.
+// One engine does all four (WebGL 2, float render targets): lens → slope → blur → distort, at half resolution for the slope maps.
+// ══════════════════════════════════════════════════════════════════════════
+// Default pictures for the PxF transitions: these need real contours (a sun, ridgelines, a saturated subject) to show off, unlike the smooth gradients the other transitions use.
+function drawPxA(g, w, h) {
+  let sd = 11; const r = () => (sd = (sd * 16807) % 2147483647) / 2147483647;
+  const sky = g.createLinearGradient(0, 0, 0, h); sky.addColorStop(0, '#1b2a5c'); sky.addColorStop(.45, '#c8567a'); sky.addColorStop(.72, '#ffb15c'); sky.addColorStop(1, '#ffe2a0'); g.fillStyle = sky; g.fillRect(0, 0, w, h);
+  for (let i = 0; i < 160; i++) { g.fillStyle = 'rgba(255,255,255,' + (.25 + r() * .6) + ')'; g.beginPath(); g.arc(r() * w, r() * h * .42, (.8 + r() * 1.6) * w / 1920, 0, 7); g.fill(); }
+  const sun = g.createRadialGradient(w * .72, h * .58, 0, w * .72, h * .58, h * .5); sun.addColorStop(0, 'rgba(255,250,215,1)'); sun.addColorStop(.28, 'rgba(255,214,120,1)'); sun.addColorStop(.3, 'rgba(255,170,90,.55)'); sun.addColorStop(1, 'rgba(255,120,60,0)'); g.fillStyle = sun; g.fillRect(0, 0, w, h);
+  for (let k = 0; k < 6; k++) { g.fillStyle = 'rgba(255,230,200,' + (.16 - k * .02) + ')'; const y = h * (.2 + k * .07), x = r() * w * .7; g.beginPath(); g.ellipse(x + w * .15, y, w * (.14 + r() * .1), h * .02, 0, 0, 7); g.fill(); }
+  const ridge = (base, amp, col, seed) => { g.fillStyle = col; g.beginPath(); g.moveTo(0, h); for (let x = 0; x <= w; x += w / 60) g.lineTo(x, h * base - amp * h * (Math.sin(x / w * (5 + seed) + seed) * .55 + Math.sin(x / w * (13 + seed * 2) + seed * 3) * .3 + Math.sin(x / w * 31 + seed) * .12)); g.lineTo(w, h); g.fill(); };
+  ridge(.66, .13, '#7a3f6b', 1); ridge(.74, .1, '#3d2a52', 2); ridge(.84, .08, '#171428', 3);
+  // a saturated subject: a hot-air balloon, so the saturation key and the portal have something to find
+  const bx = w * .3, by = h * .4, br = h * .17;
+  const body = g.createRadialGradient(bx - br * .3, by - br * .3, br * .1, bx, by, br * 1.1); body.addColorStop(0, '#ff6a3d'); body.addColorStop(.6, '#e11d48'); body.addColorStop(1, '#7a0c2a');
+  g.fillStyle = body; g.beginPath(); g.ellipse(bx, by, br * .92, br, 0, 0, 7); g.fill();
+  g.fillStyle = '#ffd23f'; g.beginPath(); g.ellipse(bx, by, br * .26, br, 0, 0, 7); g.fill();
+  g.strokeStyle = '#1a1020'; g.lineWidth = 2 * w / 1920; g.beginPath(); g.moveTo(bx - br * .45, by + br * .85); g.lineTo(bx - br * .16, by + br * 1.45); g.moveTo(bx + br * .45, by + br * .85); g.lineTo(bx + br * .16, by + br * 1.45); g.stroke();
+  g.fillStyle = '#3a2418'; g.fillRect(bx - br * .18, by + br * 1.45, br * .36, br * .24);
+  g.fillStyle = 'rgba(255,255,255,.9)'; g.font = '700 ' + Math.round(h * .045) + 'px system-ui,sans-serif'; g.textAlign = 'right'; g.fillText('A', w - h * .04, h - h * .04);
+}
+function drawPxB(g, w, h) {
+  let sd = 5; const r = () => (sd = (sd * 16807) % 2147483647) / 2147483647;
+  const bg = g.createLinearGradient(0, 0, w, h); bg.addColorStop(0, '#03233b'); bg.addColorStop(.5, '#0b6b7a'); bg.addColorStop(1, '#14d1c0'); g.fillStyle = bg; g.fillRect(0, 0, w, h);
+  for (let i = 0; i < 70; i++) { const x = r() * w, y = r() * h, rad = (.015 + r() * .07) * h; const gr = g.createRadialGradient(x, y, 0, x, y, rad); const hue = 160 + r() * 60; gr.addColorStop(0, 'hsla(' + hue + ',95%,75%,.55)'); gr.addColorStop(.8, 'hsla(' + hue + ',95%,60%,.12)'); gr.addColorStop(1, 'hsla(' + hue + ',95%,60%,0)'); g.fillStyle = gr; g.beginPath(); g.arc(x, y, rad, 0, 7); g.fill(); g.strokeStyle = 'hsla(' + hue + ',100%,85%,.45)'; g.lineWidth = 1.4 * w / 1920; g.stroke(); }
+  g.strokeStyle = 'rgba(190,255,245,.16)'; g.lineWidth = 2 * w / 1920; for (let j = 0; j < 18; j++) { g.beginPath(); for (let x = 0; x <= w; x += w / 80) { const y = h * (.1 + j * .05) + Math.sin(x / w * 9 + j) * h * .02; x ? g.lineTo(x, y) : g.moveTo(x, y); } g.stroke(); }
+  for (let i = 0; i < 26; i++) { const x = r() * w, y = h * (.5 + r() * .5), s2 = (.01 + r() * .02) * h; g.fillStyle = 'rgba(255,214,120,.9)'; g.shadowColor = 'rgba(255,190,80,.9)'; g.shadowBlur = s2 * 2.5; g.beginPath(); g.arc(x, y, s2, 0, 7); g.fill(); }
+  g.shadowBlur = 0; g.fillStyle = 'rgba(255,255,255,.9)'; g.font = '700 ' + Math.round(h * .045) + 'px system-ui,sans-serif'; g.textAlign = 'right'; g.fillText('B', w - h * .04, h - h * .04);
+}
+
+// One transition, four modes. `id` is the mode number the shader uses.
+const PXMODES = [
+  { id: 0, name: 'Luma melt',      base: 4.0, key0: 0, soft: 10, blur: 10.83, gmax: 1.04 },
+  { id: 2, name: 'Edge smear',     base: 4.0, key0: 0, soft: 8,  blur: 10.83, gmax: 1.04 },
+  { id: 1, name: 'Glass drops',    base: 4.2, key0: 0, soft: 14, blur: 14,    gmax: 1.2  },
+  { id: 3, name: 'Subject portal', base: 4.2, key0: 1, soft: 10, blur: 10.83, gmax: 1.0  },
+];
+const PXM = [{ key: 'pxfDistort', title: 'PXF DISTORT', pre: 'px0', note: 'Luma melt, edge smear, glass drops, portal' }];
+PXM.forEach((m, i) => {
+  m.n = 19 + i; m.srcC = mkc(RW, RH); m.dstC = mkc(RW, RH); m.recC = mkc(RW, RH); m.recCtx = m.recC.getContext('2d');
+  const d0 = PXMODES[0];
+  const row = (id, label, min, max, step, val, unit) => '<div style="display:flex;align-items:center;gap:10px;"><span style="font-size:10px;color:var(--color-text-tertiary);width:78px;text-align:right;">' + label + '</span><input type="range" id="' + id + '" min="' + min + '" max="' + max + '" step="' + step + '" value="' + val + '" style="width:180px;"><span id="' + id + 'Val" data-unit="' + unit + '" style="font-size:11px;color:var(--color-text-secondary);min-width:44px;">' + val + unit + '</span></div>';
+  const pill = 'font-size:10px;padding:4px 11px;border-radius:14px;border:1px solid var(--color-border-secondary);background:none;cursor:pointer;color:var(--color-text-secondary);';
+  const html = '<div style="margin-bottom:14px;"><p style="font-size:11px;font-weight:500;letter-spacing:.1em;color:var(--color-text-secondary);text-align:center;margin:0 0 6px;">' + m.title + '</p>' +
+    '<canvas id="c' + m.n + '" width="3840" height="2160" style="display:block;width:100%;height:auto;border-radius:8px;border:.5px solid var(--color-border-tertiary);"></canvas>' +
+    '<div style="display:flex;gap:8px;justify-content:center;margin-top:8px;"><button id="btn' + m.n + 'p" style="font-size:12px;padding:7px 20px;">▶ Play</button><button id="btn' + m.n + 'r" style="font-size:12px;padding:7px 20px;border-color:#e05555;color:#e05555;">⏺ Record 1080p</button></div>' +
+    '<div style="display:flex;gap:6px;justify-content:center;align-items:center;margin-top:10px;flex-wrap:wrap;"><span style="font-size:10px;color:var(--color-text-tertiary);">Mode:</span>' + PXMODES.map(md => '<button class="pxmode" data-mode="' + md.id + '" style="' + pill + '">' + md.name + '</button>').join('') + '</div>' +
+    '<div style="display:flex;flex-direction:column;gap:6px;align-items:center;margin-top:10px;">' +
+    row(m.pre + 'Speed', 'Speed', 40, 200, 1, 100, '%') + row(m.pre + 'Refr', 'Refraction', 0, 300, 1, 100, '%') + row(m.pre + 'Blur', 'Edge blur', 1, 20, 0.01, d0.blur, '') +
+    row(m.pre + 'Soft', 'Edge softness', 2, 40, 1, d0.soft, '%') + row(m.pre + 'Rim', 'Glass rim', 0, 200, 1, 55, '%') + row(m.pre + 'Chroma', 'Colour split', 0, 100, 1, 15, '%') +
+    '<div style="display:flex;align-items:center;gap:10px;"><span style="font-size:10px;color:var(--color-text-tertiary);width:78px;text-align:right;">Key from</span>' +
+    '<select id="' + m.pre + 'Key" style="font-size:12px;padding:3px 6px;width:120px;"><option value="0" selected>Luma</option><option value="1">Saturation</option><option value="2">Colour</option></select>' +
+    '<input type="color" id="' + m.pre + 'Col" value="#ff8a2a" title="Colour to key on" style="width:34px;height:24px;padding:0;border:none;background:none;">' +
+    '<label style="font-size:11px;color:var(--color-text-secondary);display:flex;align-items:center;gap:4px;"><input type="checkbox" id="' + m.pre + 'Inv"> Invert</label></div></div></div>';
+  document.getElementById('status').insertAdjacentHTML('beforebegin', html);
+  m.ctx = document.getElementById('c' + m.n).getContext('2d');
+  const setV = (id, v) => { const el = document.getElementById(id); el.value = v; el.dispatchEvent(new Event('input')); };
+  document.querySelectorAll('[id^="' + m.pre + '"][data-unit]').forEach(sp => { const sl = document.getElementById(sp.id.slice(0, -3)); const up = () => { sp.textContent = (+sl.value) + sp.dataset.unit; }; sl.addEventListener('input', up); up(); });
+  document.querySelectorAll('.pxmode').forEach(b => b.addEventListener('click', () => {      // each mode brings its own softness, blur and key
+    if (TRANSITIONS.pxfDistort && TRANSITIONS.pxfDistort.running) return;
+    const md = PXMODES.find(x => x.id === +b.dataset.mode); setV(m.pre + 'Soft', md.soft); setV(m.pre + 'Blur', md.blur); setV(m.pre + 'Key', md.key0);
+  }));
+});
+
+const PX = { gl: null, cv: null, ok: null, pr: {}, LW: 0, LH: 0 };
+const PX_COMMON = `#version 300 es
+precision highp float;
+uniform sampler2D uA, uB;
+uniform float uP, uSoft, uGmax, uAsp, uMaxD;
+uniform int uMode, uKey, uInv;
+uniform vec3 uCol; uniform vec2 uCen;
+float h21(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3. - 2. * f); return mix(mix(h21(i), h21(i + vec2(1, 0)), f.x), mix(h21(i + vec2(0, 1)), h21(i + vec2(1, 1)), f.x), f.y); }
+float keyAt(vec2 uv, float lod){
+  vec4 c = textureLod(uA, uv, lod); vec3 r = c.rgb * c.a; float k;
+  if (uKey == 0) k = dot(r, vec3(.2126, .7152, .0722));
+  else if (uKey == 1) { float mx = max(r.r, max(r.g, r.b)), mn = min(r.r, min(r.g, r.b)); k = (mx - mn) / (mx + .08); }
+  else k = 1. - clamp(length(r - uCol) * 1.1, 0., 1.);
+  return uInv == 1 ? 1. - k : k;
+}
+float field(vec2 uv){
+  if (uMode == 1) return keyAt(uv, 5.) * .75 + vn(uv * vec2(uAsp, 1.) * 5. + vec2(0., uP * .5)) * .45;      // blobby, slowly wobbling
+  if (uMode == 3) { float R = 1. - length((uv - uCen) * vec2(uAsp, 1.)) / uMaxD; return .6 * keyAt(uv, 3.) + .4 * R; }  // the subject first, then spreading outward
+  return keyAt(uv, 1.2) + (vn(uv * 18.) - .5) * .02;
+}
+float lensVal(vec2 uv){                                  // 1 where B shows (or, for the smear, where A still stands)
+  float e = uP * uP * (3. - 2. * uP);
+  float thr = mix(uGmax + uSoft, -uSoft, e);
+  float L = smoothstep(thr - uSoft, thr + uSoft, max(field(uv), 0.));
+  return uMode == 2 ? 1. - L : L;
+}`;
+const PX_FS_LENS = PX_COMMON + `
+uniform vec2 uSize; out vec4 o;
+void main(){ vec2 uv = gl_FragCoord.xy / uSize; o = vec4(lensVal(uv), 0., 0., 1.); }`;
+const PX_FS_DIFF = `#version 300 es
+precision highp float; uniform sampler2D uL; uniform vec2 uSize; out vec4 o;
+void main(){                                             // PxF: lens minus lens shifted by 1px, in x and in y (per full-resolution pixel, hence the half)
+  ivec2 q = ivec2(gl_FragCoord.xy), mx = ivec2(uSize) - 1;
+  float s = texelFetch(uL, q, 0).r, sx = texelFetch(uL, clamp(q - ivec2(1, 0), ivec2(0), mx), 0).r, sy = texelFetch(uL, clamp(q - ivec2(0, 1), ivec2(0), mx), 0).r;
+  o = vec4((s - sx) * .5, (s - sy) * .5, 0., 1.);
+}`;
+const PX_FS_BLUR = `#version 300 es
+precision highp float; uniform sampler2D uTex; uniform vec2 uDir, uSize; uniform float uSigma; out vec4 o;
+void main(){
+  vec2 c = gl_FragCoord.xy;
+  if (uSigma < 1e-4) { o = texelFetch(uTex, ivec2(c), 0); return; }
+  float step = max(1., 3. * uSigma / 24.); vec4 sum = vec4(0.); float ws = 0.;
+  for (int i = -24; i <= 24; i++) { float off = float(i) * step, w = exp(-.5 * off * off / (uSigma * uSigma)); sum += w * texture(uTex, (c + uDir * off) / uSize); ws += w; }
+  o = sum / ws;
+}`;
+const PX_FS_OUT = PX_COMMON + `
+uniform sampler2D uD; uniform vec2 uRes; uniform float uK, uCa, uRim, uAmp; out vec4 o;
+vec4 spl(sampler2D t, vec2 uv, vec2 d){
+  vec4 r = textureLod(t, uv + d * (1. + uCa), 0.), g = textureLod(t, uv + d, 0.), b = textureLod(t, uv + d * (1. - uCa), 0.);
+  return vec4(r.r * r.a, g.g * g.a, b.b * b.a, g.a);
+}
+void main(){
+  vec2 uv = gl_FragCoord.xy / uRes;
+  vec2 Upx = texture(uD, uv).rg * uK * uAmp;             // PxF's Multiply: blurred slope × blurLens^0.395 × amount × width × 3.597 / 10, IDistort uv_scale = width / 2048
+  vec2 d = Upx / uRes, q = uv + d;
+  float L = lensVal(q);
+  vec4 col;
+  if (uMode == 2) { vec4 bb = texture(uB, uv); col = mix(vec4(bb.rgb * bb.a, bb.a), spl(uA, uv, d), L); }
+  else col = mix(spl(uA, uv, d), spl(uB, uv, d), L);
+  float mag = length(Upx) * 1920. / uRes.x;
+  float rim = smoothstep(1.5, 12., mag) * (1. - smoothstep(30., 90., mag)) * uRim;
+  col.rgb += vec3(1., .97, .9) * rim * .35 * col.a;
+  o = vec4(min(col.rgb, vec3(col.a)), col.a);
+}`;
+function pxInit() {
+  if (PX.ok !== null) return PX.ok;
+  try {
+    const cv = document.createElement('canvas'); cv.width = RW; cv.height = RH;
+    const gl = cv.getContext('webgl2', { alpha: true, premultipliedAlpha: true, antialias: false, preserveDrawingBuffer: true });
+    if (!gl) throw new Error('WebGL 2 is not available');
+    if (!gl.getExtension('EXT_color_buffer_float') && !gl.getExtension('EXT_color_buffer_half_float')) throw new Error('floating-point render targets are not available');
+    const sh = (t, s) => { const o = gl.createShader(t); gl.shaderSource(o, s); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw new Error('shader: ' + gl.getShaderInfoLog(o)); return o; };
+    const vs = sh(gl.VERTEX_SHADER, '#version 300 es\nvoid main(){ vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2); gl_Position = vec4(p * 2. - 1., 0., 1.); }');
+    const mk = fs => { const p = gl.createProgram(); gl.attachShader(p, vs); gl.attachShader(p, sh(gl.FRAGMENT_SHADER, fs)); gl.linkProgram(p); if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error('link: ' + gl.getProgramInfoLog(p)); p.u = {}; for (let i = 0, n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS); i < n; i++) { const nm = gl.getActiveUniform(p, i).name; p.u[nm] = gl.getUniformLocation(p, nm); } return p; };
+    PX.pr = { lens: mk(PX_FS_LENS), diff: mk(PX_FS_DIFF), blur: mk(PX_FS_BLUR), out: mk(PX_FS_OUT) };
+    gl.bindVertexArray(gl.createVertexArray());
+    PX.LW = Math.ceil(RW / 2); PX.LH = Math.ceil(RH / 2);
+    const mkT = () => { const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, PX.LW, PX.LH, 0, gl.RGBA, gl.HALF_FLOAT, null); [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]].forEach(([k, v]) => gl.texParameteri(gl.TEXTURE_2D, k, v)); return t; };
+    const mkF = t => { const f = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, f); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0); if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) throw new Error('incomplete float framebuffer'); return f; };
+    PX.t = [mkT(), mkT(), mkT()]; PX.f = PX.t.map(mkF);
+    PX.gl = gl; PX.cv = cv; PX.ok = true;
+    cv.addEventListener('webglcontextlost', e => { e.preventDefault(); PX.ok = null; });
+  } catch (e) { PX.ok = false; reportProblem('The PxF transitions need WebGL 2 with float render targets: ' + (e.message || e), 'error'); }
+  return PX.ok;
+}
+function pxTex(canvas, unit, mip) {
+  const gl = PX.gl, t = gl.createTexture(); gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
+  if (mip) gl.generateMipmap(gl.TEXTURE_2D);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, mip ? gl.LINEAR_MIPMAP_LINEAR : gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  return t;
+}
+function pxPrepare() {                                   // read the controls, upload A and B, find the subject (for the portal)
+  const m = PXM[0], gl = PX.gl, pre = m.pre, sl = (s, d) => glSl(pre + s, d), mi = glMode('pxmode'), md = PXMODES.find(x => x.id === mi) || PXMODES[0];
+  const hex = (document.getElementById(pre + 'Col') || { value: '#ff8a2a' }).value, col = [1, 3, 5].map(k => parseInt(hex.slice(k, k + 2), 16) / 255);
+  const keyMode = +(document.getElementById(pre + 'Key') || { value: md.key0 }).value, inv = (document.getElementById(pre + 'Inv') || {}).checked ? 1 : 0;
+  const bl = sl('Blur', md.blur), aw = sl('Refr', 100) / 100, uvScale = RW / 2048;
+  const P = { mi, m, md, keyMode, inv, col, soft: sl('Soft', md.soft) / 100, ca: sl('Chroma', 15) / 100 * .12, rim: sl('Rim', 55) / 100, speed: sl('Speed', 100) / 100,
+    K: Math.pow(bl, .395) * aw * RW * 3.597 / 10 * uvScale, sigHalf: bl * uvScale * 2.75 * .5 / 2, cen: [.5, .5], maxD: 1 };
+  P.dur = md.base / P.speed;
+  if (mi === 3) {                                        // saturation-weighted centroid of A, from a tiny copy
+    const sc = pxPrepare.sc || (pxPrepare.sc = document.createElement('canvas')); sc.width = 64; sc.height = 36; const x = sc.getContext('2d', { willReadFrequently: true });
+    x.clearRect(0, 0, 64, 36); x.drawImage(m.srcC, 0, 0, 64, 36); const d = x.getImageData(0, 0, 64, 36).data; let sx = 0, sy = 0, sw = 0;
+    for (let j = 0; j < 36; j++) for (let i = 0; i < 64; i++) {
+      const k = (j * 64 + i) * 4, r = d[k] / 255, g = d[k + 1] / 255, b = d[k + 2] / 255, a = d[k + 3] / 255, mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+      let v = keyMode === 0 ? .2126 * r + .7152 * g + .0722 * b : keyMode === 1 ? (mx - mn) / (mx + .08) : 1 - Math.min(1, Math.hypot(r - col[0], g - col[1], b - col[2]) * 1.1);
+      v = Math.pow(Math.max(0, inv ? 1 - v : v) * a, 3); sx += v * (i + .5) / 64; sy += v * (1 - (j + .5) / 36); sw += v;
+    }
+    if (sw > 1e-6) P.cen = [sx / sw, sy / sw];
+    const asp = RW / RH; P.maxD = Math.max(.1, Math.max(...[[0, 0], [1, 0], [0, 1], [1, 1]].map(c => Math.hypot((c[0] - P.cen[0]) * asp, c[1] - P.cen[1]))));
+  }
+  P.texA = pxTex(m.srcC, 0, true); P.texB = pxTex(m.dstC, 1, false);
+  P.free = () => { try { gl.deleteTexture(P.texA); gl.deleteTexture(P.texB); } catch (e) { quiet(e, 'PxF texture cleanup'); } };
+  return P;
+}
+function pxDraw(P, p) {
+  const gl = PX.gl, pr = PX.pr, asp = RW / RH;
+  const common = pg => {
+    gl.uniform1f(pg.u.uP, p); gl.uniform1f(pg.u.uSoft, P.soft); gl.uniform1f(pg.u.uGmax, P.md.gmax); gl.uniform1f(pg.u.uAsp, asp); gl.uniform1f(pg.u.uMaxD, P.maxD);
+    gl.uniform1i(pg.u.uMode, P.mi); gl.uniform1i(pg.u.uKey, P.keyMode); gl.uniform1i(pg.u.uInv, P.inv); gl.uniform3f(pg.u.uCol, P.col[0], P.col[1], P.col[2]); gl.uniform2f(pg.u.uCen, P.cen[0], P.cen[1]);
+    gl.uniform1i(pg.u.uA, 0); gl.uniform1i(pg.u.uB, 1);
+  };
+  gl.disable(gl.BLEND);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, P.texA); gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, P.texB);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, PX.f[0]); gl.viewport(0, 0, PX.LW, PX.LH); gl.useProgram(pr.lens); common(pr.lens); gl.uniform2f(pr.lens.u.uSize, PX.LW, PX.LH); gl.drawArrays(gl.TRIANGLES, 0, 3);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, PX.f[1]); gl.useProgram(pr.diff); gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, PX.t[0]); gl.uniform1i(pr.diff.u.uL, 2); gl.uniform2f(pr.diff.u.uSize, PX.LW, PX.LH); gl.drawArrays(gl.TRIANGLES, 0, 3);
+  gl.useProgram(pr.blur); gl.uniform2f(pr.blur.u.uSize, PX.LW, PX.LH); gl.uniform1f(pr.blur.u.uSigma, P.sigHalf); gl.uniform1i(pr.blur.u.uTex, 2);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, PX.f[0]); gl.bindTexture(gl.TEXTURE_2D, PX.t[1]); gl.uniform2f(pr.blur.u.uDir, 1, 0); gl.drawArrays(gl.TRIANGLES, 0, 3);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, PX.f[2]); gl.bindTexture(gl.TEXTURE_2D, PX.t[0]); gl.uniform2f(pr.blur.u.uDir, 0, 1); gl.drawArrays(gl.TRIANGLES, 0, 3);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, RW, RH); gl.useProgram(pr.out); common(pr.out);
+  gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, PX.t[2]); gl.uniform1i(pr.out.u.uD, 2);
+  gl.uniform2f(pr.out.u.uRes, RW, RH); gl.uniform1f(pr.out.u.uK, P.K); gl.uniform1f(pr.out.u.uCa, P.ca); gl.uniform1f(pr.out.u.uRim, P.rim); gl.uniform1f(pr.out.u.uAmp, P.mi === 2 ? .5 + 1.5 * p : 1);
+  gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT); gl.drawArrays(gl.TRIANGLES, 0, 3);
+}
+function runPxf(onDone, only) {
+  const m = PXM[0];
+  if (!pxInit()) { if (onDone) onDone(() => {}); return; }
+  const P = pxPrepare();
+  const show = () => { m.ctx.clearRect(0, 0, W, H); m.ctx.drawImage(m.recC, 0, 0, W, H); };
+  const frame = p => { pxDraw(P, p); m.recCtx.clearRect(0, 0, RW, RH); m.recCtx.drawImage(PX.cv, 0, 0); show(); };
+  if (only != null) { frame(only); P.free(); return; }
+  PLAYER.hooks.length = 0; PLAYER.hooks.push(P.free);
+  let el = 0, lastT = null;
+  function frm(ts) {
+    if (!lastT) lastT = ts;
+    el += Math.min((ts - lastT) / 1000, 0.05); lastT = ts;
+    if (el >= P.dur) {
+      m.recCtx.clearRect(0, 0, RW, RH); m.recCtx.drawImage(m.dstC, 0, 0); show(); P.free();
+      const reset = () => { m.recCtx.clearRect(0, 0, RW, RH); m.recCtx.drawImage(m.srcC, 0, 0); show(); };
+      onDone ? onDone(reset) : setTimeout(reset, 1600);
+      return;
+    }
+    frame(el / P.dur); requestAnimationFrame(frm);
+  }
+  requestAnimationFrame(frm);
+}
+function pxThumb(w, h) {                                 // one frame from the real engine, for the gallery card
+  if (!pxInit()) return null;
+  const P = pxPrepare(); pxDraw(P, .55);
+  const c = pxThumb.c || (pxThumb.c = document.createElement('canvas')); c.width = w; c.height = h; const x = c.getContext('2d'); x.clearRect(0, 0, w, h); x.drawImage(PX.cv, 0, 0, w, h); P.free(); return c;
+}
+
+// ══════════════════════════════════════════════════════════════════════════
 // SECTION 6 · TRANSITIONS REGISTRY
 // ─────────────────────────────────────────────────────────────────────────
 // Each entry describes one transition completely.
@@ -6018,6 +6257,15 @@ const TRANSITIONS = {
     recordFilename: 'bullet-holes',
     playBtnId:      'btn18p',
     recBtnId:       'btn18r',
+    padSecs:        0,
+    running:        false,
+  },
+  pxfDistort: {
+    runFn:          runPxf,
+    recCanvas:      PXM[0].recC,
+    recordFilename: 'pxf-distort',
+    playBtnId:      'btn19p',
+    recBtnId:       'btn19r',
     padSecs:        0,
     running:        false,
   },
@@ -6601,9 +6849,9 @@ function registerTransition(key) {
 // Wire the Glass Orb / Liquid Chrome pickers (default: first option).
 (function() {
   const style = document.createElement('style');
-  style.textContent = '.orbpath.orbpath-active, .chrpath.chrpath-active, .chrmat.chrmat-active, .pswflow.pswflow-active, .pswstyle.pswstyle-active, .emberdir.emberdir-active, .frzdir.frzdir-active, .frzend.frzend-active, .ptaim.ptaim-active, .bhman.bhman-active { border-color: var(--color-text-primary) !important; color: var(--color-text-primary) !important; }';
+  style.textContent = '.orbpath.orbpath-active, .chrpath.chrpath-active, .chrmat.chrmat-active, .pswflow.pswflow-active, .pswstyle.pswstyle-active, .emberdir.emberdir-active, .frzdir.frzdir-active, .frzend.frzend-active, .ptaim.ptaim-active, .bhman.bhman-active, .pxmode.pxmode-active { border-color: var(--color-text-primary) !important; color: var(--color-text-primary) !important; }';
   document.head.appendChild(style);
-  [['orbpath', 'glassOrb'], ['chrpath', 'liquidChrome'], ['chrmat', 'liquidChrome'], ['pswflow', 'paperSwirl'], ['pswstyle', 'paperSwirl'], ['emberdir', 'emberBurn'], ['frzdir', 'frostGrow'], ['frzend', 'frostGrow'], ['ptaim', 'photonTorpedo'], ['bhman', 'bulletHoles']].forEach(([cls, key]) => {
+  [['orbpath', 'glassOrb'], ['chrpath', 'liquidChrome'], ['chrmat', 'liquidChrome'], ['pswflow', 'paperSwirl'], ['pswstyle', 'paperSwirl'], ['emberdir', 'emberBurn'], ['frzdir', 'frostGrow'], ['frzend', 'frostGrow'], ['ptaim', 'photonTorpedo'], ['bhman', 'bulletHoles'], ['pxmode', 'pxfDistort']].forEach(([cls, key]) => {
     const btns = Array.from(document.querySelectorAll('.' + cls));
     const on = b => { btns.forEach(x => { x.classList.remove(cls + '-active'); x.style.borderColor = ''; x.style.color = ''; }); b.classList.add(cls + '-active'); };
     on(btns[0]);
@@ -6804,7 +7052,7 @@ const SCENES = [
   { key: 'frostGrow',        src: frz_srcC,    dst: frz_dstC,    rec: recC16, recCtx: recCtx16, ctx: ctx16 },
   { key: 'photonTorpedo',    src: pt_srcC,     dst: pt_dstC,     rec: recC17, recCtx: recCtx17, ctx: ctx17 },
   { key: 'bulletHoles',      src: bh_srcC,     dst: bh_dstC,     rec: recC18, recCtx: recCtx18, ctx: ctx18, resetT: true },
-];
+].concat(PXM.map(m => ({ key: m.key, src: m.srcC, dst: m.dstC, rec: m.recC, recCtx: m.recCtx, ctx: m.ctx, defA: drawPxA, defB: drawPxB })));
 // Splash and Solidify keep their own screen-size (W×H) scenes: milk→butter and trimmings→tallow.
 const SCREEN_SRC = [milkC, trimC], SCREEN_DST = [butC, talC];
 const ALL_SRC = SCREEN_SRC.concat(SCENES.map(c => c.src));
@@ -6815,7 +7063,7 @@ drawMilk     (milkC.getContext('2d'), W, H);
 drawButter   (butC.getContext('2d'),  W, H);
 drawTrimmings(trimC.getContext('2d'), W, H);
 drawTallow   (talC.getContext('2d'),  W, H);
-SCENES.forEach(c => { drawDefaultA(c.src.getContext('2d'), RW, RH); drawDefaultB(c.dst.getContext('2d'), RW, RH); });
+SCENES.forEach(c => { (c.defA || drawDefaultA)(c.src.getContext('2d'), RW, RH); (c.defB || drawDefaultB)(c.dst.getContext('2d'), RW, RH); });
 
 // Page peel's fixed "back of paper" texture — plain and unrelated to A/B,
 // same reasoning as real paper: the back looks the same regardless of
@@ -7140,11 +7388,11 @@ document.getElementById('alphaWarnClose').addEventListener('click', () => {
 // every transition's own markup, canvas and buttons are untouched.
 // ══════════════════════════════════════════════════════════════════════════
 (function initGallery() {
-  const KEYS  = ['splash','solidify','bubbles','particles','tileDrop','coneRefraction','pagePeel','crumble','cubeAssembly','rippleRefraction','caustics','glassOrb','liquidChrome','paperSwirl','emberBurn','frostGrow','photonTorpedo','bulletHoles'];
-  const SLUGS = ['milk-butter','trimmings-tallow','bubbles','particles','tile-drop','cone-refraction','page-peel','crumble','cube-assembly','ripple-refraction','caustics','glass-orb','crystal-clear-water','paper-swirl','heat-shimmer-ember','frost-growth','photon-torpedo','bullet-holes'];
+  const KEYS  = ['splash','solidify','bubbles','particles','tileDrop','coneRefraction','pagePeel','crumble','cubeAssembly','rippleRefraction','caustics','glassOrb','liquidChrome','paperSwirl','emberBurn','frostGrow','photonTorpedo','bulletHoles','pxfDistort'];
+  const SLUGS = ['milk-butter','trimmings-tallow','bubbles','particles','tile-drop','cone-refraction','page-peel','crumble','cube-assembly','ripple-refraction','caustics','glass-orb','crystal-clear-water','paper-swirl','heat-shimmer-ember','frost-growth','photon-torpedo','bullet-holes','pxf-distort'];
   const PAIRS = [[milkC, butC], [trimC, talC], [bub_srcC, bub_dstC], [par_srcC, par_dstC], [td_srcC, td_dstC],
-                 [cone_srcC, cone_dstC], [peel_srcC, peel_dstC], [crumble_srcC, crumble_dstC], [cube_srcC, cube_dstC], [rip_srcC, rip_dstC], [cau_srcC, cau_dstC], [orb_srcC, orb_dstC], [chr_srcC, chr_dstC], [psw_srcC, psw_dstC], [emb_srcC, emb_dstC], [frz_srcC, frz_dstC], [pt_srcC, pt_dstC], [bh_srcC, bh_dstC]];
-  const NOTES = ['', '', '', '', 'Gentle / Cranked', 'Four glass modes', 'Adjustable angle', '', 'Five modes', 'Pond view', 'Refracting water', 'Ray-traced glass', 'Clear water', '3D paper, down the drain', 'Burns upward', 'Ice creeps in', 'Fired from you', 'Shot to bits'];
+                 [cone_srcC, cone_dstC], [peel_srcC, peel_dstC], [crumble_srcC, crumble_dstC], [cube_srcC, cube_dstC], [rip_srcC, rip_dstC], [cau_srcC, cau_dstC], [orb_srcC, orb_dstC], [chr_srcC, chr_dstC], [psw_srcC, psw_dstC], [emb_srcC, emb_dstC], [frz_srcC, frz_dstC], [pt_srcC, pt_dstC], [bh_srcC, bh_dstC]].concat(PXM.map(m => [m.srcC, m.dstC]));
+  const NOTES = ['', '', '', '', 'Gentle / Cranked', 'Four glass modes', 'Adjustable angle', '', 'Five modes', 'Pond view', 'Refracting water', 'Ray-traced glass', 'Clear water', '3D paper, down the drain', 'Burns upward', 'Ice creeps in', 'Fired from you', 'Shot to bits'].concat(PXM.map(m => m.note));
 
   const anyRunning = () => KEYS.some(k => TRANSITIONS[k].running);
   let view = 'grid';
@@ -7217,6 +7465,10 @@ document.getElementById('alphaWarnClose').addEventListener('click', () => {
     back(); x.drawImage(A, 0, 0, w, h);
     const R = rng(1000 + i * 77);
     const reveal = (pathFn) => { x.save(); x.beginPath(); pathFn(); x.clip(); back(); x.drawImage(B, 0, 0, w, h); x.restore(); };
+    if (i >= 18) {                                               // PxF transitions: a real frame from the engine
+      const tc = pxThumb(w, h); if (tc) { x.clearRect(0, 0, w, h); x.drawImage(tc, 0, 0); } else paintSplit(x, w, h, A, B, back);
+      return;
+    }
     if (i < 2 || i === 6 || i === 9 || i === 10 || i === 11 || i === 12 || i === 13 || i === 14 || i === 15 || i === 16 || i === 17) {
       if (i === 6) {                                              // page peel: B left behind, paper curling off along a diagonal
         reveal(() => { x.moveTo(w * 0.42, 0); x.lineTo(w, 0); x.lineTo(w, h); x.lineTo(w * 0.05, h); x.closePath(); });
